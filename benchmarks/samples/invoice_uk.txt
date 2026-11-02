@@ -1,0 +1,38 @@
+INVOICE No. HLS-2026-0417
+
+From:
+Harbour Lane Supplies Ltd
+27 Kingfisher Road
+Bristol BS1 4DJ
+United Kingdom
+Tel: +44 117 496 0321
+Email: accounts@harbourlane.example
+VAT Reg No: GB 123 4567 82
+Company Registered in England and Wales No. 09876543
+
+Bill To:
+Nowak Transport Sp. z o.o.
+ul. Długa 145, 31-147 Kraków
+Poland
+VAT: PL8992611767
+
+Attn: Emily Carter
+
+Description                          Qty    Unit price    Total
+Pallet wrap, 500 mm                   40         12.50   500.00
+Delivery to Kraków                     1        180.00   180.00
+
+Subtotal                                              680.00
+VAT 0% (reverse charge)                                 0.00
+Total due (GBP)                                       680.00
+
+Payment within 30 days to:
+Barclays Bank PLC
+Sort Code: 20-45-77  Account No: 41365870
+IBAN: GB33BUKB20201555555555
+
+If you have any questions about this invoice, please contact Mr Oliver Bennett on 0117 496 0588.
+
+Kind regards,
+Oliver Bennett
+Harbour Lane Supplies Ltd

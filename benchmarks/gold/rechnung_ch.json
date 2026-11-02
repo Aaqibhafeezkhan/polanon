@@ -1,0 +1,20 @@
+{
+  "source": "rechnung_ch.txt",
+  "entities": [
+    {"value": "Alpenblick Treuhand GmbH", "type": "ORG"},
+    {"value": "Bahnhofstrasse 21", "type": "ADDRESS"},
+    {"value": "CH-8001", "type": "POSTAL_CODE"},
+    {"value": "Zürich", "type": "LOCATION"},
+    {"value": "CHE-116.281.710", "type": "TAX_ID"},
+    {"value": "+41 44 668 18 00", "type": "PHONE"},
+    {"value": "info@alpenblick.example", "type": "EMAIL"},
+    {"value": "Nowak Transport Sp. z o.o.", "type": "ORG"},
+    {"value": "Wiśniewska", "type": "PERSON"},
+    {"value": "ul. Długa 145", "type": "ADDRESS"},
+    {"value": "31-147", "type": "POSTAL_CODE"},
+    {"value": "Kraków", "type": "LOCATION"},
+    {"value": "80-470-3", "type": "BANK_ACCOUNT"},
+    {"value": "CH93 0076 2011 6238 5295 7", "type": "IBAN"},
+    {"value": "Lukas Meier", "type": "PERSON"}
+  ]
+}

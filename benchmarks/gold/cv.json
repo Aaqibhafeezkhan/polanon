@@ -1,0 +1,65 @@
+{
+  "source": "cv.txt",
+  "entities": [
+    {
+      "value": "Anna Wiśniewska",
+      "type": "PERSON"
+    },
+    {
+      "value": "Piotr Zieliński",
+      "type": "PERSON"
+    },
+    {
+      "value": "ul. Kwiatowa 12/4",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "30-001",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "Kraków",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Katowice",
+      "type": "LOCATION"
+    },
+    {
+      "value": "+48 601 234 567",
+      "type": "PHONE"
+    },
+    {
+      "value": "502 987 654",
+      "type": "PHONE"
+    },
+    {
+      "value": "anna.wisniewska@poczta.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "p.zielinski@nowak-transport.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "85031523454",
+      "type": "PESEL"
+    },
+    {
+      "value": "ABC412345",
+      "type": "PL_ID"
+    },
+    {
+      "value": "Nowak Transport Sp. z o.o.",
+      "type": "ORG"
+    },
+    {
+      "value": "Malinowski Handel S.A.",
+      "type": "ORG"
+    },
+    {
+      "value": "Uniwersytet Ekonomiczny w Krakowie",
+      "type": "ORG"
+    }
+  ]
+}

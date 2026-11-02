@@ -1,0 +1,49 @@
+{
+  "source": "mail_klienta.txt",
+  "entities": [
+    {
+      "value": "Katarzyna Lewandowska",
+      "type": "PERSON"
+    },
+    {
+      "value": "Marek Dąbrowski",
+      "type": "PERSON"
+    },
+    {
+      "value": "k.lewandowska@sklep.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "bok@nasza-firma.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "PL27114020040000300201355387",
+      "type": "IBAN"
+    },
+    {
+      "value": "ul. Ogrodowa 3",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "61-004",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "Poznań",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Lesznie",
+      "type": "LOCATION"
+    },
+    {
+      "value": "91071109871",
+      "type": "PESEL"
+    },
+    {
+      "value": "785 112 334",
+      "type": "PHONE"
+    }
+  ]
+}

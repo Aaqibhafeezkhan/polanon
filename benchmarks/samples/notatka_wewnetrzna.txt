@@ -1,0 +1,18 @@
+NOTATKA WEWNĘTRZNA — migracja serwera pocztowego
+
+Prowadzi: Maria Nowak-Kowalska, dział IT
+Zastępstwo: Katarzyna Lewandowska (urlop od poniedziałku)
+
+Stan obecny:
+Serwer pocztowy 10.14.22.7 zostanie wyłączony. Nowy adres to
+2001:0db8:85a3:0000:0000:8a2e:0370:7334, a interfejs ma MAC 3C:22:FB:1A:0B:9E.
+Konto serwisowe: serwis@nasza-firma.example, hasło Zimowy-Pociag-2026.
+
+Kontakt do dostawcy:
+Bud-Mar sp. z o.o., NIP 5270810728
+Opiekun: Tomasz Kowalczyk, tel. 0048601234567
+Adres: ul. Przemysłowa 7, 40-020 Katowice
+
+Uwagi:
+Faktury wysyłamy na kadry@nowak-transport.example. Samochód serwisowy
+nr rej. KR 8492J stoi na parkingu przy ul. Długiej 145.

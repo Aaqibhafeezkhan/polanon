@@ -1,0 +1,73 @@
+{
+  "source": "notatka_wewnetrzna.txt",
+  "entities": [
+    {
+      "value": "Maria Nowak-Kowalska",
+      "type": "PERSON"
+    },
+    {
+      "value": "Katarzyna Lewandowska",
+      "type": "PERSON"
+    },
+    {
+      "value": "Tomasz Kowalczyk",
+      "type": "PERSON"
+    },
+    {
+      "value": "10.14.22.7",
+      "type": "IP_ADDRESS"
+    },
+    {
+      "value": "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+      "type": "IP_ADDRESS"
+    },
+    {
+      "value": "3C:22:FB:1A:0B:9E",
+      "type": "MAC_ADDRESS"
+    },
+    {
+      "value": "serwis@nasza-firma.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "kadry@nowak-transport.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "Zimowy-Pociag-2026",
+      "type": "SECRET"
+    },
+    {
+      "value": "Bud-Mar sp. z o.o.",
+      "type": "ORG"
+    },
+    {
+      "value": "5270810728",
+      "type": "NIP"
+    },
+    {
+      "value": "0048601234567",
+      "type": "PHONE"
+    },
+    {
+      "value": "ul. Przemysłowa 7",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "40-020",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "Katowice",
+      "type": "LOCATION"
+    },
+    {
+      "value": "KR 8492J",
+      "type": "PLATE"
+    },
+    {
+      "value": "ul. Długiej 145",
+      "type": "ADDRESS"
+    }
+  ]
+}

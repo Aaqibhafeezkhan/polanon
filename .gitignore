@@ -1,0 +1,21 @@
+.venv/
+.venv*/
+venv/
+.tox/
+.env
+.claude/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# coverage artefacts
+.coverage
+.coverage.*
+htmlcov/
+
+# build output
+dist/
+build/

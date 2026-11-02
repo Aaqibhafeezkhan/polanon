@@ -1,0 +1,8 @@
+# The sdist carries what its tests read, so the suite runs from it: the annotated benchmark the
+# floors in tests/test_benchmark.py are measured on, and the recipes tests/test_examples.py checks.
+graft tests
+graft benchmarks
+graft examples
+graft docs
+include CHANGELOG.md CONTRIBUTING.md SECURITY.md
+global-exclude __pycache__ *.py[cod]

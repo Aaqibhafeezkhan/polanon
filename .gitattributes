@@ -1,0 +1,2 @@
+# Line endings are LF in the repository and in every checkout, whatever core.autocrlf says.
+* text=auto eol=lf

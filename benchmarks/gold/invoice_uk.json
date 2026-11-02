@@ -1,0 +1,25 @@
+{
+  "source": "invoice_uk.txt",
+  "entities": [
+    {"value": "Harbour Lane Supplies Ltd", "type": "ORG"},
+    {"value": "27 Kingfisher Road", "type": "ADDRESS"},
+    {"value": "Bristol", "type": "LOCATION"},
+    {"value": "BS1 4DJ", "type": "POSTAL_CODE"},
+    {"value": "+44 117 496 0321", "type": "PHONE"},
+    {"value": "accounts@harbourlane.example", "type": "EMAIL"},
+    {"value": "GB 123 4567 82", "type": "TAX_ID"},
+    {"value": "09876543", "type": "COMPANY_ID"},
+    {"value": "Nowak Transport Sp. z o.o.", "type": "ORG"},
+    {"value": "ul. Długa 145", "type": "ADDRESS"},
+    {"value": "31-147", "type": "POSTAL_CODE"},
+    {"value": "Kraków", "type": "LOCATION"},
+    {"value": "PL8992611767", "type": "NIP"},
+    {"value": "Emily Carter", "type": "PERSON"},
+    {"value": "Barclays Bank PLC", "type": "ORG"},
+    {"value": "20-45-77", "type": "BANK_ACCOUNT"},
+    {"value": "41365870", "type": "BANK_ACCOUNT"},
+    {"value": "GB33BUKB20201555555555", "type": "IBAN"},
+    {"value": "Oliver Bennett", "type": "PERSON"},
+    {"value": "0117 496 0588", "type": "PHONE"}
+  ]
+}

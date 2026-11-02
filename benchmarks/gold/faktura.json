@@ -1,0 +1,69 @@
+{
+  "source": "faktura.txt",
+  "entities": [
+    {
+      "value": "Malinowski Handel S.A.",
+      "type": "ORG"
+    },
+    {
+      "value": "Nowak Transport Sp. z o.o.",
+      "type": "ORG"
+    },
+    {
+      "value": "ul. Przemysłowa 7",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "ul. Długa 145",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "40-020",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "31-147",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "Katowice",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Kraków",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Gdańsk",
+      "type": "LOCATION"
+    },
+    {
+      "value": "5270810728",
+      "type": "NIP"
+    },
+    {
+      "value": "8992611767",
+      "type": "NIP"
+    },
+    {
+      "value": "141707919",
+      "type": "REGON"
+    },
+    {
+      "value": "PL61109010140000071219812874",
+      "type": "IBAN"
+    },
+    {
+      "value": "Tomasz Kowalczyk",
+      "type": "PERSON"
+    },
+    {
+      "value": "71 345 22 10",
+      "type": "PHONE"
+    },
+    {
+      "value": "t.kowalczyk@nowak-transport.example",
+      "type": "EMAIL"
+    }
+  ]
+}

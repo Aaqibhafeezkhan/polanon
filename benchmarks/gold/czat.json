@@ -1,0 +1,41 @@
+{
+  "source": "czat.txt",
+  "entities": [
+    {
+      "value": "kamilem bednarkiem",
+      "type": "PERSON"
+    },
+    {
+      "value": "ani kowalskiej",
+      "type": "PERSON"
+    },
+    {
+      "value": "tomek wiśniewski",
+      "type": "PERSON"
+    },
+    {
+      "value": "604 223 118",
+      "type": "PHONE"
+    },
+    {
+      "value": "wróbel",
+      "type": "PERSON"
+    },
+    {
+      "value": "nowakiem",
+      "type": "PERSON"
+    },
+    {
+      "value": "kasi",
+      "type": "PERSON"
+    },
+    {
+      "value": "MAREK ZIELIŃSKI",
+      "type": "PERSON"
+    },
+    {
+      "value": "m.zielinski@poczta.example",
+      "type": "EMAIL"
+    }
+  ]
+}

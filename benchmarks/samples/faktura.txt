@@ -1,0 +1,22 @@
+FAKTURA VAT nr FV/2026/09/128
+
+Sprzedawca:
+Malinowski Handel S.A.
+ul. Przemysłowa 7, 40-020 Katowice
+NIP: 5270810728
+REGON: 141707919
+Konto: PL61109010140000071219812874
+
+Nabywca:
+Nowak Transport Sp. z o.o.
+ul. Długa 145, 31-147 Kraków
+NIP: 8992611767
+
+Osoba kontaktowa: Tomasz Kowalczyk, tel. 71 345 22 10, t.kowalczyk@nowak-transport.example
+
+Pozycje:
+1. Usługa spedycyjna, trasa Katowice-Gdańsk    4 500,00 PLN
+2. Magazynowanie, wrzesień 2026                1 200,00 PLN
+
+Razem do zapłaty: 5 700,00 PLN
+Termin płatności: 14 dni

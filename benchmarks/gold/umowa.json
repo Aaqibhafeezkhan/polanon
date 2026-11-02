@@ -1,0 +1,77 @@
+{
+  "source": "umowa.txt",
+  "entities": [
+    {
+      "value": "Nowak Transport Sp. z o.o.",
+      "type": "ORG"
+    },
+    {
+      "value": "Poznaniu",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Krakowie",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Kraków",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Poznań",
+      "type": "LOCATION"
+    },
+    {
+      "value": "ul. Długa 145",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "ul. Ogrodowa 3",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "31-147",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "61-004",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "8992611767",
+      "type": "NIP"
+    },
+    {
+      "value": "519301889",
+      "type": "REGON"
+    },
+    {
+      "value": "Tomasza Kowalczyka",
+      "type": "PERSON"
+    },
+    {
+      "value": "Katarzyną Lewandowską",
+      "type": "PERSON"
+    },
+    {
+      "value": "ABC412345",
+      "type": "PL_ID"
+    },
+    {
+      "value": "91071109871",
+      "type": "PESEL"
+    },
+    {
+      "value": "PL27114020040000300201355387",
+      "type": "IBAN"
+    },
+    {
+      "value": "kadry@nowak-transport.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "12 430 88 21",
+      "type": "PHONE"
+    }
+  ]
+}

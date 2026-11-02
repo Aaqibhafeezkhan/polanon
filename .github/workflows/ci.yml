@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only by default: nothing here needs to write to the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The provider SDKs are there for the recipes in examples/, which are tested against them
+      # offline.
+      - name: Install
+        run: pip install -e ".[dev,ner,judge]" anthropic openai
+
+      # `spacy download` is a pip install underneath, so the model lands in the pip cache that
+      # setup-python already restores.
+      - name: Download the spaCy model
+        run: python -m spacy download pl_core_news_md
+
+      - name: Lint
+        run: ruff check --output-format=github . && ruff format --check .
+
+      - name: Type-check
+        run: mypy polanon
+
+      - name: Test
+        run: pytest --cov --cov-report=term-missing
+
+      # Printed rather than asserted: tests/test_benchmark.py already holds the floors, and the
+      # table is what a reviewer wants to see in the log when a guard changes.
+      - name: Detection scores
+        run: python benchmarks/run.py --ner --markdown
+
+  versions:
+    name: The built wheel on Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Build and install the wheel with its extras
+        run: |
+          pip install build
+          python -m build --wheel
+          pip install "$(ls dist/polanon-*.whl)[ner,judge]" pytest pytest-asyncio httpx \
+            anthropic openai
+          python -m spacy download pl_core_news_md
+
+      # The source tree is moved aside, so the tests import the installed wheel and nothing else.
+      - name: Test the installed wheel
+        run: mv polanon .polanon-source && python -m pytest -p no:cacheprovider
+
+  package:
+    name: Packages build, and the wheel works alone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Build the wheel and the sdist
+        run: |
+          pip install build twine
+          python -m build
+          twine check --strict dist/*
+
+      # What `pip install polanon` gets: no dependencies at all, and a command on the PATH. The
+      # README promises the core runs on the standard library alone.
+      - name: Install the wheel alone and mask a document
+        working-directory: /tmp
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/pip install "$GITHUB_WORKSPACE"/dist/polanon-*.whl
+          masked="$(/tmp/bare/bin/polanon "Jan Kowalski, PESEL 90010112349")"
+          echo "$masked"
+          test "$masked" = "<OSOBA_1>, PESEL <PESEL_1>"

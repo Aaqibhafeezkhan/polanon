@@ -1,0 +1,27 @@
+FAKTURA / INVOICE 20261093
+
+Nordvik Konsult AB
+Storgatan 14
+111 22 Stockholm
+Sweden
+Org.nr: 556677-8899
+Momsreg.nr: SE556677889901
+Tfn: +46 8 123 456 78
+E-post: faktura@nordvik.example
+Bankgiro: 5050-1055
+Plusgiro: 12 34 56-7
+
+Kund / Customer:
+Malinowski Handel S.A.
+ul. Przemysłowa 7
+40-020 Katowice
+
+Er referens / Your reference: Tomasz Kowalczyk
+Vår referens / Our reference: Karin Lindqvist
+
+Konsulttimmar augusti 2026        12 h    1 150,00 SEK    13 800,00 SEK
+Moms 0 % (omvänd skattskyldighet)                                0,00 SEK
+Att betala / Amount due                                     13 800,00 SEK
+
+Förfallodatum / Due date: 2026-09-30
+OCR: 20261093

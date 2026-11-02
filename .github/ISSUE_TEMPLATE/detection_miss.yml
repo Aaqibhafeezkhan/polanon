@@ -1,0 +1,43 @@
+name: Something was not masked
+description: A value reached the provider, or was masked wrongly, in text you can share.
+labels: ["detection"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste real personal data here.** This issue is public and stays public. Rewrite the
+        text with invented values of the same shape: a made-up name, a PESEL with a valid checksum
+        (for example 90010112349), a fictional company.
+  - type: input
+    id: kind
+    attributes:
+      label: What kind of value
+      placeholder: a surname in the instrumental case, a Swiss VAT number, a street address...
+    validations:
+      required: true
+  - type: textarea
+    id: text
+    attributes:
+      label: Invented text that reproduces it
+      description: The shortest text that still shows the problem.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: masked
+    attributes:
+      label: What you got, and what you expected
+      description: The output of `polanon --ner "..."`, or of your own call.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Language model
+      options:
+        - pl_core_news_md (the default)
+        - none (with_ner=False)
+        - another spaCy model
+    validations:
+      required: true

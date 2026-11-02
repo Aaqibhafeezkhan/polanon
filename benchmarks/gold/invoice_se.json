@@ -1,0 +1,21 @@
+{
+  "source": "invoice_se.txt",
+  "entities": [
+    {"value": "Nordvik Konsult AB", "type": "ORG"},
+    {"value": "Storgatan 14", "type": "ADDRESS"},
+    {"value": "111 22", "type": "POSTAL_CODE"},
+    {"value": "Stockholm", "type": "LOCATION"},
+    {"value": "556677-8899", "type": "COMPANY_ID"},
+    {"value": "SE556677889901", "type": "TAX_ID"},
+    {"value": "+46 8 123 456 78", "type": "PHONE"},
+    {"value": "faktura@nordvik.example", "type": "EMAIL"},
+    {"value": "5050-1055", "type": "BANK_ACCOUNT"},
+    {"value": "12 34 56-7", "type": "BANK_ACCOUNT"},
+    {"value": "Malinowski Handel S.A.", "type": "ORG"},
+    {"value": "ul. Przemysłowa 7", "type": "ADDRESS"},
+    {"value": "40-020", "type": "POSTAL_CODE"},
+    {"value": "Katowice", "type": "LOCATION"},
+    {"value": "Tomasz Kowalczyk", "type": "PERSON"},
+    {"value": "Karin Lindqvist", "type": "PERSON"}
+  ]
+}

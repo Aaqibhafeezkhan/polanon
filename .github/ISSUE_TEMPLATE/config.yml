@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A masked value reached the provider anyway
+    url: https://github.com/boromat/polanon/security/advisories/new
+    about: Report privately. A public issue would publish the way past the masking along with the bug.

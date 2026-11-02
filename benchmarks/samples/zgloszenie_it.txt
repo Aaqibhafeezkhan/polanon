@@ -1,0 +1,19 @@
+Zgłoszenie serwisowe nr INC-2026-0912
+
+Zgłaszający: Marek Dąbrowski, dział IT
+Kontakt: m.dabrowski@nasza-firma.example, tel. 22 610 44 08
+
+Opis:
+Po aktualizacji serwer aplikacyjny 10.14.22.7 przestał odpowiadać.
+W logu widać próbę połączenia z hosta o adresie MAC 3C:22:FB:1A:0B:9E.
+Konfiguracja, którą przysłał dostawca:
+
+  DB_PASSWORD=ZimowyPociag2026
+  OPENROUTER_KEY=sk-or-v1-8f2c1d9a6b4e7c05a3d18f2b6e9c4a71
+  smtp_login: serwis@nasza-firma.example
+
+Dostawca: Bud-Mar sp. z o.o., NIP 5270810728, REGON 360214771
+Samochód serwisowy: nr rej. KR 8492J, VIN WVWZZZ1KZAW123456
+
+Prosimy o kontakt z panią Anną Wiśniewską, PESEL 85031523454,
+ul. Kwiatowa 12/4, 30-001 Kraków.

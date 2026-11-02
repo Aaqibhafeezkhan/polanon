@@ -1,0 +1,9 @@
+# Keeps the workflow actions current. They are pinned to a commit, with the release in a comment, so
+# a moved tag cannot change what runs; Dependabot updates both. Python dependencies are left out on
+# purpose: pyproject.toml pins lower bounds only, so every install already gets the newest release.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
