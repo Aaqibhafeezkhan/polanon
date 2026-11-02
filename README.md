@@ -8,6 +8,8 @@
 your network, send only tokens to the model, and put the originals back into its answer — even
 while it streams. Pure Python: the standard library is the whole core.
 
+![polanon masking a Polish invoice request in a terminal, then restoring the model's answer in Python](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.gif)
+
 ```bash
 pip install polanon
 ```
