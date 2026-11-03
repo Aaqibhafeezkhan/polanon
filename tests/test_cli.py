@@ -132,3 +132,104 @@ def test_file_option_refuses_text_arguments(capsys, tmp_path):
         main(["--file", str(path), "Jan Kowalski"])
     assert exit_info.value.code == 2
     assert "cannot be combined" in capsys.readouterr().err
+
+
+SIGNED = "Umowę podpisał Łukasz Wiśniewski, PESEL 50810112354."
+SIGNED_MASKED = "Umowę podpisał <OSOBA_1>, PESEL <PESEL_1>."
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(SIGNED.encode("utf-16"), id="utf-16 with a byte order mark"),
+        pytest.param(SIGNED.encode("utf-16-le"), id="utf-16-le without one"),
+        pytest.param(SIGNED.encode("utf-16-be"), id="utf-16-be without one"),
+        pytest.param(SIGNED.encode("utf-32"), id="utf-32 with a byte order mark"),
+        pytest.param(SIGNED.encode("utf-8-sig"), id="utf-8 with a byte order mark"),
+    ],
+)
+def test_unicode_files_are_decoded_by_their_bytes(data, capsys, tmp_path):
+    """Windows PowerShell 5.1 writes UTF-16 with `>`, and its NULs used to hide every value."""
+    path = tmp_path / "umowa.txt"
+    path.write_bytes(data)
+    assert main(["--file", str(path)]) == 0
+    assert capsys.readouterr().out.strip() == SIGNED_MASKED
+
+
+def test_piped_utf16_is_decoded_too(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdin", PipedInput(SIGNED.encode("utf-16")))
+    assert main([]) == 0
+    assert capsys.readouterr().out.strip() == SIGNED_MASKED
+
+
+def test_one_cp1250_line_does_not_garble_a_utf8_file(capsys, tmp_path):
+    """Decoding the whole file as cp1250 turned its UTF-8 names into mojibake that went out."""
+    path = tmp_path / "umowa.txt"
+    path.write_bytes((SIGNED + "\n").encode() + "Kwota: 100 zł.\n".encode("cp1250"))
+    assert main(["--file", str(path)]) == 0
+    assert capsys.readouterr().out.rstrip("\n").splitlines() == [SIGNED_MASKED, "Kwota: 100 zł."]
+
+
+@pytest.mark.parametrize(
+    ("data", "reason"),
+    [
+        pytest.param(b"\x00\x01\x02 binary \x00\xff\x00", "NUL", id="binary"),
+        pytest.param(b"Umowa \x81 podpisana", "neither UTF-8 nor cp1250", id="undefined in cp1250"),
+        pytest.param(b"\xff\xfeU\x00m\x00o", "UTF-16", id="truncated utf-16"),
+    ],
+)
+def test_input_that_cannot_be_decoded_for_certain_is_refused(data, reason, capsys, tmp_path):
+    path = tmp_path / "umowa.txt"
+    path.write_bytes(data)
+    assert main(["--file", str(path)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert reason in captured.err
+
+
+def test_crlf_line_endings_come_out_as_they_went_in(tmp_path):
+    """Windows text mode turned CRLF into CR CR LF, double-spacing the masked document."""
+    import subprocess
+    import sys
+
+    (tmp_path / "umowa.txt").write_bytes(b"PESEL 50810112354\r\nKoniec\r\n")
+    completed = subprocess.run(
+        [sys.executable, "-m", "polanon", "--file", "umowa.txt"],
+        capture_output=True,
+        check=False,
+        cwd=tmp_path,
+    )
+    assert completed.returncode == 0
+    assert completed.stdout == b"PESEL <PESEL_1>\r\nKoniec\r\n\n"
+
+
+def test_mapping_option_writes_the_mapping_to_a_file(capsys, tmp_path):
+    mapping = tmp_path / "mapping.json"
+    assert main(["--mapping", str(mapping), SIGNED]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == SIGNED_MASKED
+    assert captured.err == ""
+    assert json.loads(mapping.read_text(encoding="utf-8")) == {
+        "<OSOBA_1>": "Łukasz Wiśniewski",
+        "<PESEL_1>": "50810112354",
+    }
+
+
+def test_an_unwritable_mapping_fails_before_any_masked_text(capsys, tmp_path):
+    assert main(["--mapping", str(tmp_path), SIGNED]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "cannot write" in captured.err
+
+
+def test_a_directory_given_as_the_file_is_reported_with_a_reason(capsys, tmp_path):
+    assert main(["--file", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert "cannot read" in err
+    assert "None" not in err
+
+
+def test_no_standard_input_at_all_explains_itself(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdin", None)
+    assert main([]) == 2
+    assert "nothing to mask" in capsys.readouterr().err

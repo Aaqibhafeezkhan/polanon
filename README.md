@@ -66,20 +66,23 @@ Another spaCy model is one argument away: `default_guards(spacy_model="pl_core_n
 
 ## From the command line
 
-Text comes from the arguments or, without any, from standard input. Masked text goes to stdout
-and the mapping to stderr, so a pipeline can keep the two apart:
+Text comes from the arguments, from a file with `--file`, or from standard input. Masked text goes
+to stdout and the mapping to stderr, or to a file with `--mapping`:
 
 ```bash
 polanon "Jan Kowalski, PESEL 50810112354"
+polanon --file umowa.txt --ner --mapping mapping.json > masked.txt
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
-polanon --file umowa.txt --ner > masked.txt 2> mapping.json
 ```
 
-A non-zero exit status means stderr holds an error rather than the mapping. In Windows
-PowerShell 5.1, read the file with `Get-Content -Encoding UTF8 umowa.txt | polanon`: a plain
-`cat` there re-encodes Polish letters before they reach the program, and a garbled name is not
-recognised. `--file` avoids that: polanon reads the file's bytes itself, as UTF-8 or else cp1250,
-and it cannot be combined with text arguments.
+A non-zero exit status means something went wrong and stderr says what. `--file` reads the file's
+bytes itself and tells UTF-8, UTF-16 (what Windows PowerShell 5.1 writes with `>`) and cp1250
+apart; text it cannot decode for certain is refused rather than masked half-blind.
+
+On Windows, prefer `--file` and `--mapping` to pipes and redirection. Windows PowerShell 5.1
+re-encodes text piped into a program as ASCII, so Polish letters arrive as `?` and a garbled name
+is not recognised, and its `2>` wraps stderr in error records. If you do pipe, run
+`$OutputEncoding = [System.Text.UTF8Encoding]::new($false)` first; in `cmd.exe`, run `chcp 65001`.
 
 ## Streaming
 
