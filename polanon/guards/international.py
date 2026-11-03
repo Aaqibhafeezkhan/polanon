@@ -388,7 +388,9 @@ _STREET_LINE = re.compile(
         (
             *_STREETS,
             _PO_BOX,
-            r"[^\W\d_]{2,}\.?,?[ \t]+\d{1,3}[a-zA-Z]?"
+            # Starting only where a word starts: retried at every letter of a long line with no
+            # space, the run of letters was rescanned each time, quadratically.
+            r"(?<![^\W\d_])[^\W\d_]{2,}\.?,?[ \t]+\d{1,3}[a-zA-Z]?"
             r"(?:[ \t]*[-/][ \t]*\d{1,4}[a-zA-Z]?)?[ \t]*,?$",
             r"^[ \t]*(?:Postfach|Postbus|Postboks|Postbox|Apartado|P\.?[ \t]?O\.?[ \t]?Box|Boks"
             r"|Box|Case[ \t]+postale|Casella[ \t]+postale|Boîte[ \t]+postale)\b",

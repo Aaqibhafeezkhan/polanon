@@ -453,10 +453,31 @@ def _locate_cards(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
             continue
         first += 1
         # Inside a chain of four-digit groups a card would only be a slice of a longer number,
-        # an account number for one, so the next try starts where such a chain starts.
-        while first < len(groups) and _width(groups[first - 1]) == 4:
+        # an account number for one, so the next try starts where such a chain starts. A group
+        # that is not four digits wide ends the chain: skipping it as well lost a card written
+        # whole after a year, "2024 4111111111111111".
+        while (
+            first < len(groups)
+            and _width(groups[first - 1]) == _width(groups[first]) == 4
+            and not _card_after_one_number(groups, first)
+        ):
             first += 1
     return found
+
+
+def _card_after_one_number(groups: list[tuple[int, int]], index: int) -> bool:
+    """Return whether four groups of four digits from `index` follow exactly one such group.
+
+    A statement line puts the year of a date right before the card, "15.03.2024 4111 1111 1111
+    1111", as does "ważna do 2027 ...". Only that shape is tried: four groups that end the chain
+    after a single number. Any other slice of a chain is part of a longer number.
+    """
+    if index >= 2 and _width(groups[index - 2]) == 4:
+        return False
+    end = index + 4
+    if end > len(groups) or any(_width(group) != 4 for group in groups[index:end]):
+        return False
+    return end == len(groups) or _width(groups[end]) != 4
 
 
 def _longest_card(run: str, groups: list[tuple[int, int]], first: int) -> int | None:

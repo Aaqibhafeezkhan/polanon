@@ -765,3 +765,22 @@ def test_krs_is_found_in_the_usual_phrasings(text):
 def test_an_address_after_an_inflected_street_word_is_masked(text, address):
     """Only the nominative "ulica" was a street word, and prose uses the other cases."""
     assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "15.03.2024 4111 1111 1111 1111 Zakup 100,00 PLN",
+        "15.03.2024 4111111111111111 Zakup 100,00 PLN",
+        "Karta ważna do 2027 4111 1111 1111 1111",
+        "2024-03-15 4111 1111 1111 1111 zakup",
+    ],
+)
+def test_a_card_right_after_a_four_digit_number_is_masked(text):
+    """After the year of a date, every following group was skipped and the card went out."""
+    assert [found.replace(" ", "") for found in _found(text, "CREDIT_CARD")] == ["4111111111111111"]
+
+
+def test_a_long_chain_of_four_digit_groups_is_still_not_sliced_into_a_card():
+    """Five groups or more are an account or reference number, not a year and a card."""
+    assert _found("Ref. 1234 4111 1111 1111 1111 9999", "CREDIT_CARD") == []

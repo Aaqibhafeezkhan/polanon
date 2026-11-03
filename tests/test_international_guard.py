@@ -452,3 +452,10 @@ def test_detection_stays_linear_on_a_long_hyphen_or_apostrophe_joined_token(toke
     started = time.perf_counter()
     GUARD.detect(text, ALL)
     assert time.perf_counter() - started < 1.0
+
+
+def test_a_long_line_of_letters_above_a_postcode_is_scanned_in_linear_time():
+    """The street-line rule was retried at every letter: 40 KB took half a minute."""
+    started = time.perf_counter()
+    Anonymizer(default_guards(with_ner=False)).anonymize_sync("A" * 40_000 + "\n12345 Berlin")
+    assert time.perf_counter() - started < 3
