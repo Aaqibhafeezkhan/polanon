@@ -30,39 +30,39 @@ async def run(
 
 
 async def test_masks_polish_identifiers_and_keeps_mapping():
-    result = await run("PESEL 90010112349 i NIP 526-000-00-05")
+    result = await run("PESEL 50810112354 i NIP 526-000-00-05")
     assert result.anonymized == "PESEL <PESEL_1> i NIP <NIP_1>"
-    assert result.mapping == {"<PESEL_1>": "90010112349", "<NIP_1>": "526-000-00-05"}
+    assert result.mapping == {"<PESEL_1>": "50810112354", "<NIP_1>": "526-000-00-05"}
     assert result.entity_counts == {"PESEL": 1, "NIP": 1}
 
 
 async def test_same_value_twice_gets_the_same_token():
-    result = await run("mail a@b.pl oraz ponownie a@b.pl")
+    result = await run("mail a@b.example oraz ponownie a@b.example")
     assert result.anonymized == "mail <EMAIL_1> oraz ponownie <EMAIL_1>"
     assert len(result.mapping) == 1
 
 
 async def test_distinct_values_get_consecutive_numbers():
-    result = await run("a@b.pl, c@d.pl")
+    result = await run("a@b.example, c@d.example")
     assert result.anonymized == "<EMAIL_1>, <EMAIL_2>"
 
 
 async def test_existing_mapping_is_reused_and_numbering_continues():
-    existing = {"<EMAIL_1>": "a@b.pl", "<EMAIL_2>": "c@d.pl"}
-    result = await run("a@b.pl pisze do e@f.pl", mapping=existing)
+    existing = {"<EMAIL_1>": "a@b.example", "<EMAIL_2>": "c@d.example"}
+    result = await run("a@b.example pisze do e@f.example", mapping=existing)
     assert result.anonymized == "<EMAIL_1> pisze do <EMAIL_3>"
-    assert result.mapping["<EMAIL_3>"] == "e@f.pl"
-    assert result.mapping["<EMAIL_2>"] == "c@d.pl"
+    assert result.mapping["<EMAIL_3>"] == "e@f.example"
+    assert result.mapping["<EMAIL_2>"] == "c@d.example"
 
 
 async def test_value_at_the_very_start_and_end_is_masked():
-    result = await run("a@b.pl w środku c@d.pl")
+    result = await run("a@b.example w środku c@d.example")
     assert result.anonymized.startswith("<EMAIL_1>")
     assert result.anonymized.endswith("<EMAIL_2>")
 
 
 async def test_restore_is_the_inverse_of_anonymize():
-    text = "Faktura dla a@b.pl, PESEL 90010112349, tel. 600 100 200."
+    text = "Faktura dla a@b.example, PESEL 50810112354, tel. 600 100 200."
     result = await run(text)
     assert Anonymizer.restore(result.anonymized, result.mapping) == text
 
@@ -74,8 +74,8 @@ async def test_existing_tokens_in_the_input_are_left_alone():
 
 
 async def test_disabled_entity_types_are_not_masked():
-    result = await run("PESEL 90010112349 i mail a@b.pl", enabled={"EMAIL"})
-    assert result.anonymized == "PESEL 90010112349 i mail <EMAIL_1>"
+    result = await run("PESEL 50810112354 i mail a@b.example", enabled={"EMAIL"})
+    assert result.anonymized == "PESEL 50810112354 i mail <EMAIL_1>"
 
 
 async def test_denylist_masks_company_names_case_insensitively():
@@ -120,20 +120,20 @@ async def test_judge_other_type_maps_to_inne_label():
 
 async def test_judge_finding_overlapping_a_token_is_skipped():
     judge = MockJudge({"<EMAIL_1>": "PERSON"})
-    result = await run("kontakt a@b.pl", judge=judge)
+    result = await run("kontakt a@b.example", judge=judge)
     assert result.anonymized == "kontakt <EMAIL_1>"
     assert result.judge_hits == 0
 
 
 async def test_judge_failure_with_send_stage1_keeps_stage1_result():
-    result = await run("PESEL 90010112349", judge=MockJudge(fail=True))
+    result = await run("PESEL 50810112354", judge=MockJudge(fail=True))
     assert result.anonymized == "PESEL <PESEL_1>"
     assert result.judge_failed is True
 
 
 async def test_judge_failure_with_block_raises():
     with pytest.raises(JudgeError):
-        await run("PESEL 90010112349", judge=MockJudge(fail=True), fallback=JudgeFallback.BLOCK)
+        await run("PESEL 50810112354", judge=MockJudge(fail=True), fallback=JudgeFallback.BLOCK)
 
 
 async def test_judge_spans_are_reported_in_original_coordinates():
@@ -152,7 +152,7 @@ async def test_empty_text_produces_empty_result():
 
 async def test_anonymizer_facade_matches_pipeline():
     anon = Anonymizer(guards(), judge=None)
-    result = await anon.anonymize("mail a@b.pl")
+    result = await anon.anonymize("mail a@b.example")
     assert result.anonymized == "mail <EMAIL_1>"
 
 
@@ -227,7 +227,7 @@ async def test_masking_does_not_freeze_the_caller_while_the_guards_run():
 
 async def test_a_document_with_many_entities_is_rebuilt_once():
     """The masked text used to be rebuilt per span, which is quadratic on a long upload."""
-    text = "PESEL 90010112349 oraz PESEL 85031523454. " * 500
+    text = "PESEL 50810112354 oraz PESEL 45831523452. " * 500
 
     result = await anonymize(
         text,
@@ -389,7 +389,7 @@ async def test_the_longest_known_value_is_placed_first():
 
 
 async def test_numbering_still_follows_reading_order_when_values_repeat():
-    text = "PESEL 90010112349, potem 85031523454, znowu 90010112349."
+    text = "PESEL 50810112354, potem 45831523452, znowu 50810112354."
     result = await anonymize(
         text, enabled={"PESEL"}, guards=[RegexGuard()], judge=None, existing_mapping={}
     )

@@ -100,6 +100,6 @@ jobs:
         run: |
           python -m venv /tmp/bare
           /tmp/bare/bin/pip install "$GITHUB_WORKSPACE"/dist/polanon-*.whl
-          masked="$(/tmp/bare/bin/polanon "Jan Kowalski, PESEL 90010112349")"
+          masked="$(/tmp/bare/bin/polanon "Jan Kowalski, PESEL 50810112354")"
           echo "$masked"
           test "$masked" = "<OSOBA_1>, PESEL <PESEL_1>"

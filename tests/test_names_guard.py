@@ -205,11 +205,11 @@ def test_a_word_before_a_first_name_stays_out_outside_a_labelled_field(text, exp
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("JAN KONIECZNY, PESEL 90010112349", ["JAN KONIECZNY"]),
-        ("PAN JAN KONIECZNY, PESEL 90010112349", ["JAN KONIECZNY"]),
-        ("ANNA GOŁĄB, PESEL 90010112349", ["ANNA GOŁĄB"]),
-        ("KATARZYNA ŚLIWA, PESEL 90010112349", ["KATARZYNA ŚLIWA"]),
-        ("Imię i nazwisko: JAN KONIECZNY PESEL 90010112349", ["JAN KONIECZNY"]),
+        ("JAN KONIECZNY, PESEL 50810112354", ["JAN KONIECZNY"]),
+        ("PAN JAN KONIECZNY, PESEL 50810112354", ["JAN KONIECZNY"]),
+        ("ANNA GOŁĄB, PESEL 50810112354", ["ANNA GOŁĄB"]),
+        ("KATARZYNA ŚLIWA, PESEL 50810112354", ["KATARZYNA ŚLIWA"]),
+        ("Imię i nazwisko: JAN KONIECZNY PESEL 50810112354", ["JAN KONIECZNY"]),
         ("Jan KONIECZNY, dyrektor", ["Jan KONIECZNY"]),
         ("PAN KONIECZNY, tel. 600 100 200", ["KONIECZNY"]),
         ("MAREK ZAJĄC zadzwoni", ["MAREK ZAJĄC"]),
@@ -252,7 +252,7 @@ def test_a_mans_nominative_surname_is_taken_after_a_vocative(text, expected):
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("Umowę podpisał J. Kowalski, PESEL 90010112349.", ["J. Kowalski"]),
+        ("Umowę podpisał J. Kowalski, PESEL 50810112354.", ["J. Kowalski"]),
         ("Umowę podpisała A. Zielińska.", ["A. Zielińska"]),
         ("Z poważaniem\nM. Wiśniewski\nDział Kadr", ["M. Wiśniewski"]),
         ("Podpisali A.M. Nowak i J. K. Wróbel", ["A.M. Nowak", "J. K. Wróbel"]),

@@ -102,7 +102,9 @@ def test_end_to_end_masking_of_a_polish_sentence():
     from polanon import Anonymizer, RegexGuard
 
     anonymizer = Anonymizer([RegexGuard(), NerGuard()])
-    result = asyncio.run(anonymizer.anonymize("Jan Kowalski, PESEL 90010112349, mail jan@firma.pl"))
+    result = asyncio.run(
+        anonymizer.anonymize("Jan Kowalski, PESEL 50810112354, mail jan@example.com")
+    )
     assert "Jan Kowalski" not in result.anonymized
     assert "<OSOBA_1>" in result.anonymized
     assert "<PESEL_1>" in result.anonymized
@@ -112,7 +114,7 @@ def test_end_to_end_masking_of_a_polish_sentence():
 @needs_model
 def test_entities_never_span_a_line_break(guard):
     """A detection that runs across a newline is split, so it cannot swallow the next line."""
-    text = "Anna Wiśniewska\nPESEL: 85031523454"
+    text = "Anna Wiśniewska\nPESEL: 45831523452"
     for span in guard.detect(text, {"PERSON", "LOCATION", "ORG"}):
         assert "\n" not in text[span.start : span.end]
 
@@ -124,7 +126,7 @@ def test_email_beats_an_overlapping_name_detection():
 
     from polanon import Anonymizer, RegexGuard
 
-    text = "Anna Wiśniewska\ne-mail: anna.wisniewska@poczta.example\nPESEL: 85031523454"
+    text = "Anna Wiśniewska\ne-mail: anna.wisniewska@poczta.example\nPESEL: 45831523452"
     result = asyncio.run(Anonymizer([RegexGuard(), NerGuard()]).anonymize(text))
     assert "<EMAIL_1>" in result.anonymized
     assert "<PESEL_1>" in result.anonymized

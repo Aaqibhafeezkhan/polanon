@@ -7,7 +7,7 @@ body:
       value: |
         **Never paste real personal data here.** This issue is public and stays public. Rewrite the
         text with invented values of the same shape: a made-up name, a PESEL with a valid checksum
-        (for example 90010112349), a fictional company.
+        (for example 50810112354), a fictional company.
   - type: input
     id: kind
     attributes:

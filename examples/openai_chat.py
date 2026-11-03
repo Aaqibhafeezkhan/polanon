@@ -70,8 +70,8 @@ if __name__ == "__main__":
     if not model:
         sys.exit("Set OPENAI_MODEL to the model the endpoint serves.")
     question = (
-        "Napisz krótką odpowiedź do Jana Kowalskiego (PESEL 90010112349, "
-        "jan.kowalski@firma.pl), że korekta faktury jest gotowa."
+        "Napisz krótką odpowiedź do Jana Kowalskiego (PESEL 50810112354, "
+        "jan.kowalski@example.com), że korekta faktury jest gotowa."
     )
     for piece in ask_streaming(openai.OpenAI(), model, question):
         print(piece, end="", flush=True)

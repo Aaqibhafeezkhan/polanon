@@ -27,7 +27,7 @@ ALL = set(ENTITY_TYPES)
 
 @pytest.mark.parametrize(
     ("value", "ok"),
-    [("90010112349", True), ("02212900125", True), ("90010112345", False), ("12345678901", False)],
+    [("50810112354", True), ("02412900121", True), ("50810112350", False), ("12345678901", False)],
 )
 def test_pesel(value, ok):
     assert is_valid_pesel(value) is ok
@@ -72,20 +72,20 @@ def test_iban_and_luhn():
 
 def test_regex_guard_finds_valid_and_skips_invalid():
     text = (
-        "Jan, PESEL 90010112349, NIP 526-000-00-05, tel. 600 100 200, "
-        "mail jan@firma.pl, zły PESEL 90010112345."
+        "Jan, PESEL 50810112354, NIP 526-000-00-05, tel. 600 100 200, "
+        "mail jan@example.com, zły PESEL 50810112350."
     )
     spans = RegexGuard().detect(text, ALL)
     found = {(s.entity_type, text[s.start : s.end]) for s in spans}
-    assert ("PESEL", "90010112349") in found
+    assert ("PESEL", "50810112354") in found
     assert ("NIP", "526-000-00-05") in found
-    assert ("EMAIL", "jan@firma.pl") in found
+    assert ("EMAIL", "jan@example.com") in found
     assert ("PHONE", "600 100 200") in found
-    assert ("PESEL", "90010112345") not in found
+    assert ("PESEL", "50810112350") not in found
 
 
 def test_regex_guard_respects_enabled_set():
-    assert RegexGuard().detect("PESEL 90010112349", {"NIP"}) == []
+    assert RegexGuard().detect("PESEL 50810112354", {"NIP"}) == []
 
 
 # --- address, contact and device identifiers added after the first field test ---------------
@@ -271,8 +271,8 @@ def test_dates_are_detected_when_the_admin_enables_them(text, expected):
 @pytest.mark.parametrize(
     ("validator", "value"),
     [
-        (is_valid_pesel, "9001011234"),  # ten digits
-        (is_valid_pesel, "90010112340"),  # checksum off by one
+        (is_valid_pesel, "5081011235"),  # ten digits
+        (is_valid_pesel, "50810112355"),  # checksum off by one
         (is_valid_pesel, "90993112341"),  # month 99 exists in no calendar
         (is_valid_pesel, "90013212349"),  # day 32
         (is_valid_nip, "526000000"),  # nine digits
@@ -305,7 +305,7 @@ def test_a_malformed_identifier_is_rejected(validator, value):
         (is_valid_vin, "WVWZZZ1KZAW123456"),
         (is_valid_plate, "KR 8492J"),
         (is_valid_luhn, "4111111111111111"),
-        (is_valid_pesel, "900101 12349"),  # birth date and serial number apart
+        (is_valid_pesel, "508101 12354"),  # birth date and serial number apart
     ],
 )
 def test_a_well_formed_identifier_is_accepted(validator, value):
@@ -471,8 +471,8 @@ def test_id_card_with_a_currency_series_is_detected_after_an_id_card_label():
 @pytest.mark.parametrize(
     ("text", "entity_type", "value"),
     [
-        ("Numer PESEL: 9 0 0 1 0 1 1 2 3 4 9", "PESEL", "9 0 0 1 0 1 1 2 3 4 9"),
-        ("PESEL 900101 12349 (data urodzenia i numer)", "PESEL", "900101 12349"),
+        ("Numer PESEL: 5 0 8 1 0 1 1 2 3 5 4", "PESEL", "5 0 8 1 0 1 1 2 3 5 4"),
+        ("PESEL 508101 12354 (data urodzenia i numer)", "PESEL", "508101 12354"),
         ("Identyfikator podatkowy NIP: 5 2 6 0 0 0 0 0 0 5", "NIP", "5 2 6 0 0 0 0 0 0 5"),
         (
             "Numer rachunku: 6 1 1 0 9 0 1 0 1 4 0 0 0 0 0 7 1 2 1 9 8 1 2 8 7 4",
@@ -577,16 +577,16 @@ def masked(text: str, enabled=ALL) -> str:
 
 def test_pesel_with_check_digit_zero_is_masked():
     """One PESEL in ten ends in 0: its weighted sum is a multiple of ten."""
-    assert is_valid_pesel("90010110040")
-    assert masked("PESEL 90010110040") == "PESEL <PESEL_1>"
+    assert is_valid_pesel("50810110048")
+    assert masked("PESEL 50810110048") == "PESEL <PESEL_1>"
 
 
 def test_pesel_of_someone_born_on_the_31st_is_masked():
-    assert is_valid_pesel("90013110009")
-    assert masked("PESEL 90013110009") == "PESEL <PESEL_1>"
+    assert is_valid_pesel("50813110007")
+    assert masked("PESEL 50813110007") == "PESEL <PESEL_1>"
 
 
-@pytest.mark.parametrize("pesel", ["90120110006", "85121510009"])
+@pytest.mark.parametrize("pesel", ["50920110004", "45921510007"])
 def test_pesel_of_someone_born_in_december_is_masked(pesel):
     assert is_valid_pesel(pesel)
     assert masked(f"PESEL {pesel}") == "PESEL <PESEL_1>"
@@ -666,7 +666,7 @@ def test_longest_valid_card_is_taken_when_a_prefix_also_passes_luhn():
 
 def test_split_number_with_a_pesel_checksum_but_no_label_is_not_a_pesel():
     """A date-prefixed order number has the same shape and passes the checksum one time in ten."""
-    text = "Zamówienie 900101-12349 wysłane."
+    text = "Zamówienie 508101-12354 wysłane."
     assert masked(text, {"PESEL"}) == text
 
 

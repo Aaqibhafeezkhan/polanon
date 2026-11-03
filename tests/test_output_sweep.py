@@ -11,7 +11,7 @@ NAME_GUARDS = [RegexGuard(), PersonNameGuard()]
 
 
 def test_clean_answer_reports_nothing():
-    report = sweep("Wszystko w porządku.", {"<EMAIL_1>": "a@b.pl"}, GUARDS, ALL)
+    report = sweep("Wszystko w porządku.", {"<EMAIL_1>": "a@b.example"}, GUARDS, ALL)
     assert report.is_clean
 
 
@@ -21,12 +21,12 @@ def test_invented_token_is_reported():
 
 
 def test_restored_known_value_is_not_reported_as_new():
-    report = sweep("Kontakt: a@b.pl", {"<EMAIL_1>": "a@b.pl"}, GUARDS, ALL)
+    report = sweep("Kontakt: a@b.example", {"<EMAIL_1>": "a@b.example"}, GUARDS, ALL)
     assert report.new_spans == []
 
 
 def test_hallucinated_personal_data_is_reported():
-    report = sweep("Przykładowy PESEL to 90010112349.", {}, GUARDS, ALL)
+    report = sweep("Przykładowy PESEL to 50810112354.", {}, GUARDS, ALL)
     assert [s.entity_type for s in report.new_spans] == ["PESEL"]
     assert not report.is_clean
 
@@ -51,7 +51,9 @@ def test_a_new_name_next_to_known_ones_is_still_reported():
 
 
 def test_known_value_repeated_in_the_answer_is_not_reported_as_new():
-    report = sweep("Napisz na a@b.pl, a kopię na a@b.pl.", {"<EMAIL_1>": "a@b.pl"}, GUARDS, ALL)
+    report = sweep(
+        "Napisz na a@b.example, a kopię na a@b.example.", {"<EMAIL_1>": "a@b.example"}, GUARDS, ALL
+    )
     assert report.is_clean
 
 

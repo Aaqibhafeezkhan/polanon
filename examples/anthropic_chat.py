@@ -99,8 +99,8 @@ class PrivateChat:
 
 if __name__ == "__main__":
     question = (
-        "Napisz krótką odpowiedź do Jana Kowalskiego (PESEL 90010112349, "
-        "jan.kowalski@firma.pl), że korekta faktury jest gotowa."
+        "Napisz krótką odpowiedź do Jana Kowalskiego (PESEL 50810112354, "
+        "jan.kowalski@example.com), że korekta faktury jest gotowa."
     )
     for piece in ask_streaming(anthropic.Anthropic(), question):
         print(piece, end="", flush=True)

@@ -3,7 +3,7 @@
 Text comes from the arguments or from standard input. The masked text goes to stdout and the token
 mapping to stderr, so a pipeline can keep the two apart:
 
-    polanon "Jan Kowalski, PESEL 90010112349"
+    polanon "Jan Kowalski, PESEL 50810112354"
     cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
 
 The mapping is what makes the masking reversible, so treat that second file the way you would treat

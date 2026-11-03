@@ -35,7 +35,7 @@ offline, and are skipped without them.
 ## A value that was not masked
 
 Open a *Something was not masked* issue with invented text of the same shape: a made-up name, a
-PESEL with a valid checksum (90010112349), a fictional company. The shortest text that still shows
+PESEL with a valid checksum (50810112354), a fictional company. The shortest text that still shows
 the miss is the most useful. A way to get a value that already has a token past the masking is a
 security report instead: see `SECURITY.md`.
 

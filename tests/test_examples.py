@@ -23,10 +23,10 @@ httpx2 = pytest.importorskip("httpx2")
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 QUESTION = (
-    "Napisz krótką odpowiedź do Jana Kowalskiego (PESEL 90010112349, "
-    "jan.kowalski@firma.pl), że korekta faktury jest gotowa."
+    "Napisz krótką odpowiedź do Jana Kowalskiego (PESEL 50810112354, "
+    "jan.kowalski@example.com), że korekta faktury jest gotowa."
 )
-RAW_VALUES = ("Jana Kowalskiego", "90010112349", "jan.kowalski@firma.pl")
+RAW_VALUES = ("Jana Kowalskiego", "50810112354", "jan.kowalski@example.com")
 RESTORED = "Gotowe dla " + ", ".join(RAW_VALUES)
 CUT_SHORT = ". Pozdrawiam, <OSO"
 TOKEN = re.compile(TOKEN_PATTERN)
@@ -71,7 +71,7 @@ class FakeProvider:
     def assert_saw_no_raw_value(self):
         for body in self.bodies:
             assert "kowalsk" not in body.lower()
-            assert "90010112349" not in body
+            assert "50810112354" not in body
 
 
 def _claude_message(text):
@@ -166,9 +166,9 @@ def test_claude_conversation_keeps_tokens_and_masked_history_across_turns(claude
     provider, client = claude
     chat = _load("anthropic_chat").PrivateChat(client)
     chat.send(QUESTION)
-    second = chat.send("Dopisz, że PESEL 90010112349 zweryfikowano.")
+    second = chat.send("Dopisz, że PESEL 50810112354 zweryfikowano.")
     provider.assert_saw_no_raw_value()
-    assert second == "Gotowe dla 90010112349" + CUT_SHORT
+    assert second == "Gotowe dla 50810112354" + CUT_SHORT
     messages = json.loads(provider.bodies[-1])["messages"]
     assert [message["role"] for message in messages] == ["user", "assistant", "user"]
     assert "<PESEL_1>" in messages[1]["content"]

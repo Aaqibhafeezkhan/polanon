@@ -7,19 +7,19 @@ import pytest
 
 from polanon.__main__ import main
 
-TEXT = "Jan Kowalski, PESEL 90010112349, mail jan@example.com"
+TEXT = "Jan Kowalski, PESEL 50810112354, mail jan@example.com"
 
 
 def test_arguments_are_masked_on_stdout_and_the_mapping_goes_to_stderr(capsys):
     assert main([TEXT]) == 0
     captured = capsys.readouterr()
     assert "<PESEL_1>" in captured.out
-    assert "90010112349" not in captured.out
-    assert json.loads(captured.err)["<PESEL_1>"] == "90010112349"
+    assert "50810112354" not in captured.out
+    assert json.loads(captured.err)["<PESEL_1>"] == "50810112354"
 
 
 def test_several_arguments_are_joined_into_one_text(capsys):
-    assert main(["PESEL", "90010112349"]) == 0
+    assert main(["PESEL", "50810112354"]) == 0
     assert "<PESEL_1>" in capsys.readouterr().out
 
 
@@ -77,7 +77,7 @@ def test_the_command_runs_with_docstrings_stripped():
     import sys
 
     completed = subprocess.run(
-        [sys.executable, "-OO", "-m", "polanon", "PESEL 90010112349"],
+        [sys.executable, "-OO", "-m", "polanon", "PESEL 50810112354"],
         capture_output=True,
         check=False,
     )

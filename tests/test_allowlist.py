@@ -125,7 +125,7 @@ async def test_an_allowed_brand_stays_masked_when_a_form_of_address_names_a_pers
 
 
 async def test_a_platform_the_model_flags_goes_out_as_written():
-    text = "Zrób post na Facebooku o Janie Kowalskim, PESEL 90010112349."
+    text = "Zrób post na Facebooku o Janie Kowalskim, PESEL 50810112354."
     result = await anonymize(
         text,
         enabled=ALL,

@@ -17,7 +17,7 @@ from polanon.guards.base import Guard
 from polanon.judge.mock import MockJudge
 from polanon.types import JudgeFallback, Span
 
-TEXT = "Jan Kowalski, PESEL 90010112349, termin 15.03.2024."
+TEXT = "Jan Kowalski, PESEL 50810112354, termin 15.03.2024."
 
 
 class EmployeeGuard(Guard):
@@ -40,17 +40,17 @@ def test_anonymize_sync_gives_what_anonymize_gives():
 
 async def test_anonymize_sync_works_inside_a_running_event_loop():
     """A notebook, or an async web handler calling sync code, already has a loop running."""
-    result = Anonymizer([RegexGuard()]).anonymize_sync("PESEL 90010112349")
+    result = Anonymizer([RegexGuard()]).anonymize_sync("PESEL 50810112354")
     assert result.anonymized == "PESEL <PESEL_1>"
 
 
 def test_anonymize_sync_reuses_a_conversation_mapping_without_changing_it():
-    mapping = {"<PESEL_1>": "90010112349"}
+    mapping = {"<PESEL_1>": "50810112354"}
     result = Anonymizer([RegexGuard()]).anonymize_sync(
-        "Ten sam PESEL 90010112349 i nowy 85031523454", mapping
+        "Ten sam PESEL 50810112354 i nowy 45831523452", mapping
     )
     assert result.anonymized == "Ten sam PESEL <PESEL_1> i nowy <PESEL_2>"
-    assert mapping == {"<PESEL_1>": "90010112349"}
+    assert mapping == {"<PESEL_1>": "50810112354"}
 
 
 def test_anonymize_sync_refuses_a_judge_instead_of_skipping_it():
@@ -60,7 +60,7 @@ def test_anonymize_sync_refuses_a_judge_instead_of_skipping_it():
 
 def test_dates_stay_readable_unless_asked_for():
     """Masking every deadline left the model unable to answer what the text was sent for."""
-    text = "Termin: 15.03.2024, PESEL 90010112349"
+    text = "Termin: 15.03.2024, PESEL 50810112354"
     assert Anonymizer([RegexGuard()]).anonymize_sync(text).anonymized == (
         "Termin: 15.03.2024, PESEL <PESEL_1>"
     )
@@ -140,7 +140,7 @@ def test_birth_date_is_masked_by_default():
 async def test_facade_blocks_when_the_judge_fails_and_the_policy_says_block():
     anonymizer = Anonymizer([RegexGuard()], judge=MockJudge(fail=True), judge_fallback="block")
     with pytest.raises(JudgeError):
-        await anonymizer.anonymize("PESEL 90010112349")
+        await anonymizer.anonymize("PESEL 50810112354")
 
 
 def test_anonymize_sync_honours_the_allowlist():

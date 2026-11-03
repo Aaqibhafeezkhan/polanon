@@ -19,7 +19,7 @@ def is_valid_pesel(s: str) -> bool:
     """Return True for an 11-digit PESEL with a valid checksum and a plausible birth date.
 
     Spaces and dashes are ignored: a PESEL is also written as the birth date and the serial number
-    apart ("900101 12349"), and a form with one box per digit comes out of text extraction spaced.
+    apart ("508101 12354"), and a form with one box per digit comes out of text extraction spaced.
     """
     s = re.sub(r"[\s-]", "", s)
     if not re.fullmatch(r"\d{11}", s):

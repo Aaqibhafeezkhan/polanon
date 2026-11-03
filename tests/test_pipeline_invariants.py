@@ -123,7 +123,7 @@ def fullwidth(text):
 
 @pytest.mark.parametrize(
     ("written", "token"),
-    [("jan.kowalski@firma.pl", "<EMAIL_1>"), ("PL61109010140000071219812874", "<IBAN_1>")],
+    [("jan.kowalski@example.com", "<EMAIL_1>"), ("PL61109010140000071219812874", "<IBAN_1>")],
 )
 async def test_fullwidth_letters_are_read_as_letters(written, token):
     """Digits alone would pass anyway: regex and int() already read fullwidth digits."""
@@ -164,21 +164,21 @@ async def test_a_custom_type_is_masked_at_every_occurrence_and_restored():
 
 async def test_a_token_already_in_the_text_is_never_handed_out_again():
     """A template's literal placeholder must not become the real PESEL on restore."""
-    text = "W szablonie mamy pole <PESEL_1>, a prawdziwy PESEL to 90010112349."
+    text = "W szablonie mamy pole <PESEL_1>, a prawdziwy PESEL to 50810112354."
     result = await mask(text)
     assert result.anonymized == "W szablonie mamy pole <PESEL_1>, a prawdziwy PESEL to <PESEL_2>."
-    assert result.mapping == {"<PESEL_1>": "<PESEL_1>", "<PESEL_2>": "90010112349"}
+    assert result.mapping == {"<PESEL_1>": "<PESEL_1>", "<PESEL_2>": "50810112354"}
     assert is_lossless(result)
 
 
 async def test_a_token_written_in_an_earlier_turn_is_never_handed_out_later():
     """The placeholder stands for itself in the mapping, so the next turn still steps around it."""
     first = await mask("W szablonie umowy jest pole <PESEL_1> i pole <OSOBA_1>, wypełnij je.")
-    second = await mask("Klient Jan Kowalski, PESEL 90010112349.", mapping=first.mapping)
+    second = await mask("Klient Jan Kowalski, PESEL 50810112354.", mapping=first.mapping)
     assert second.anonymized == "Klient <OSOBA_2>, PESEL <PESEL_2>."
     answer = "W polu <PESEL_1> wpisz <PESEL_2>, a pole <OSOBA_1> zostaw puste."
     assert Anonymizer.restore(answer, second.mapping) == (
-        "W polu <PESEL_1> wpisz 90010112349, a pole <OSOBA_1> zostaw puste."
+        "W polu <PESEL_1> wpisz 50810112354, a pole <OSOBA_1> zostaw puste."
     )
 
 
@@ -200,9 +200,9 @@ async def test_tokens_follow_reading_order_when_a_value_is_recognised_only_later
 async def test_a_piece_left_over_from_a_losing_detection_is_not_masked_elsewhere():
     """An address rule once ran from an e-mail domain into the next line and left "NIP" behind;
     every "NIP" in the document then reached the model as an address."""
-    text = "Kontakt: jan@firma.pl\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
+    text = "Kontakt: jan@example.com\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
     guard = FixedGuard(
-        Span(9, 21, "EMAIL"), Span(26, 39, "NIP"), Span(19, 29, "ADDRESS", 0.8, "fixed")
+        Span(9, 24, "EMAIL"), Span(29, 42, "NIP"), Span(22, 32, "ADDRESS", 0.8, "fixed")
     )
     result = await mask(text, [guard])
     assert result.anonymized == "Kontakt: <EMAIL_1>\n<ADRES_1> <NIP_1>\nProszę podać NIP nabywcy."
@@ -210,9 +210,9 @@ async def test_a_piece_left_over_from_a_losing_detection_is_not_masked_elsewhere
 
 async def test_the_judge_reviews_only_the_masked_text():
     judge = SpyJudge()
-    result = await mask(f"Jan Kowalski, PESEL 90010112349, konto {IBAN}", judge=judge)
+    result = await mask(f"Jan Kowalski, PESEL 50810112354, konto {IBAN}", judge=judge)
     assert judge.seen == [result.anonymized]
-    assert not any(raw in judge.seen[0] for raw in ("Kowalski", "90010112349", "1090"))
+    assert not any(raw in judge.seen[0] for raw in ("Kowalski", "50810112354", "1090"))
 
 
 async def test_a_short_judge_finding_is_never_replaced_inside_a_longer_word():
@@ -231,9 +231,9 @@ async def test_a_long_judge_finding_inside_a_word_masks_the_whole_word_under_its
 
 async def test_a_judge_finding_that_quotes_or_cuts_a_token_allocates_nothing():
     judge = SpyJudge([("PESEL <PESEL_1> z Łodzi", "PERSON"), ("PESEL_1", "OTHER")])
-    result = await mask("Klient PESEL 90010112349 z Łodzi.", judge=judge)
+    result = await mask("Klient PESEL 50810112354 z Łodzi.", judge=judge)
     assert result.anonymized == "Klient PESEL <PESEL_1> z Łodzi."
-    assert result.mapping == {"<PESEL_1>": "90010112349"}
+    assert result.mapping == {"<PESEL_1>": "50810112354"}
     assert result.judge_hits == 0
 
 
@@ -251,7 +251,7 @@ async def test_judge_spans_record_exactly_what_was_replaced():
 
 
 async def test_a_judge_that_breaks_its_contract_still_falls_back_to_stage_one():
-    result = await mask("PESEL 90010112349", judge=SpyJudge(error=TypeError("a list, not a dict")))
+    result = await mask("PESEL 50810112354", judge=SpyJudge(error=TypeError("a list, not a dict")))
     assert result.judge_failed
     assert result.anonymized == "PESEL <PESEL_1>"
 
@@ -259,14 +259,14 @@ async def test_a_judge_that_breaks_its_contract_still_falls_back_to_stage_one():
 async def test_a_judge_that_breaks_its_contract_blocks_when_the_policy_says_so():
     with pytest.raises(JudgeError, match="TypeError"):
         await mask(
-            "PESEL 90010112349", judge=SpyJudge(error=TypeError("x")), fallback=JudgeFallback.BLOCK
+            "PESEL 50810112354", judge=SpyJudge(error=TypeError("x")), fallback=JudgeFallback.BLOCK
         )
 
 
 async def test_a_fallback_given_as_plain_text_is_honoured():
     """A string "block" used to compare unequal to the enum and let a failing judge through."""
     with pytest.raises(JudgeError):
-        await mask("PESEL 90010112349", judge=SpyJudge(error=JudgeError("down")), fallback="block")
+        await mask("PESEL 50810112354", judge=SpyJudge(error=JudgeError("down")), fallback="block")
 
 
 async def test_a_long_export_masks_every_repeated_value():
@@ -391,9 +391,9 @@ async def test_known_value_inside_the_last_word_takes_all_of_it():
 async def test_leftover_sharing_the_start_of_its_detection_is_not_masked_elsewhere():
     """The address rule starts at "NIP" and loses the number to the NIP rule: the bare word left
     over is masked in place, not in every sentence that mentions a NIP."""
-    text = "Kontakt: jan@firma.pl\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
+    text = "Kontakt: jan@example.com\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
     guard = FixedGuard(
-        Span(9, 21, "EMAIL"), Span(26, 39, "NIP"), Span(22, 39, "ADDRESS", 0.8, "fixed")
+        Span(9, 24, "EMAIL"), Span(29, 42, "NIP"), Span(25, 42, "ADDRESS", 0.8, "fixed")
     )
     result = await mask(text, [guard])
     assert result.anonymized == "Kontakt: <EMAIL_1>\n<ADRES_1> <NIP_1>\nProszę podać NIP nabywcy."
@@ -420,10 +420,14 @@ async def test_judge_span_right_after_a_token_points_at_the_original_value():
 
 async def test_existing_mapping_out_of_order_never_hands_out_a_used_token():
     """A conversation's mapping read back from storage need not be in numbering order."""
-    existing = {"<EMAIL_2>": "c@d.pl", "<EMAIL_1>": "a@b.pl"}
-    result = await mask("Nowy adres: e@f.pl", mapping=existing)
+    existing = {"<EMAIL_2>": "c@d.example", "<EMAIL_1>": "a@b.example"}
+    result = await mask("Nowy adres: e@f.example", mapping=existing)
     assert result.anonymized == "Nowy adres: <EMAIL_3>"
-    assert result.mapping == {"<EMAIL_1>": "a@b.pl", "<EMAIL_2>": "c@d.pl", "<EMAIL_3>": "e@f.pl"}
+    assert result.mapping == {
+        "<EMAIL_1>": "a@b.example",
+        "<EMAIL_2>": "c@d.example",
+        "<EMAIL_3>": "e@f.example",
+    }
 
 
 async def test_judge_finding_of_a_type_the_policy_disables_is_not_masked():
@@ -450,7 +454,7 @@ async def test_judge_error_under_block_reaches_the_caller_unchanged():
 
     with pytest.raises(JudgeError) as raised:
         await anonymize(
-            "PESEL 90010112349",
+            "PESEL 50810112354",
             enabled=ALL,
             guards=[RegexGuard()],
             judge=FailingJudge(),
@@ -575,9 +579,9 @@ async def test_a_short_number_known_as_a_secret_is_masked_where_it_stands_alone(
 
 async def test_a_secret_is_masked_whole_with_an_address_inside_it():
     """The model learnt that the password was the e-mail address followed by "#!"."""
-    result = await mask('Hasło: "jan.kowalski@firma.pl#!"', [RegexGuard(), SecretsGuard()])
+    result = await mask('Hasło: "jan.kowalski@example.com#!"', [RegexGuard(), SecretsGuard()])
     assert result.anonymized == 'Hasło: "<SEKRET_1>"'
-    assert result.mapping == {"<SEKRET_1>": "jan.kowalski@firma.pl#!"}
+    assert result.mapping == {"<SEKRET_1>": "jan.kowalski@example.com#!"}
 
 
 @pytest.mark.parametrize("values", [1, 40, 400])
@@ -670,9 +674,9 @@ async def test_a_known_name_split_over_two_lines_is_masked_whole():
 
 
 async def test_a_known_password_holding_an_address_is_masked_whole_in_a_later_turn():
-    first = await mask("Hasło: jan.kowalski@firma.pl#!", [RegexGuard(), SecretsGuard()])
+    first = await mask("Hasło: jan.kowalski@example.com#!", [RegexGuard(), SecretsGuard()])
     second = await mask(
-        "Czy jan.kowalski@firma.pl#! to dobre hasło?",
+        "Czy jan.kowalski@example.com#! to dobre hasło?",
         [RegexGuard(), SecretsGuard()],
         mapping=first.mapping,
     )
@@ -687,8 +691,8 @@ async def test_a_known_iban_broken_over_lines_is_masked_whole_around_a_card_read
 
 async def test_a_known_identifier_written_in_lowercase_later_is_masked():
     """The lowercase exception is for names; a VIN or an e-mail address is the same in any case."""
-    mapping = {"<VIN_1>": "WVWZZZ1JZXW000001", "<EMAIL_1>": "Jan.Kowalski@Firma.pl"}
-    replayed = mask_known_values("auto wvwzzz1jzxw000001, mail jan.kowalski@firma.pl", mapping)
+    mapping = {"<VIN_1>": "WVWZZZ1JZXW000001", "<EMAIL_1>": "Jan.Kowalski@Example.com"}
+    replayed = mask_known_values("auto wvwzzz1jzxw000001, mail jan.kowalski@example.com", mapping)
     assert replayed == "auto <VIN_1>, mail <EMAIL_1>"
 
 

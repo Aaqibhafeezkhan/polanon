@@ -20,15 +20,15 @@ from polanon import Anonymizer, default_guards
 anonymizer = Anonymizer(default_guards(with_ner=False))
 
 result = anonymizer.anonymize_sync(
-    "Proszę o korektę faktury dla Jana Kowalskiego, PESEL 90010112349, "
-    "konto PL61109010140000071219812874, mail jan.kowalski@firma.pl."
+    "Proszę o korektę faktury dla Jana Kowalskiego, PESEL 50810112354, "
+    "konto PL61109010140000071219812874, mail jan.kowalski@example.com."
 )
 print(result.anonymized)
 # Proszę o korektę faktury dla <OSOBA_1>, PESEL <PESEL_1>, konto <IBAN_1>, mail <EMAIL_1>.
 
 answer = "Korekta dla <OSOBA_1> (PESEL <PESEL_1>) jest gotowa."  # what the model replied
 print(Anonymizer.restore(answer, result.mapping))
-# Korekta dla Jana Kowalskiego (PESEL 90010112349) jest gotowa.
+# Korekta dla Jana Kowalskiego (PESEL 50810112354) jest gotowa.
 ```
 
 The model only ever sees `<OSOBA_1>`. The mapping that turns it back into a name never leaves your
@@ -70,7 +70,7 @@ Text comes from the arguments or, without any, from standard input. Masked text 
 and the mapping to stderr, so a pipeline can keep the two apart:
 
 ```bash
-polanon "Jan Kowalski, PESEL 90010112349"
+polanon "Jan Kowalski, PESEL 50810112354"
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
 ```
 
@@ -89,7 +89,7 @@ restorer = Anonymizer.stream_restorer(result.mapping)
 for chunk in stream:  # "Dzień dobry <OSO", "BA_1>, PESEL <PESEL", "_1> zweryfikowany."
     print(restorer.feed(chunk), end="")
 print(restorer.flush())
-# Dzień dobry Jana Kowalskiego, PESEL 90010112349 zweryfikowany.
+# Dzień dobry Jana Kowalskiego, PESEL 50810112354 zweryfikowany.
 ```
 
 ## With Claude, GPT or a local model
@@ -152,7 +152,7 @@ value. The mapping you pass in is read, not changed, so keep the one each result
 
 ```python
 mapping = result.mapping
-second = anonymizer.anonymize_sync("Ten sam PESEL 90010112349", mapping)
+second = anonymizer.anonymize_sync("Ten sam PESEL 50810112354", mapping)
 second.anonymized  # "Ten sam PESEL <PESEL_1>"
 mapping = second.mapping  # everything so far, for the next turn
 ```

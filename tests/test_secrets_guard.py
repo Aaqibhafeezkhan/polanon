@@ -96,10 +96,10 @@ def test_password_in_a_connection_url_is_masked_whatever_the_host(text, password
 @pytest.mark.parametrize(
     ("text", "token"),
     [
-        (f'curl -H "Authorization: Bearer {BODY}" https://api.firma.pl', BODY),
+        (f'curl -H "Authorization: Bearer {BODY}" https://api.example.com', BODY),
         (f"GET /api 401, header bearer {BODY[:20]}", BODY[:20]),
         (
-            "curl -H 'Authorization: Basic dXNlcjpTM2NyZXQ=' https://api.firma.pl",
+            "curl -H 'Authorization: Basic dXNlcjpTM2NyZXQ=' https://api.example.com",
             "dXNlcjpTM2NyZXQ=",
         ),
     ],
@@ -165,7 +165,7 @@ async def test_password_is_masked_again_when_repeated_after_a_full_stop():
         "Hasło zostało zmienione, PIN również.",
         "Ten pin 12 w złączu jest uszkodzony.",
         "Bearer instruments and bearer responsibilities are described in chapter 3.",
-        "Zobacz https://firma.pl:8443/panel albo http://host/a@b, port 8443.",
+        "Zobacz https://example.com:8443/panel albo http://host/a@b, port 8443.",
         "token: nie wiem, sprawdź w konfiguracji",
     ],
 )

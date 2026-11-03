@@ -87,17 +87,17 @@ def test_the_facade_sweeps_a_restored_answer():
     from polanon.policy import ENTITY_TYPES
 
     anonymizer = Anonymizer([RegexGuard()], enabled=set(ENTITY_TYPES))
-    mapping = {"<PESEL_1>": "90010112349"}
+    mapping = {"<PESEL_1>": "50810112354"}
 
     # A value that came back from the mapping is expected and says nothing.
-    assert anonymizer.sweep("Sprawa 90010112349 zamknięta.", mapping).is_clean
+    assert anonymizer.sweep("Sprawa 50810112354 zamknięta.", mapping).is_clean
 
     # A token nobody allocated means the model invented a reference.
     invented = anonymizer.sweep("Sprawa <PESEL_9> zamknięta.", mapping)
     assert invented.unknown_tokens == ["<PESEL_9>"]
 
     # Personal data in the answer that was never in the question is worth a warning.
-    surprise = anonymizer.sweep("Sprawa 90010112349 i 85031523454.", mapping)
+    surprise = anonymizer.sweep("Sprawa 50810112354 i 45831523452.", mapping)
     assert [s.entity_type for s in surprise.new_spans] == ["PESEL"]
     assert not surprise.is_clean
 
@@ -111,8 +111,8 @@ def test_merge_spans_breaks_a_tie_by_the_first_report_of_a_value_seen_twice():
 
 
 def test_a_secret_is_masked_whole_with_what_was_detected_inside_it():
-    """'hasło: "jan.kowalski@firma.pl#!"' went out as "<EMAIL_1>#!", most of the password."""
-    text = 'hasło: "jan.kowalski@firma.pl#!"'
+    """'hasło: "jan.kowalski@example.com#!"' went out as "<EMAIL_1>#!", most of the password."""
+    text = 'hasło: "jan.kowalski@example.com#!"'
     secret = Span(8, 31, "SECRET", 0.9)
     email = Span(8, 29, "EMAIL", 1.0)
     assert merge_spans([email, secret], text) == [secret]

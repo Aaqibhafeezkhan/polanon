@@ -130,7 +130,7 @@ async def test_a_judge_that_returns_junk_cannot_garble_a_message():
     from polanon import Anonymizer, MockJudge, RegexGuard
     from polanon.policy import ENTITY_TYPES
 
-    original = "Sprawa dotyczy firmy i jej klienta, PESEL 90010112349."
+    original = "Sprawa dotyczy firmy i jej klienta, PESEL 50810112354."
     judge = MockJudge({"i": "OTHER", "je": "OTHER"})
     anonymizer = Anonymizer([RegexGuard()], judge=judge, enabled=set(ENTITY_TYPES))
 
