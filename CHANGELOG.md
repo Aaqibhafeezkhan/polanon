@@ -4,14 +4,54 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-03
+
+Before this release a pre-release review went through the library looking for ways personal data
+could get past it. Everything under *Fixed* is what it found; each fix comes with a test that
+fails without it.
 
 ### Added
 
-- `--file PATH` on the command line. polanon reads the file's bytes itself and decodes them as
-  UTF-8, or else cp1250, the way it decodes standard input, so Windows PowerShell 5.1 cannot
-  garble Polish letters on the way in. Contributed by jay23606 in
-  [#5](https://github.com/boromat/polanon/pull/5).
+- `--file PATH` on the command line. polanon reads the file's bytes itself and tells UTF-8,
+  UTF-16 and cp1250 apart, so Windows PowerShell 5.1 cannot garble Polish letters on the way in.
+  Contributed by jay23606 in [#5](https://github.com/boromat/polanon/pull/5).
+- `--mapping PATH` writes the mapping to a file as UTF-8 JSON, created readable by its owner
+  only, instead of to stderr, which Windows PowerShell's `2>` wraps in error records.
+
+### Fixed
+
+- **A UTF-16 file went out unmasked.** Windows PowerShell 5.1 writes UTF-16 with `>`; decoded
+  as cp1250 it was full of NUL characters that hid every value from the guards, and the command
+  line printed it unmasked with exit status 0. Input is now decoded by its byte order mark,
+  UTF-16 is recognised without one, a UTF-8 file with one cp1250 line is decoded line by line,
+  and bytes that are none of these are refused with exit status 2.
+- **The second of two IBANs went out whole** when they were grouped and written one per line or
+  joined by "oraz".
+- **A double surname was read by its last part only**, so "mają kowalską-nowak" went out where
+  "mają kowalską" was masked.
+- **A name on the cut of a long single-line text was missed by spaCy.** Text over 100,000
+  characters with no line break was cut at exactly that length, through the middle of a name.
+- **A card number after the year of a date**, "15.03.2024 4111 1111 1111 1111", went out whole.
+- **Settings secrets named `SECRET_KEY`, `APP_KEY` or `DB_PASS`** were not recognised, and a
+  labelled password containing "," or ";" was cut short with the rest sent.
+- **A birth date with the year abbreviation glued on**, "ur. 15.03.1985r.", went out whole.
+- **An address after a street word in an oblique case**, "przy ulicy Długiej 5", went out
+  whole; KRS is now also found after "pod numerem" and "No.".
+- **A denylist term copied from Word, a PDF or macOS** (an en dash, decomposed letters, a soft
+  hyphen) matched nothing, not even the same text.
+- **A judge error carried the HTTP error it came from**, so a logged traceback could show a
+  proxy password or an API key. Judge replies with code fences inside their JSON, a brace in a
+  sentence before it, or a quote that differs from the text only in its whitespace are now read
+  instead of dropped, and a reply of a few thousand spaces no longer freezes the event loop.
+- "Pana przesyłka została nadana" no longer masks the parcel as a person.
+- Masked CRLF documents no longer come out as CR CR LF on Windows, and two rules that took
+  quadratic time on long lines without spaces now run in linear time.
+
+### Changed
+
+- The README no longer recommends `Get-Content -Encoding UTF8 file | polanon` for Windows
+  PowerShell 5.1: that pipe turns Polish letters into `?`. It recommends `--file` and
+  `--mapping` instead.
 
 ## [0.1.1] - 2026-11-03
 
