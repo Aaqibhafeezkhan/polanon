@@ -32,6 +32,13 @@ offline, and are skipped without them.
 - Synthetic data only. No real person's name, identifier, document or log belongs in an issue, a
   test or a commit.
 
+## Changes written with AI tools
+
+Welcome, on the same terms as any other change. Say in the pull request that an AI tool wrote or
+helped write it, and which one, so the review knows where to look. You answer for the change as if
+you had typed it yourself: you have read every line, run the quality bar above, and can answer
+questions about it. A pull request that nobody answers for after a review is closed.
+
 ## A value that was not masked
 
 Open a *Something was not masked* issue with invented text of the same shape: a made-up name, a
