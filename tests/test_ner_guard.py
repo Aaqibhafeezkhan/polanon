@@ -222,3 +222,24 @@ def test_a_long_text_reaches_spacy_in_pieces_with_spans_mapped_back(monkeypatch)
     spans = fresh.detect(text, {"PERSON"})
     assert len(pieces) > 1
     assert [text[span.start : span.end] for span in spans] == ["Jan Kowalski"]
+
+
+def test_a_single_line_text_is_cut_after_a_sentence_not_inside_a_name():
+    """Cut at exactly the limit, a name fell across two pieces and spaCy missed both halves."""
+    from polanon.guards.ner import _chunks
+
+    text = "Zamówienie wysłano. Rozmawiałem z Marleną Brzęczyszczykiewicz w sprawie umowy. " * 3
+    pieces = list(_chunks(text, 100))
+    assert "".join(piece for _, piece in pieces) == text
+    assert all(len(piece) <= 100 for _, piece in pieces)
+    assert all(piece.endswith(". ") for _, piece in pieces[:-1])
+    assert all("Marleną Brzęczyszczykiewicz" in piece for _, piece in pieces)
+
+
+def test_a_single_line_text_without_sentences_is_cut_at_a_space():
+    from polanon.guards.ner import _chunks
+
+    text = "słowo " * 40
+    pieces = list(_chunks(text, 50))
+    assert "".join(piece for _, piece in pieces) == text
+    assert all(piece.endswith(" ") for _, piece in pieces)

@@ -8,6 +8,7 @@ so it silently returns nothing. Talking to spaCy ourselves keeps the mapping exp
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Iterator
 from typing import Any
@@ -39,8 +40,12 @@ SUPPORTED = frozenset({"PERSON", "LOCATION", "ORG"})
 NER_SCORE = 0.85
 
 #: Longest piece of text handed to spaCy at once. spaCy refuses anything over one million
-#: characters, and a long export is cut at a line break below this, where no name continues.
+#: characters, and a long export is cut below this where no name continues: see :func:`_chunks`.
 CHUNK_CHARS = 100_000
+
+#: The end of a sentence, and any whitespace: where a piece of a text with no line break is cut.
+_SENTENCE_END = re.compile(r"[.!?…][\"'”»)\]]*\s+")
+_WHITESPACE = re.compile(r"\s+")
 
 #: Loading a model takes seconds and hundreds of megabytes. Threads that need it at the same time
 #: wait for the first one instead of each loading their own copy. One lock for the module rather
@@ -332,18 +337,34 @@ def _join_hyphenated(text: str, spans: list[Span]) -> list[Span]:
 
 
 def _chunks(text: str, limit: int) -> Iterator[tuple[int, str]]:
-    """Cut `text` into pieces of at most `limit` characters, at line breaks where there is one.
+    """Cut `text` into pieces of at most `limit` characters where no name is likely to continue.
+
+    A piece ends after its last line break, else after its last sentence, else after its last
+    space, and only a text with no whitespace at all is cut mid-word. Cutting a single-line text
+    at exactly `limit` characters split a name across two pieces, and spaCy, seeing half of it in
+    each, missed it.
 
     Yields:
         Each piece with the offset at which it starts in `text`.
     """
     start = 0
     while len(text) - start > limit:
-        cut = text.rfind("\n", start, start + limit)
-        end = cut + 1 if cut > start else start + limit
+        end = _cut(text, start, start + limit)
         yield start, text[start:end]
         start = end
     yield start, text[start:]
+
+
+def _cut(text: str, start: int, stop: int) -> int:
+    """Return where the piece of `text` from `start` ends, at most at `stop`."""
+    newline = text.rfind("\n", start, stop)
+    if newline > start:
+        return newline + 1
+    for boundary in (_SENTENCE_END, _WHITESPACE):
+        ends = [match.end() for match in boundary.finditer(text, start, stop)]
+        if ends:
+            return ends[-1]
+    return stop
 
 
 class NerGuard(Guard):
