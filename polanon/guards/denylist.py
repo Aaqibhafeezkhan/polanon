@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from polanon._view import as_read
 from polanon.guards.base import Guard
 from polanon.types import Span
 
@@ -28,8 +29,13 @@ def _fold(text: str) -> str:
 
 
 def _term_pattern(term: str) -> str:
-    """Return the pattern of one term: its words, folded and escaped, apart by any whitespace."""
-    return r"\s+".join(re.escape(word) for word in _fold(term).split())
+    """Return the pattern of one term: its words, folded and escaped, apart by any whitespace.
+
+    The term is read the way the guards read the text, dashes unified, combining marks composed
+    and soft hyphens dropped: a term copied from Word, a PDF or macOS matched nothing, not even
+    the same text.
+    """
+    return r"\s+".join(re.escape(word) for word in _fold(as_read(term)).split())
 
 
 class DenylistGuard(Guard):

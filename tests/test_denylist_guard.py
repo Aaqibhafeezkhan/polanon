@@ -58,3 +58,17 @@ async def test_overlapping_terms_reach_the_provider_as_one_token():
     result = await anonymizer.anonymize("Kierownikiem jest Projekt Atlas Wiśniewski.")
     assert result.anonymized == "Kierownikiem jest <FIRMA_1>."
     assert result.mapping == {"<FIRMA_1>": "Projekt Atlas Wiśniewski"}
+
+
+@pytest.mark.parametrize(
+    ("term", "text"),
+    [
+        pytest.param("Nowak\u2013Kowal", "Umowa z Nowak\u2013Kowal sp.", id="en dash"),
+        pytest.param("Projekt Z\u0307uraw", "Raport: Projekt \u017buraw gotowy", id="decomposed"),
+        pytest.param("Pro\u00adjekt Atlas", "Pro\u00adjekt Atlas startuje", id="soft hyphen"),
+    ],
+)
+def test_a_term_copied_from_word_a_pdf_or_macos_matches_the_text(term, text):
+    """The text is read normalised, the terms were not, and they matched nothing."""
+    result = Anonymizer(default_guards(with_ner=False, denylist=[term])).anonymize_sync(text)
+    assert list(result.mapping) == ["<FIRMA_1>"]
