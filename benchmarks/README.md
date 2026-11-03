@@ -13,8 +13,8 @@ their findings, not the pass that masks every later occurrence of a value alread
 |---|---:|---:|---:|---:|
 | polanon, guards only, no model | 140 / 164 (85%) | 0 | 24 | 0 |
 | polanon, guards + `pl_core_news_md` | **161 / 164 (98%)** | 0 | 3 | 7 |
-| Microsoft Presidio 2.2, set up for Polish with the same model | 106 / 164 (65%) | 24 | 34 | 46 |
-| Presidio, phone recognizer at leniency 0 | 122 / 164 (74%) | 30 | 12 | 71 |
+| Presidio 2.2.366, set up for Polish with the same model | 108 / 164 (66%) | 24 | 32 | 46 |
+| Presidio, phone recognizer at leniency 0 | 124 / 164 (76%) | 28 | 12 | 71 |
 
 Presidio is the usual answer to "mask personal data before an LLM call", so it is the baseline.
 [`compare_presidio.py`](compare_presidio.py) gives it the same Polish spaCy model, every offline recognizer it

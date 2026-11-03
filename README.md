@@ -53,6 +53,28 @@ of the box:
 It also reads foreign invoices: EU, UK and Swiss VAT numbers, company register numbers, Bankgiro,
 Plusgiro and sort codes, international phone numbers, street addresses and postcodes.
 
+## How it compares
+
+|  | polanon | [Presidio](https://github.com/data-privacy-stack/presidio) | [pii-veil](https://pypi.org/project/pii-veil/) | [piimask](https://pypi.org/project/piimask/) |
+|---|---|---|---|---|
+| Restores the model's answer | Yes, from stable tokens such as `<OSOBA_1>`, also while it streams | Not built in: its deanonymizer decrypts spans at known positions; its docs include a sample that restores an LLM answer | Yes, from stable tokens and a saved mapping | Yes, from stable tokens |
+| Polish identifiers with a checksum | PESEL, NIP, REGON, ID card, IBAN, payment cards | PESEL; IBAN and payment cards in general | PESEL, NIP, REGON, IBAN, payment cards; ID card and passport by pattern only | None; IBAN and payment cards in general |
+| Polish names in every grammatical case | For listed first names and the surnames that agree with them, without a language model; spaCy adds the rest | With a Polish spaCy model and its `persName` label mapped | Not detected | Not detected; its README suggests adding an NER model |
+| What the core needs | Nothing beyond the standard library | spaCy, numpy, pydantic and a few more; a language model only for names and places | pii-core and typer | Nothing beyond the standard library |
+| On polanon's [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) | 98% fully masked with `pl_core_news_md`, 85% with rules alone | 66% with the same model (presidio-analyzer 2.2.366) | Not measured | Not measured |
+| License | MIT | MIT | Apache-2.0 | MIT |
+
+Compared from each project's own documentation and source on 3 November 2026. Only Presidio was
+run on the sample documents, with the script in `benchmarks/`, and that is not neutral ground: the
+ten synthetic documents were written by polanon's author, who tuned its rules on them, and
+Presidio had only the Polish model, also for the three invoices from abroad. Each has its place:
+Presidio for many languages, structured data and its Azure integration; pii-veil for Polish
+identifiers under Apache-2.0 when names do not matter; piimask for language-neutral identifiers
+(e-mail, phone numbers, payment cards, IBAN, IP addresses, URLs) and US social security numbers,
+with fake-value, hashing and partial strategies and an encrypted vault. polanon is for Polish text
+on its way to a model, where the names in it
+and the restored answer matter as much as the numbers.
+
 ## Install
 
 | You want | Install |
@@ -146,8 +168,8 @@ On the annotated sample documents in the repository, the rules alone fully mask 
 values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Ten short
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
-missed and why, and for Microsoft Presidio on the same documents with the same model: 65% fully
-masked, 74% at its most lenient.
+missed and why, and for Presidio on the same documents with the same model: 66% fully masked, 76%
+at its most lenient.
 
 ## Worth knowing
 

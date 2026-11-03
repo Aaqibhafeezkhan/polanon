@@ -1,4 +1,4 @@
-"""Score Microsoft Presidio on the same annotated samples, set up for Polish with no own code.
+"""Score Presidio on the same annotated samples, set up for Polish with no own code.
 
 Presidio is the usual answer to "how do I mask personal data before an LLM call", so it is the
 baseline worth measuring against. It gets the same Polish spaCy model polanon uses, with the model's
