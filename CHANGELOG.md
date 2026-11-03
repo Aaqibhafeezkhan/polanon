@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
+  as a name and half an address, and an address on an internationalised domain not at all.
+  Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).
+
 ## [0.2.0] - 2026-11-03
 
 Before this release a pre-release review went through the library looking for ways personal data
