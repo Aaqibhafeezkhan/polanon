@@ -349,7 +349,9 @@ _NOT_NAMES = frozenset(
     )
 )
 
-#: Ordinary nouns that look like a surname ending in -ek, -ak, -ik, -yk or -uk.
+#: Ordinary nouns that look like a surname ending in -ek, -ak, -ik, -yk or -uk. The second block
+#: holds the -ek forms of common feminine nouns in -ka, which read as the genitive of an -ek
+#: surname (Bednarek, Bednarka): "Pana przesyłka została nadana" masked the parcel as a person.
 _NOT_SURNAMES = frozenset(
     _words(
         """
@@ -359,6 +361,11 @@ _NOT_SURNAMES = frozenset(
         posrednik pracownik prawnik przewodnik przypadek rachunek ratownik rolnik rynek rzecznik
         skutek spadek strazak technik uczestnik urzednik wiek wniosek wspolnik wtorek wydatek
         wyjatek wynik wypadek zakatek
+
+        corek ciotek drukarek dzialek kartek kolezanek komorek ksiazek kurtek ladowarek malzonek
+        matek myszek naklejek paczek partnerek podwyzek pozyczek pralek przeprowadzek przesylek
+        skladek skrzynek sluchawek suszarek szafek teczek torebek ulotek usterek walizek wizytowek
+        wnuczek wycieczek wysylek zabawek zaliczek znizek zmywarek
         """
     )
 )
@@ -459,10 +466,29 @@ def surname_reading(word: str) -> SurnameReading | None:
     An adjectival ending (-ski, -cka, -dzkiego), -wicz, or a declined noun ending (Nowakiem,
     Bednarka) is a strong sign. A bare -ak, -ek, -ik and the listed surnames are weak ones, because
     plenty of ordinary nouns look the same.
+
+    A double surname, "Kowalska-Nowak", is as strong as its stronger part and takes the cases its
+    parts agree on. Read by its last part alone, a strong first part was ignored, and "mają
+    kowalską-nowak" went out whole where "mają kowalską" was masked.
     """
-    part = fold(word).rsplit("-", 1)[-1]
-    if part in _NOT_NAMES:
+    parts = fold(word).split("-")
+    if parts[-1] in _NOT_NAMES:
         return None
+    readings = [
+        reading
+        for reading in (_part_reading(part) for part in parts if part not in _NOT_NAMES)
+        if reading is not None
+    ]
+    if not readings:
+        return None
+    agreed = frozenset.intersection(*(reading.tags for reading in readings))
+    return SurnameReading(
+        agreed or readings[-1].tags, strong=any(reading.strong for reading in readings)
+    )
+
+
+def _part_reading(part: str) -> SurnameReading | None:
+    """Return the readings of one folded word, or one part of a double surname, as a surname."""
     listed = _SURNAME_FORMS.get(part)
     if listed is not None:
         return SurnameReading(listed, strong=False)

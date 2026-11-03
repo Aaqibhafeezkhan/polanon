@@ -332,3 +332,42 @@ async def test_the_reported_message_is_masked_without_a_language_model():
         "Mam sprawę sądową z panem <OSOBA_1> i on nie chciał zapłacić co teraz?"
     )
     assert result.mapping == {"<OSOBA_1>": "kamilem bednarkiem"}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("rozmawiałem z mają kowalską-nowak", ["mają kowalską-nowak"]),
+        ("marek kowalski-nowak dzwonił", ["marek kowalski-nowak"]),
+        ("Z Mają Kowalską-Nowak", ["Mają Kowalską-Nowak"]),
+    ],
+)
+def test_a_double_surname_is_as_strong_as_its_stronger_part(text, expected):
+    """Read by its last part only, "kowalską-nowak" was weak, and the whole person leaked."""
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Dzień dobry, Pana przesyłka została nadana wczoraj.",
+        "Uprzejmie informujemy, że Pana pożyczka została zatwierdzona.",
+        "Pana paczka czeka w paczkomacie.",
+        "Pana składka wzrośnie od stycznia.",
+        "Czy Pana usterka została zgłoszona?",
+    ],
+)
+def test_a_noun_in_ka_after_pana_is_not_a_surname(text):
+    """Feminine nouns in -ka read as the genitive of an -ek surname: Bednarek, Bednarka."""
+    assert _found(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("rozmawiałem z panem bednarkiem", ["bednarkiem"]),
+        ("list do pana bednarka", ["bednarka"]),
+    ],
+)
+def test_a_lowercase_ek_surname_after_a_form_of_address_is_still_masked(text, expected):
+    assert _found(text) == expected
