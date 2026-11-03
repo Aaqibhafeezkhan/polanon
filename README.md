@@ -333,6 +333,15 @@ or GPT on real documents without sending personal data to the provider; the hub 
 yet. The library knows nothing about it — no HTTP, no database, no settings — and a test fails if
 it ever starts to.
 
+## Used by
+
+[PolCV](https://github.com/boromat/polcv) writes CVs for Polish job postings and can mask the
+candidate's name, contact details and company names with polanon before any text reaches the
+model, then put them back into the answer. It adds a guard of its own for what the profile already
+knows, such as a LinkedIn link with the name in it, as
+[Adding a detector](https://github.com/boromat/polanon#adding-a-detector) describes. polanon stays optional there: the app installs it on request, talks to it through a
+small JSON-lines bridge, and sends nothing at all while masking is on but polanon is not working.
+
 ## Contributing
 
 Bug reports, missed values and new detectors are welcome: see
