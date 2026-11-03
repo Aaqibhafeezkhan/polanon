@@ -252,9 +252,11 @@ _PASSPORT_LABEL = re.compile(
 )
 #: Words that end right before a PESEL: "PESEL:", "nr PESEL", "numer PESEL to".
 _PESEL_LABEL = re.compile(r"(?i)pesel\w*(?:\s+(?:nr|numer|to))?\.?\s*[:-]?\s*$")
-#: Phone labels: a nine-digit REGON-looking number after these is a phone (#8).
+#: Phone labels: a nine-digit REGON-looking number after these is a phone (#8). A label starts a
+#: word, so the "tel" that ends "hotel" is none.
 _PHONE_LABEL = re.compile(
-    r"(?i)(?:tel(?:\.\s*kom\.?|\.)?|telefon\w*|komórk\w*|fax|phone)\s*[:-]?\s*$"
+    r"(?i)(?<![^\W\d_])(?:tel(?:\.\s*kom\.?|\.)?|kom\.?|telefon\w*|komórk\w*|fax|phone)"
+    r"\s*[:-]?\s*$"
 )
 #: How far back a label is looked for: one short phrase, never the previous sentence.
 _LABEL_REACH = 40

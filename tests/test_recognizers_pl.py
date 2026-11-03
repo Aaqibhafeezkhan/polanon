@@ -612,7 +612,7 @@ def test_nine_digit_regon_with_check_digit_zero_is_masked():
 
 @pytest.mark.parametrize(
     "label",
-    ["tel.", "tel. kom.", "telefon", "komórka", "fax", "phone"],
+    ["tel.", "tel. kom.", "kom.", "nr tel.", "telefon", "komórka", "fax", "phone"],
 )
 def test_nine_digit_number_after_phone_label_is_a_phone_not_regon(label):
     """A checksum-valid nine-digit phone after a phone label was labelled REGON (#8)."""
@@ -627,8 +627,9 @@ def test_nine_digit_number_after_regon_label_stays_regon():
     assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("REGON", "123456785")]
 
 
-def test_unlabelled_checksum_valid_nine_digits_stay_regon():
-    text = "numer 123456785"
+@pytest.mark.parametrize("text", ["numer 123456785", "hotel 123456785", "Pastel 123456785"])
+def test_unlabelled_checksum_valid_nine_digits_stay_regon(text):
+    """A phone label starts a word: the "tel" at the end of "hotel" is none."""
     spans = merge_spans(RegexGuard().detect(text, {"REGON", "PHONE"}), text)
     assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("REGON", "123456785")]
 
