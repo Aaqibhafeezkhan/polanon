@@ -1,0 +1,51 @@
+# polanon
+
+> Reversible PII masking for LLM calls, Polish-first. A pure-Python library (MIT, Python 3.11+, no core dependencies) that replaces personal data with stable tokens such as `<OSOBA_1>` before a prompt goes to Claude, GPT or a local model, and puts the originals back into the answer, also while it streams. It validates PESEL, NIP, REGON, ID card, IBAN and payment card checksums, and recognises Polish first names in all seven grammatical cases, with the surname that goes with them, without a language model; a surname standing alone is found by the optional spaCy model.
+
+Use it when Polish text with personal data is sent to a language model API and the answer must come back with the real names and numbers in it. It is pseudonymisation, not legal anonymisation: no detector catches everything, and the mapping it returns must be kept as safe as the original document.
+
+Install with `pip install polanon`. The `ner` extra adds a spaCy model for places and names no rule can see (`pip install "polanon[ner]"`, then `python -m spacy download pl_core_news_md`); the `judge` extra adds an optional second review by a small local or remote model.
+
+```python
+from polanon import Anonymizer, default_guards
+
+anonymizer = Anonymizer(default_guards(with_ner=False))  # default_guards() also needs spaCy and pl_core_news_md
+masked = anonymizer.anonymize_sync("Faktura dla Jana Kowalskiego, PESEL 50810112354.")
+masked.anonymized  # "Faktura dla <OSOBA_1>, PESEL <PESEL_1>."
+
+answer = "Korekta dla <OSOBA_1> jest gotowa."  # the model's reply
+Anonymizer.restore(answer, masked.mapping)  # "Korekta dla Jana Kowalskiego jest gotowa."
+
+restorer = Anonymizer.stream_restorer(masked.mapping)  # for a streamed reply
+# for chunk in stream: print(restorer.feed(chunk), end="")
+# print(restorer.flush())
+```
+
+Key facts:
+
+- In async code use `await anonymizer.anonymize(text)`; it runs the same work in a worker thread.
+- Keep the mapping each result returns and pass it to the next call: `result = anonymizer.anonymize_sync(text, mapping)`, then `mapping = result.mapping`. The dict you pass is read, never updated, so reusing the first one makes `<OSOBA_1>` stand for two people. The same value as written keeps its token; the same name in another grammatical case ("Jan Kowalski", "Jana Kowalskiego") gets a token of its own.
+- In a multi-turn chat, keep the history masked: store the model's answers with their tokens and restore only what the user sees. Before sending the history again, run `mask_known_values(turn, mapping)` (from `polanon`) on every earlier turn, because a value first recognised in a later message may still be in the clear in an earlier one. `examples/anthropic_chat.py` does both.
+- Tell the model what the tokens are in the system prompt, for example "Personal data is replaced by tokens such as <OSOBA_1>. Copy a token exactly as written.", so it does not rewrite them.
+- `anonymizer.sweep(restored_text, mapping)` reports tokens the model invented and personal data it introduced.
+- Dates are left readable by default (birth dates are still masked); pass `enabled=DEFAULT_ENABLED | {"DATE"}` (both from `polanon`) to `Anonymizer` to mask them too.
+- A judge is passed as `Anonymizer(guards, judge=OllamaJudge())` (`from polanon.judge import OllamaJudge`). With a judge only `await anonymizer.anonymize(text)` works; `anonymize_sync` raises `RuntimeError`.
+- Command line: `polanon --file umowa.txt --mapping mapping.json > masked.txt`; add `--ner` to use the spaCy model, without it the command uses the rules alone. On Windows, read the input with `--file` and write the mapping with `--mapping` rather than piping text in or using `2>`. The masked text always goes to stdout, and Windows PowerShell 5.1's `>` saves it as UTF-16, which `polanon --file` reads back.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/boromat/polanon/main/README.md): installation, the main API, what is detected, streaming, the judge, adding a detector, and a comparison with Presidio and other libraries
+- [Threat model](https://raw.githubusercontent.com/boromat/polanon/main/docs/THREAT_MODEL.md): what the masking covers, what it does not, and what stays the application's job
+- [Changelog](https://raw.githubusercontent.com/boromat/polanon/main/CHANGELOG.md): what changed in each release
+
+## Examples
+
+- [Anthropic SDK](https://raw.githubusercontent.com/boromat/polanon/main/examples/anthropic_chat.py): a conversation whose history keeps masked text only, restored as it streams
+- [OpenAI-compatible API](https://raw.githubusercontent.com/boromat/polanon/main/examples/openai_chat.py): the same for OpenAI, OpenRouter, Azure, vLLM or a local Ollama
+
+## Optional
+
+- [Benchmark notes](https://raw.githubusercontent.com/boromat/polanon/main/benchmarks/README.md): the annotated sample documents, what is missed and why, and Presidio measured on the same documents
+- [Contributing](https://raw.githubusercontent.com/boromat/polanon/main/CONTRIBUTING.md): setup, the quality bar and how to add a detector
+- [Security policy](https://raw.githubusercontent.com/boromat/polanon/main/SECURITY.md): how to report a way to get a value past the masking
+- [PyPI](https://pypi.org/project/polanon/): releases
