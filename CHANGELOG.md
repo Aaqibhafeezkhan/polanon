@@ -4,6 +4,15 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `--file PATH` on the command line. polanon reads the file's bytes itself and decodes them as
+  UTF-8, or else cp1250, the way it decodes standard input, so Windows PowerShell 5.1 cannot
+  garble Polish letters on the way in. Contributed by jay23606 in
+  [#5](https://github.com/boromat/polanon/pull/5).
+
 ## [0.1.1] - 2026-11-03
 
 ### Changed
