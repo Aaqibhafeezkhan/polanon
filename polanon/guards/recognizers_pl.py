@@ -6,7 +6,7 @@ RegexGuard finds candidates with regex and keeps only checksum-valid ones (where
 
 import ipaddress
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from itertools import takewhile
 
 from polanon.guards.base import Guard
@@ -161,8 +161,12 @@ def _is_plate_value(value: str) -> bool:
     return not (letters in _NOT_A_PLATE_AREA and value[len(letters) :].strip().isdigit())
 
 
-#: Street prefixes that introduce a Polish address.
-_STREET = r"(?:ul|al|pl|os|ulica|aleja|aleje|plac|osiedle|rondo|skwer)"
+#: Street prefixes that introduce a Polish address. In prose the word is mostly in an oblique case,
+#: "przy ulicy Długiej 5", "na placu Wolności 2", which the nominative alone let through whole.
+_STREET = (
+    r"(?:ul|al|pl|os|ulic[aąęy]|ale(?:ja|je|i|ją|ję|jach)|plac(?:u|em)?|osiedl(?:e|a|u|em)"
+    r"|rond(?:o|a|em|zie)|skwer(?:u|em|ze)?)"
+)
 #: A name component: a capitalised word (Roman numerals such as "II" included), or a leading day
 #: number as in "3 Maja". A separate Roman-numeral branch matched "I" a second way, and on OCR
 #: output with a run of "I" tokens the failed match backtracked through 2^n combinations.
@@ -299,7 +303,15 @@ PATTERNS: list[Rule] = [
     ("REGON", re.compile(r"(?<!\d)\d{9}[ -]\d{5}(?!\d)"), is_valid_regon),
     # No public checksum, so the label is what makes the match trustworthy. A KRS number is also
     # written without its leading zeros.
-    ("KRS", re.compile(r"(?i)\bKRS(?:\s*(?:nr|numer)\.?)?[:\s]*(?P<value>\d{5,10})\b"), None),
+    # "KRS 0000123456", "KRS nr 123456", "wpisana do KRS pod numerem 0000123456", "KRS No. 123456".
+    (
+        "KRS",
+        re.compile(
+            r"(?i)\bKRS(?:\s*(?:pod\s+)?(?:nr|numer\w*|no|number)\.?)?[\s:#-]*"
+            r"(?P<value>\d{5,10})\b"
+        ),
+        None,
+    ),
     # A lowercase ID card is only taken written together, "abc412345": with a space, a short
     # Polish word and a six-figure number ("dla 120000 osób") would pass the check one time in ten.
     ("PL_ID", re.compile(r"\b(?:[A-Z]{3} ?|[a-z]{3})\d{6}\b"), None),  # see _LOCATORS
@@ -371,15 +383,17 @@ PATTERNS: list[Rule] = [
     ),
     # Before the DATE rule, so a birth date read by both keeps this type. A deadline identifies
     # nobody, but a birth date next to a name does, so this type stays on where dates are off.
+    # A date ends where its digits do: Polish glues the year's abbreviation on, "1985r.", and a
+    # word boundary there let a labelled birth date go out whole.
     (
         "BIRTH_DATE",
         re.compile(
             rf"{_BIRTH_LABEL}\s*[:-]?\s*(?:(?:w\s+)?dniu\s+|dnia\s+|on\s+|am\s+)?"
-            rf"(?P<value>{_DATE_VALUE})\b"
+            rf"(?P<value>{_DATE_VALUE})(?!\d)"
         ),
         None,
     ),
-    ("DATE", re.compile(rf"\b(?:{_DATE_VALUE})\b"), None),
+    ("DATE", re.compile(rf"\b(?:{_DATE_VALUE})(?!\d)"), None),
 ]
 
 
@@ -553,10 +567,32 @@ class RegexGuard(Guard):
         for entity_type, pattern, validator in PATTERNS:
             if entity_type not in enabled:
                 continue
-            locate = _LOCATORS.get(entity_type)
-            for m in pattern.finditer(text):
-                extents = locate(text, m) if locate is not None else _validated(m, validator)
-                spans.extend(
-                    Span(start, end, entity_type, 1.0, self.name) for start, end in extents
-                )
+            spans.extend(
+                Span(start, end, entity_type, 1.0, self.name)
+                for start, end in _extents(text, entity_type, pattern, validator)
+            )
         return spans
+
+
+def _extents(
+    text: str,
+    entity_type: str,
+    pattern: re.Pattern[str],
+    validator: Callable[[str], bool] | None,
+) -> Iterator[tuple[int, int]]:
+    """Yield the extent of every match of `pattern` that its locator or validator accepts.
+
+    An IBAN candidate can run on into the next IBAN, in a list written one per line or in
+    "X oraz Y", and is then cut back to its registered length. The scan resumes where that IBAN
+    ended, not where the candidate did: resuming after the candidate skipped the start of the next
+    IBAN, which then went out unmasked.
+    """
+    locate = _LOCATORS.get(entity_type)
+    position = 0
+    while (m := pattern.search(text, position)) is not None:
+        extents = locate(text, m) if locate is not None else _validated(m, validator)
+        yield from extents
+        if entity_type == "IBAN":
+            position = extents[-1][1] if extents else m.start() + 1
+        else:
+            position = max(m.end(), m.start() + 1)

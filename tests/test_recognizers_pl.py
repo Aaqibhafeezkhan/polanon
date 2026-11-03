@@ -697,3 +697,71 @@ def test_iban_wrapped_onto_the_next_line_is_masked(text):
 def test_iban_at_the_end_of_a_line_does_not_take_the_next_line_with_it():
     text = "PL61 1090 1014 0000 0712 1981 2874\n2024 Faktura"
     assert masked(text, {"IBAN"}) == "<IBAN_1>\n2024 Faktura"
+
+
+SECOND_IBAN = "PL07 1090 1014 0000 0000 0000 0001"  # made-up digits with valid check digits
+
+
+@pytest.mark.parametrize(
+    "joint",
+    [
+        pytest.param("\n", id="one per line"),
+        pytest.param(" oraz ", id="joined by a word"),
+        pytest.param(", ", id="comma"),
+    ],
+)
+def test_the_second_of_two_grouped_ibans_is_masked_too(joint):
+    """The first candidate ran on into the second IBAN, and the scan resumed after it."""
+    text = f"Konta: {PL_IBAN}{joint}{SECOND_IBAN}"
+    ibans = [
+        text[span.start : span.end]
+        for span in RegexGuard().detect(text, ALL)
+        if span.entity_type == "IBAN"
+    ]
+    assert ibans == [PL_IBAN, SECOND_IBAN]
+
+
+def _found(text, entity_type):
+    return [
+        text[span.start : span.end]
+        for span in RegexGuard().detect(text, ALL)
+        if span.entity_type == entity_type
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["ur. 15.03.1985r. w Krakowie", "urodzony 15 marca 1985r.", "data urodzenia: 1985-03-15r"],
+)
+def test_a_birth_date_with_the_year_abbreviation_glued_on_is_masked(text):
+    """A word boundary after the year let "1985r." go out whole."""
+    assert len(_found(text, "BIRTH_DATE")) == 1
+    assert not _found(text, "BIRTH_DATE")[0].endswith("r")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "wpisana do KRS pod numerem 0000123456",
+        "KRS pod nr 0000123456",
+        "KRS No. 0000123456",
+        "KRS: 0000123456",
+    ],
+)
+def test_krs_is_found_in_the_usual_phrasings(text):
+    assert _found(text, "KRS") == ["0000123456"]
+
+
+@pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Mieszka przy ulicy Długiej 5 od lat.", "ulicy Długiej 5"),
+        ("Przeprowadził się na ulicę Polną 12/4.", "ulicę Polną 12/4"),
+        ("Biuro na placu Wolności 2.", "placu Wolności 2"),
+        ("Dom w alei Róż 3.", "alei Róż 3"),
+        ("Mieszkanie na osiedlu Słonecznym 14.", "osiedlu Słonecznym 14"),
+    ],
+)
+def test_an_address_after_an_inflected_street_word_is_masked(text, address):
+    """Only the nominative "ulica" was a street word, and prose uses the other cases."""
+    assert _found(text, "ADDRESS") == [address]
