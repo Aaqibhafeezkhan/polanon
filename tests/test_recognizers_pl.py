@@ -155,6 +155,34 @@ def test_address_does_not_swallow_the_postcode_that_follows():
 def test_phone_formats_used_in_poland_are_detected(text):
     assert any(s.entity_type == "PHONE" for s in RegexGuard().detect(text, {"PHONE"}))
 
+@pytest.mark.parametrize(
+    ("text", "number"),
+    [
+        ("SMS do 48123456789 nie doszedł", "48123456789"),
+        ("msisdn=48123456789", "48123456789"),
+        ("numer 48 123 456 789", "48 123 456 789"),
+        ("numer 48-123-456-789", "48-123-456-789"),
+        ("numer 48 12 345 67 89", "48 12 345 67 89"),
+        ("+48123456789", "+48123456789"),
+        ("0048123456789", "0048123456789"),
+    ],
+)
+def test_bare_48_country_code_phone_is_masked_in_common_formats(text, number):
+    spans = RegexGuard().detect(text, {"PHONE"})
+    assert [text[s.start : s.end] for s in spans] == [number]
+
+
+def test_valid_pesel_starting_with_48_keeps_its_type():
+    text = "PESEL 48010112340"
+    assert is_valid_pesel("48010112340")
+    spans = merge_spans(RegexGuard().detect(text, ALL), text)
+    assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("PESEL", "48010112340")]
+
+
+def test_longer_digit_run_starting_with_48_is_not_a_phone():
+    text = "msisdn=481234567890"
+    assert RegexGuard().detect(text, ALL) == []
+
 
 def test_mac_address_is_detected():
     text = "MAC 00:1B:44:11:3A:B7"
