@@ -56,11 +56,13 @@ class OllamaJudge(Judge):
             response = await client.post(f"{self.base_url}/api/chat", json=payload)
             response.raise_for_status()
             content = reply_content(response.json(), "message", "content")
+        # The status or the type, never the httpx error, not even as the cause: an error can quote
+        # the request it failed on, credentials in the URL included, and logger.exception prints
+        # the cause as well.
         except httpx.HTTPStatusError as exc:
-            raise JudgeError(f"ollama judge failed: HTTP {exc.response.status_code}") from exc
+            raise JudgeError(f"ollama judge failed: HTTP {exc.response.status_code}") from None
         except (httpx.HTTPError, ValueError, RecursionError) as exc:
-            # The type, not the message: an error can quote the request it failed on.
-            raise JudgeError(f"ollama judge failed: {type(exc).__name__}") from exc
+            raise JudgeError(f"ollama judge failed: {type(exc).__name__}") from None
         finally:
             if self._client is None:
                 await client.aclose()

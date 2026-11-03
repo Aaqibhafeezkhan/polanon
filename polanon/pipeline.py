@@ -402,7 +402,7 @@ async def anonymize(
         if JudgeFallback(judge_fallback) is JudgeFallback.BLOCK:
             if isinstance(exc, JudgeError):
                 raise
-            raise JudgeError(f"judge {judge.name!r} failed: {type(exc).__name__}") from exc
+            raise JudgeError(f"judge {judge.name!r} failed: {type(exc).__name__}") from None
         masking.judge_failed = True
     else:
         _apply_findings(masking, findings, enabled, allowlist)

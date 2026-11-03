@@ -65,11 +65,12 @@ class RemoteJudge(Judge):
             )
             response.raise_for_status()
             content = reply_content(response.json(), "choices", 0, "message", "content")
+        # The status or the type, never the httpx error, not even as the cause: an invalid header
+        # error quotes the header, key included, and logger.exception prints the cause as well.
         except httpx.HTTPStatusError as exc:
-            raise JudgeError(f"remote judge failed: HTTP {exc.response.status_code}") from exc
+            raise JudgeError(f"remote judge failed: HTTP {exc.response.status_code}") from None
         except (httpx.HTTPError, ValueError, RecursionError) as exc:
-            # The type, not the message: an invalid header error quotes the header, key included.
-            raise JudgeError(f"remote judge failed: {type(exc).__name__}") from exc
+            raise JudgeError(f"remote judge failed: {type(exc).__name__}") from None
         finally:
             if self._client is None:
                 await client.aclose()

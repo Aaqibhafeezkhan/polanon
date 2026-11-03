@@ -10,6 +10,7 @@ import json
 import re
 from typing import Any
 
+from polanon._matching import reading
 from polanon.judge.base import JudgeError, JudgeFinding
 from polanon.judge.prompt import ALLOWED_TYPES
 from polanon.policy import TOKEN_PATTERN
@@ -19,9 +20,13 @@ from polanon.policy import TOKEN_PATTERN
 #: nothing that short identifies a person anyway.
 MIN_FINDING_CHARS = 3
 
+#: How many "{" in a reply are tried as the start of its JSON object. Each failed try reads ahead,
+#: and a reply is untrusted, so the search is bounded.
+_MAX_JSON_STARTS = 50
+
 _TOKEN_RE = re.compile(TOKEN_PATTERN)
-#: A reply wrapped in a Markdown code fence, as chat models write JSON even when told not to.
-_FENCE_RE = re.compile(r"```[A-Za-z]*\s*(?P<body>.*?)\s*```", re.DOTALL)
+#: A Markdown code fence, as chat models wrap JSON even when told not to.
+_FENCE = "```"
 
 
 def parse_findings(raw: object, masked_text: str) -> list[JudgeFinding]:
@@ -66,20 +71,54 @@ def _decode(raw: str) -> Any:
             logged.
     """
     body = raw.strip()
-    fence = _FENCE_RE.search(body)
-    if fence is not None:
-        body = fence.group("body")
-    try:
-        return json.loads(body)
-    except (ValueError, RecursionError):
-        pass
-    start = body.find("{")
-    if start != -1:
+    for candidate in (body, _fenced(body)):
+        if candidate is None:
+            continue
         try:
-            return json.JSONDecoder().raw_decode(body, start)[0]
+            return json.loads(candidate)
         except (ValueError, RecursionError):
             pass
+    found = _object_with_findings(body)
+    if found is not None:
+        return found
     raise JudgeError(f"judge returned no readable JSON ({len(raw)} characters)")
+
+
+def _fenced(body: str) -> str | None:
+    """Return what the first Markdown code fence holds, or None when there is none.
+
+    Found with plain string search: the regex this replaced backtracked over the whitespace after
+    an unclosed fence, and a reply of a few thousand spaces froze the event loop for seconds.
+    """
+    opening = body.find(_FENCE)
+    if opening == -1:
+        return None
+    start = opening + len(_FENCE)
+    while start < len(body) and body[start].isalpha():  # the language tag: ```json
+        start += 1
+    closing = body.find(_FENCE, start)
+    return body[start:] if closing == -1 else body[start:closing]
+
+
+def _object_with_findings(body: str) -> Any:
+    """Return the first JSON object in `body` that has a "findings" key, or None.
+
+    Every "{" is a candidate, up to a bound, not just the first: a sentence before the JSON may
+    hold a brace of its own.
+    """
+    decoder = json.JSONDecoder()
+    start = body.find("{")
+    for _ in range(_MAX_JSON_STARTS):
+        if start == -1:
+            return None
+        try:
+            payload = decoder.raw_decode(body, start)[0]
+        except (ValueError, RecursionError):
+            payload = None
+        if isinstance(payload, dict) and "findings" in payload:
+            return payload
+        start = body.find("{", start + 1)
+    return None
 
 
 def _finding(item: Any, masked_text: str) -> JudgeFinding | None:
@@ -90,7 +129,10 @@ def _finding(item: Any, masked_text: str) -> JudgeFinding | None:
     if not isinstance(text, str):
         return None
     text = text.strip()
-    if len(text) < MIN_FINDING_CHARS or text not in masked_text or _TOKEN_RE.search(text):
+    # Compared as the masking reads both, whitespace squeezed: a small model quoting a hard-wrapped
+    # line with a plain space was dropped, and the identifying phrase went out with stage 2 "done".
+    quoted = len(text) >= MIN_FINDING_CHARS and reading(text) in reading(masked_text)
+    if not quoted or _TOKEN_RE.search(text):
         return None
     entity_type = item.get("type")
     entity_type = entity_type.upper() if isinstance(entity_type, str) else "OTHER"

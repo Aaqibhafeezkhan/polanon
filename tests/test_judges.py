@@ -308,3 +308,61 @@ async def test_remote_reply_with_no_choices_is_a_judge_error():
 def test_deeply_nested_reply_is_a_judge_error():
     with pytest.raises(JudgeError):
         parse_findings("[" * 100_000 + "]" * 100_000, MASKED)
+
+
+@pytest.mark.parametrize("make", ["ollama", "remote"])
+async def test_a_judge_error_does_not_carry_the_http_error_into_a_logged_traceback(make):
+    """logger.exception prints the cause, and an httpx error can quote credentials."""
+    import traceback
+
+    def handler(request):
+        raise httpx.ConnectError("proxy https://user:SENTINEL@proxy.test refused the connection")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    judge = (
+        OllamaJudge(client=client)
+        if make == "ollama"
+        else RemoteJudge(base_url="https://provider.test/v1", api_key="k", model="m", client=client)
+    )
+    with pytest.raises(JudgeError) as error:
+        await judge.review(MASKED)
+    assert "SENTINEL" not in "".join(traceback.format_exception(error.value))
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param(
+            '{"findings": [{"text": "dyrektor jedynej huty w Stalowej Woli", "type": "PERSON",'
+            ' "reason": "like ```this``` and ```that```"}]}',
+            id="fences inside the JSON strings",
+        ),
+        pytest.param("Wynik {poniżej}: " + GOOD_JSON, id="a brace in a sentence before it"),
+        pytest.param('Przykład: {"a": 1}. Odpowiedź: ' + GOOD_JSON, id="other JSON before it"),
+        pytest.param("```json\n" + GOOD_JSON + "\n```", id="fenced"),
+        pytest.param("```json\n" + GOOD_JSON, id="fence never closed"),
+    ],
+)
+def test_a_valid_reply_is_read_wherever_its_json_object_stands(raw):
+    assert [f.text for f in parse_findings(raw, MASKED)] == [
+        "dyrektor jedynej huty w Stalowej Woli"
+    ]
+
+
+def test_an_unclosed_fence_with_a_run_of_spaces_is_parsed_quickly():
+    """The fence regex backtracked over the spaces and froze the event loop."""
+    import time
+
+    started = time.perf_counter()
+    with pytest.raises(JudgeError):
+        parse_findings("```json" + " " * 20_000 + "x", MASKED)
+    assert time.perf_counter() - started < 1
+
+
+async def test_a_finding_quoted_with_other_whitespace_is_still_masked():
+    """A hard-wrapped line quoted with a plain space was dropped, and the phrase went out."""
+    text = "Kowalski to dyrektor jedynej\nhuty w Stalowej Woli."
+    judge = _ollama(GOOD_JSON)
+    result = await anonymize(text, enabled={"PERSON"}, guards=[], judge=judge, existing_mapping={})
+    assert "Stalowej" not in result.anonymized
+    assert result.judge_failed is False
