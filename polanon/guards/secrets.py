@@ -31,7 +31,9 @@ _WHOLE_MATCH: tuple[re.Pattern[str], ...] = (
     re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
+    # A JWT starts where a base64url run starts: "\b" also let a match start after every "-" in a
+    # long "eyJ-eyJ-..." run, and each start scanned to the end of the run, quadratically.
+    re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
     # A block never holds a second BEGIN, and stopping there keeps a paste of many headers without
     # an END from rescanning the rest of the text once per header.
     re.compile(
@@ -59,22 +61,27 @@ _BASIC_AUTH = re.compile(r"(?i)\bAuthorization\s*:\s*Basic\s+(?P<value>[A-Za-z0-
 _CREDENTIAL_LABELS = r"password|passwd|has[łl]o|has[łl]a|pin|kod\s+dost[ęe]pu"
 
 #: The value after a label. A quoted value is taken whole, spaces included, because passphrases
-#: are what password policies now ask for. A bare one ends at whitespace or punctuation, and
-#: leaves out one ".", ")" or "]" that closes the sentence: "hasło: Zima2026." masked with its
-#: full stop gave a value no later bare "Zima2026" matched, so the repeat went out in clear.
+#: are what password policies now ask for. A bare one ends at whitespace or at one of the `stop`
+#: characters, and leaves out one ".", ",", ";", ")" or "]" that closes the sentence: "hasło:
+#: Zima2026." masked with its full stop gave a value no later bare "Zima2026" matched, so the
+#: repeat went out in clear.
 _VALUE = (
     r"(?:\"(?P<dq>[^\"\n]{{1,200}})\"|'(?P<sq>[^'\n]{{1,200}})'"
-    r"|[\"']?(?P<bare>[^\s\"',;{stop}]{{{shortest},}}?)[.)\]]?(?![^\s\"',;{stop}]))"
+    r"|[\"']?(?P<bare>[^\s\"'{stop}]{{{shortest},}}?)[.,;)\]]?(?![^\s\"'{stop}]))"
 )
 
 #: Assignments such as `password: hunter2` or `DB_PASSWORD="abc"`. The value is a named group.
 #: The left boundary is a lookbehind rather than ``\b`` so a prefixed name still matches: in
 #: ``DB_PASSWORD`` the character before the keyword is an underscore, which ``\b`` treats as part of
-#: the same word and would therefore skip.
+#: the same word and would therefore skip. For the same reason "key" and "pass" count as labels
+#: only as the last part of a compound name, ``SECRET_KEY``, ``APP_KEY``, ``DB_PASS``, the way
+#: settings and .env files name them; alone they are ordinary words. After an explicit ":" or "="
+#: a bare value runs to whitespace, so a password with "," or ";" in it is not cut short.
 _ASSIGNMENT = re.compile(
     r"(?i)(?<![A-Za-z0-9])"
     rf"(?:(?:{_CREDENTIAL_LABELS})(?:\s+(?:do|dla|od)\s+[\w-]{{1,20}})?"
     r"|pwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret"
+    r"|(?<=[_-])key|(?<=[_-])pass"
     r"|klucz|login|u[żz]ytkownik)"
     r"(?:\s+to)?\s*[:=]\s*" + _VALUE.format(stop="", shortest=4)
 )
@@ -84,7 +91,7 @@ _ASSIGNMENT = re.compile(
 #: see :func:`_looks_like_a_secret`.
 _LABELLED = re.compile(
     r"(?i)(?<![A-Za-z0-9])(?:has[łl]o|has[łl]em|password|pin|kod\s+dost[ęe]pu)(?:\s+to)?\s+"
-    + _VALUE.format(stop=":", shortest=6)
+    + _VALUE.format(stop=",;:", shortest=6)
 )
 
 #: A PIN is four to eight digits, shorter than any other labelled secret, so it gets its own rule:

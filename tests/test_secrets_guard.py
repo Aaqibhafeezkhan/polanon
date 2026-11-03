@@ -175,3 +175,50 @@ def test_prose_is_left_alone_when_it_only_mentions_credentials(text):
 
 def test_nothing_is_reported_when_secrets_are_disabled():
     assert SecretsGuard().detect("hasło: Zima2026!", {"EMAIL"}) == []
+
+
+def _secrets(text):
+    return [text[s.start : s.end] for s in SecretsGuard().detect(text, {"SECRET"})]
+
+
+@pytest.mark.parametrize(
+    ("line", "secret"),
+    [
+        ("SECRET_KEY = 'django-insecure-x7#k2'", "django-insecure-x7#k2"),
+        ("secret_key: s3cr3t-value", "s3cr3t-value"),
+        ("APP_KEY=base64:Zm9vYmFyYmF6", "base64:Zm9vYmFyYmF6"),
+        ("STRIPE_KEY=rk_9f8e7d6c", "rk_9f8e7d6c"),
+        ("DB_PASS=Zima2026!", "Zima2026!"),
+        ("SMTP_PASS: haslo123", "haslo123"),
+    ],
+)
+def test_settings_and_env_secrets_named_key_or_pass_are_masked(line, secret):
+    """SECRET_KEY, *_KEY and *_PASS were not labels, so pasted settings went out in clear."""
+    assert secret in _secrets(line)
+
+
+@pytest.mark.parametrize(
+    "text", ["monkey: banana-split", "keyboard: logitech-mx", "bypass: true-ish", "key: value-1"]
+)
+def test_key_and_pass_alone_or_inside_a_word_are_not_labels(text):
+    assert _secrets(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        ("password: ab,cdef1 i dalej", "ab,cdef1"),
+        ("hasło=x;y-z-2026, a reszta", "x;y-z-2026"),
+        ("DB_PASSWORD=Qw,er;ty12;", "Qw,er;ty12"),
+    ],
+)
+def test_a_labelled_password_with_a_comma_or_semicolon_is_masked_whole(text, secret):
+    """The bare value stopped at "," or ";", so the rest of the password was sent."""
+    assert _secrets(text) == [secret]
+
+
+def test_a_long_run_of_jwt_starts_is_scanned_in_linear_time():
+    text = "eyJ-" * 50_000
+    started = time.perf_counter()
+    _secrets(text)
+    assert time.perf_counter() - started < 2
