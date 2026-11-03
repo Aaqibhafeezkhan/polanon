@@ -332,9 +332,15 @@ PATTERNS: list[Rule] = [
     ("CREDIT_CARD", re.compile(r"(?<!\d)\d+(?:[ -]\d+)*"), None),
     # The lookbehind starts a match only where a run of address characters starts. Without it a
     # long run with no "@" — a hex dump, a base64 blob — was rescanned from every position.
+    # Polish letters are allowed in the local part and in every domain label (#7).
     (
         "EMAIL",
-        re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+        re.compile(
+            r"(?<![A-Za-z0-9._%+\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
+            r"[A-Za-z0-9._%+\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+@"
+            r"[A-Za-z0-9.\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\."
+            r"[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}"
+        ),
         None,
     ),
     (

@@ -128,6 +128,19 @@ def test_email_match_stays_linear_when_a_long_run_has_no_at_sign():
     assert time.perf_counter() - started < 1.0
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("e-mail: zofia.żak@example.com", "zofia.żak@example.com"),
+        ("kontakt@przykład.example", "kontakt@przykład.example"),
+    ],
+)
+def test_email_with_polish_letters_is_masked_as_one_unit(text, expected):
+    """ASCII-only EMAIL left diacritics outside the token or skipped the address (#7)."""
+    spans = [s for s in RegexGuard().detect(text, {"EMAIL"}) if s.entity_type == "EMAIL"]
+    assert [text[s.start : s.end] for s in spans] == [expected]
+
+
 def test_address_does_not_swallow_the_postcode_that_follows():
     text = "ul. Krótka 5, 00-950 Warszawa"
     found = {(s.entity_type, text[s.start : s.end]) for s in RegexGuard().detect(text, ALL)}
