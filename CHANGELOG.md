@@ -11,6 +11,10 @@ All notable changes to this project are recorded here. The format follows
 - **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
   as a name and half an address, and an address on an internationalised domain not at all.
   Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).
+- **A phone number after "tel." is labelled a phone**, not a REGON: one nine-digit number in ten
+  passes the REGON checksum, and the model was told it was a company's register number.
+  Contributed by ShahadatTest in [#22](https://github.com/boromat/polanon/pull/22); "kom."
+  counts as a phone label as well, and "hotel" no longer does.
 
 ## [0.2.0] - 2026-11-03
 
