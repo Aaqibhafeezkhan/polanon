@@ -350,12 +350,18 @@ Masking is pseudonymisation, not anonymisation in the legal sense, and no detect
 everything. The [threat model](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md) says what is covered, what is
 not, and what stays your application's job, starting with keeping the mapping safe.
 
-polanon was built as the masking engine of piigate, a self-hosted hub that lets a team use Claude
-or GPT on real documents without sending personal data to the provider; the hub is not published
-yet. The library knows nothing about it — no HTTP, no database, no settings — and a test fails if
-it ever starts to.
+polanon was built as the masking engine of [PolGate](https://github.com/boromat/polgate), a
+self-hosted hub that lets a team use Claude or GPT on real documents without sending personal data
+to the provider. The library knows nothing about it — no HTTP, no database, no settings — and a
+test fails if it ever starts to.
 
 ## Used by
+
+[PolGate](https://github.com/boromat/polgate) is a self-hosted company chat for Claude and GPT
+built on polanon: every message and uploaded document is masked on the server before it reaches the
+model, and the answer streams back with the originals in place. It adds what a team needs around
+the library: an encrypted vault for the mapping, retention that deletes, an audit log of types and
+counts, and an admin panel for the policy, including the allowlist and denylist.
 
 [PolCV](https://github.com/boromat/polcv) writes CVs for Polish job postings and can mask the
 candidate's name, contact details and company names with polanon before any text reaches the

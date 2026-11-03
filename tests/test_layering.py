@@ -24,7 +24,7 @@ def test_the_library_is_where_these_tests_look():
 
 
 #: Packages the library must never import, at any depth: the hub itself and the frameworks it uses.
-FORBIDDEN = ("piigate", "fastapi", "sqlmodel", "sqlalchemy", "starlette", "jinja2")
+FORBIDDEN = ("polgate", "fastapi", "sqlmodel", "sqlalchemy", "starlette", "jinja2")
 
 #: Modules allowed to import a third-party package at module level, and what they may import.
 #: The judges that talk to a server need an HTTP client; nothing else does, and `polanon/__init__`
