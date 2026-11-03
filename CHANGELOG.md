@@ -4,6 +4,23 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-11-03
+
+### Changed
+
+- **Example data that belongs to nobody.** The PESEL numbers in the README, the examples, the tests
+  and the benchmark had birth dates in the 1980s, 1990s and 2000s, so each could have been issued
+  to a real person. They now carry birth dates before 1860, for which no PESEL was ever issued (the
+  register started in 1979), or in the 2100s. Day, month, serial number and the checksum rule are
+  unchanged, so detection is tested exactly as before, and the benchmark scores are the same.
+  E-mail addresses and URLs on real domains (`firma.pl`, `b.pl`) moved to reserved ones
+  (`example.com`, `.example`).
+
+### Added
+
+- A terminal recording at the top of the README, showing a document masked on the command line and
+  an answer restored in Python.
+
 ## [0.1.0] - 2026-11-03
 
 The first release.

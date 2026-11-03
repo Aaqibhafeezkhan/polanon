@@ -9,9 +9,9 @@ Public API (stable):
     from polanon import Anonymizer, default_guards
 
     anonymizer = Anonymizer(default_guards(with_ner=False))
-    result = anonymizer.anonymize_sync("Jan Kowalski, PESEL 90010112349")  # or: await .anonymize()
+    result = anonymizer.anonymize_sync("Jan Kowalski, PESEL 50810112354")  # or: await .anonymize()
     result.anonymized        # "<OSOBA_1>, PESEL <PESEL_1>"
-    result.mapping           # {"<OSOBA_1>": "Jan Kowalski", "<PESEL_1>": "90010112349"}
+    result.mapping           # {"<OSOBA_1>": "Jan Kowalski", "<PESEL_1>": "50810112354"}
     Anonymizer.restore("Dzień dobry <OSOBA_1>", result.mapping)   # original back in the answer
     restorer = Anonymizer.stream_restorer(result.mapping)         # for token-by-token streams
 
@@ -71,7 +71,7 @@ __all__ = [
     "token_for",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 #: The entity types an Anonymizer masks unless told otherwise: every built-in type except DATE.
 #: A date rarely identifies anyone on its own, and masking every deadline and invoice date leaves
