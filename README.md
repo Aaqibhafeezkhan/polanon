@@ -72,12 +72,14 @@ and the mapping to stderr, so a pipeline can keep the two apart:
 ```bash
 polanon "Jan Kowalski, PESEL 50810112354"
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
+polanon --file umowa.txt --ner > masked.txt 2> mapping.json
 ```
 
 A non-zero exit status means stderr holds an error rather than the mapping. In Windows
 PowerShell 5.1, read the file with `Get-Content -Encoding UTF8 umowa.txt | polanon`: a plain
 `cat` there re-encodes Polish letters before they reach the program, and a garbled name is not
-recognised.
+recognised. `--file` avoids that: polanon reads the file's bytes itself, as UTF-8 or else cp1250,
+and it cannot be combined with text arguments.
 
 ## Streaming
 

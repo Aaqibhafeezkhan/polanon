@@ -102,3 +102,33 @@ def test_output_is_utf8_whatever_the_console_encoding():
     assert completed.returncode == 0
     assert completed.stdout.decode("utf-8").strip() == "Umowę podpisał <OSOBA_1>."
     assert json.loads(completed.stderr.decode("utf-8")) == {"<OSOBA_1>": "Łukasz Wiśniewski"}
+
+
+def test_a_utf8_file_is_masked_with_file_option(capsys, tmp_path):
+    path = tmp_path / "umowa.txt"
+    path.write_bytes("Umowę podpisał Łukasz Wiśniewski.".encode())
+    assert main(["--file", str(path)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "Umowę podpisał <OSOBA_1>."
+    assert json.loads(captured.err) == {"<OSOBA_1>": "Łukasz Wiśniewski"}
+
+
+def test_a_cp1250_file_is_masked_with_file_option(capsys, tmp_path):
+    path = tmp_path / "umowa.txt"
+    path.write_bytes("Umowę podpisał Łukasz Wiśniewski.".encode("cp1250"))
+    assert main(["--file", str(path)]) == 0
+    assert capsys.readouterr().out.strip() == "Umowę podpisał <OSOBA_1>."
+
+
+def test_a_missing_file_is_reported_and_fails(capsys, tmp_path):
+    assert main(["--file", str(tmp_path / "missing.txt")]) == 2
+    assert "cannot read" in capsys.readouterr().err
+
+
+def test_file_option_refuses_text_arguments(capsys, tmp_path):
+    path = tmp_path / "umowa.txt"
+    path.write_text("Jan Kowalski", encoding="utf-8")
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--file", str(path), "Jan Kowalski"])
+    assert exit_info.value.code == 2
+    assert "cannot be combined" in capsys.readouterr().err

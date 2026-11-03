@@ -14,6 +14,7 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TextIO
 
 from polanon import Anonymizer, default_guards
@@ -33,6 +34,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="polanon", description=DESCRIPTION)
     parser.add_argument("text", nargs="*", help="text to mask; omit to read standard input")
     parser.add_argument(
+        "--file",
+        metavar="PATH",
+        help="read the text from this file, decoding its bytes as UTF-8 or cp1250",
+    )
+    parser.add_argument(
         "--ner", action="store_true", help="also load the spaCy model for names and places"
     )
     parser.add_argument(
@@ -41,10 +47,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="spaCy model to load with --ner (default: %(default)s)",
     )
     args = parser.parse_args(argv)
+    if args.file is not None and args.text:
+        parser.error("--file cannot be combined with text arguments")
 
     _write_utf8(sys.stdout)
     _write_utf8(sys.stderr)
-    text = " ".join(args.text) if args.text else _read_stdin()
+    if args.file is not None:
+        try:
+            text = _decode(Path(args.file).read_bytes())
+        except OSError as exc:
+            print(f"polanon: cannot read {args.file}: {exc.strerror}", file=sys.stderr)
+            return 2
+    else:
+        text = " ".join(args.text) if args.text else _read_stdin()
     if not text.strip():
         print("nothing to mask: pass text as arguments or on standard input", file=sys.stderr)
         return 2
@@ -70,7 +85,11 @@ def _read_stdin() -> str:
     stream = getattr(sys.stdin, "buffer", None)
     if stream is None:
         return sys.stdin.read()
-    raw = stream.read()
+    return _decode(stream.read())
+
+
+def _decode(raw: bytes) -> str:
+    """Decode a file or pipe as UTF-8, then cp1250, before replacement characters."""
     for encoding in ("utf-8-sig", "cp1250"):
         try:
             return str(raw.decode(encoding))
