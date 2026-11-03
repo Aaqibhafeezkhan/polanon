@@ -252,6 +252,10 @@ _PASSPORT_LABEL = re.compile(
 )
 #: Words that end right before a PESEL: "PESEL:", "nr PESEL", "numer PESEL to".
 _PESEL_LABEL = re.compile(r"(?i)pesel\w*(?:\s+(?:nr|numer|to))?\.?\s*[:-]?\s*$")
+#: Phone labels: a nine-digit REGON-looking number after these is a phone (#8).
+_PHONE_LABEL = re.compile(
+    r"(?i)(?:tel(?:\.\s*kom\.?|\.)?|telefon\w*|komórk\w*|fax|phone)\s*[:-]?\s*$"
+)
 #: How far back a label is looked for: one short phrase, never the previous sentence.
 _LABEL_REACH = 40
 
@@ -560,8 +564,23 @@ def _follows(label: re.Pattern[str], text: str, match: re.Match[str]) -> bool:
     return label.search(text, max(0, match.start() - _LABEL_REACH), match.start()) is not None
 
 
+def _locate_regon(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return a REGON unless a phone label stands right before it (#8).
+
+    One nine-digit number in ten passes the REGON checksum, so an unspaced phone
+    after "tel." would otherwise be labelled REGON. With "REGON" or no label the
+    checksum still wins.
+    """
+    if not is_valid_regon(match.group()):
+        return []
+    if _follows(_PHONE_LABEL, text, match):
+        return []
+    return [match.span()]
+
+
 _LOCATORS: dict[str, Locator] = {
     "PESEL": _locate_pesel,
+    "REGON": _locate_regon,
     "IBAN": _locate_iban,
     "CREDIT_CARD": _locate_cards,
     "PL_ID": _locate_pl_id,

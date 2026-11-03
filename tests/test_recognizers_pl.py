@@ -610,6 +610,29 @@ def test_nine_digit_regon_with_check_digit_zero_is_masked():
     assert masked("REGON 123456160", {"REGON"}) == "REGON <REGON_1>"
 
 
+@pytest.mark.parametrize(
+    "label",
+    ["tel.", "tel. kom.", "telefon", "komórka", "fax", "phone"],
+)
+def test_nine_digit_number_after_phone_label_is_a_phone_not_regon(label):
+    """A checksum-valid nine-digit phone after a phone label was labelled REGON (#8)."""
+    text = f"{label} 123456785"
+    spans = merge_spans(RegexGuard().detect(text, {"REGON", "PHONE"}), text)
+    assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("PHONE", "123456785")]
+
+
+def test_nine_digit_number_after_regon_label_stays_regon():
+    text = "REGON 123456785"
+    spans = merge_spans(RegexGuard().detect(text, {"REGON", "PHONE"}), text)
+    assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("REGON", "123456785")]
+
+
+def test_unlabelled_checksum_valid_nine_digits_stay_regon():
+    text = "numer 123456785"
+    spans = merge_spans(RegexGuard().detect(text, {"REGON", "PHONE"}), text)
+    assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("REGON", "123456785")]
+
+
 def test_fourteen_digit_number_with_an_invalid_company_part_is_not_a_regon():
     assert not is_valid_regon("12345678000005")
     assert masked("Zamówienie 12345678000005", {"REGON"}) == "Zamówienie 12345678000005"
