@@ -1,0 +1,53 @@
+{
+  "source": "karta_wypisowa.txt",
+  "entities": [
+    {
+      "value": "Szpital Miejski Nad Motławą Sp. z o.o.",
+      "type": "ORG"
+    },
+    {
+      "value": "ul. Szpitalna 4",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "80-200",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "Gdańsk",
+      "type": "LOCATION"
+    },
+    {
+      "value": "+48 58 123 45 67",
+      "type": "PHONE"
+    },
+    {
+      "value": "Zofia Kaczmarek",
+      "type": "PERSON"
+    },
+    {
+      "value": "50810112354",
+      "type": "PESEL"
+    },
+    {
+      "value": "ul. Słoneczna 18/7",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "80-180",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "+48 600 123 456",
+      "type": "PHONE"
+    },
+    {
+      "value": "zofia.kaczmarek@pacjent.example",
+      "type": "EMAIL"
+    },
+    {
+      "value": "Marek Wójcik",
+      "type": "PERSON"
+    }
+  ]
+}

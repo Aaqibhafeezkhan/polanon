@@ -1,0 +1,29 @@
+KARTA INFORMACYJNA LECZENIA SZPITALNEGO
+
+Szpital Miejski Nad Motławą Sp. z o.o.
+ul. Szpitalna 4, 80-200 Gdańsk
+Centrala: +48 58 123 45 67
+
+DANE PACJENTA
+Imię i nazwisko: Zofia Kaczmarek
+PESEL: 50810112354
+Adres zamieszkania: ul. Słoneczna 18/7, 80-180 Gdańsk
+Telefon kontaktowy: +48 600 123 456
+Adres e-mail: zofia.kaczmarek@pacjent.example
+
+PRZEBIEG HOSPITALIZACJI
+Data przyjęcia: 12.10.2026
+Data wypisu: 16.10.2026
+Oddział: Chorób Wewnętrznych
+
+Rozpoznanie główne: nadciśnienie tętnicze.
+Rozpoznanie dodatkowe: okresowe zaburzenia rytmu serca.
+Wykonane badania: EKG, morfologia krwi oraz badanie echokardiograficzne.
+Zastosowano leczenie farmakologiczne i zalecono kontrolę w poradni kardiologicznej
+w ciągu czterech tygodni. Pacjentka w stanie ogólnym dobrym, wypisana do domu.
+
+LEKARZ PROWADZĄCY
+Marek Wójcik
+Zalecenia omówiono z pacjentką. Pacjentka: Zofia Kaczmarek.
+
+Dokument wydano na prośbę pacjentki.
