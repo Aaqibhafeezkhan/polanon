@@ -353,9 +353,9 @@ PATTERNS: list[Rule] = [
         "PHONE",
         re.compile(
             r"\(\d{2,3}\)[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}(?!\d)"
-            # "0048" is how a Polish number is dialled from abroad and how half of them are written
-            # down; without it the digits after the prefix look like a run of eleven, not a phone.
-            r"|(?<!\d)(?:\+48[ -]?|0048[ -]?)?"
+            # "0048" is how a Polish number is dialled from abroad; bare "48" is also used in
+            # SMS gateway output and CRM exports (#6). The lookbehind avoids taking a time's ":48".
+            r"|(?<!\d)(?:\+48[ -]?|0048[ -]?|(?<!\d:)48[ -]?(?=[1-9]))?"
             r"(?:\d{3}[ -]?\d{3}[ -]?\d{3}|\d{2}[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}"
             r"|\d{2}[ -]?\d{7})(?!\d)"
         ),
