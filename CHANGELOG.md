@@ -15,6 +15,11 @@ All notable changes to this project are recorded here. The format follows
   passes the REGON checksum, and the model was told it was a company's register number.
   Contributed by ShahadatTest in [#22](https://github.com/boromat/polanon/pull/22); "kom."
   counts as a phone label as well, and "hotel" no longer does.
+- **A phone number written with a bare 48 in front** is masked whole: `48123456789`, as SMS
+  gateways and CRM exports write it, went out unmasked, and in `48 123 456 789` the country code
+  stayed in the clear. A valid PESEL that starts with 48 keeps its type, and the minutes of a time
+  such as `10:48` are not pulled into the phone. Contributed by Aaqibhafeezkhan in
+  [#26](https://github.com/boromat/polanon/pull/26).
 
 ## [0.2.0] - 2026-11-03
 
