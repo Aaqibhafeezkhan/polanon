@@ -92,10 +92,13 @@ Text comes from the arguments, from a file with `--file`, or from standard input
 to stdout and the mapping to stderr, or to a file with `--mapping`:
 
 ```bash
+polanon --version
 polanon "Jan Kowalski, PESEL 50810112354"
 polanon --file umowa.txt --ner --mapping mapping.json > masked.txt
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
 ```
+
+`polanon --version` prints the installed package version and exits without reading or masking input.
 
 A non-zero exit status means something went wrong and stderr says what. `--file` reads the file's
 bytes itself and tells UTF-8, UTF-16 (what Windows PowerShell 5.1 writes with `>`) and cp1250
