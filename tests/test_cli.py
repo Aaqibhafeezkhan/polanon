@@ -233,3 +233,12 @@ def test_no_standard_input_at_all_explains_itself(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", None)
     assert main([]) == 2
     assert "nothing to mask" in capsys.readouterr().err
+
+
+def test_version_prints_the_installed_version(capsys):
+    from polanon import __version__
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--version"])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"polanon {__version__}"
