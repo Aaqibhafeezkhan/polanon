@@ -13,3 +13,6 @@ would in one company's paperwork. No data about an actual person belongs in this
 
 `../gold/*.json` annotates each document with the values that must be masked and their entity type.
 `../run.py` scores the guards against those annotations; `../demo.py` just prints the masked text.
+
+`monthly_roster.txt` keeps surname-first monthly periods and names beside ordinary numbers
+masked without a language model. The separate name-guard tests cover punctuated date formats.

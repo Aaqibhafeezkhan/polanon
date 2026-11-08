@@ -17,7 +17,7 @@ up covered, so that is what is measured here:
     masked spans that overlap no annotation. Some of these are genuinely wrong; others are
     conservative masking the annotation did not ask for. Reported as a count, not as an error.
 
-The corpus is ten short synthetic documents (164 annotated occurrences), seven Polish and three
+The corpus is eleven short synthetic documents (169 annotated occurrences), eight Polish and three
 foreign invoices, which makes this a regression check with a readable output, not a research
 benchmark. Nobody should quote these numbers as a general accuracy claim for any language.
 

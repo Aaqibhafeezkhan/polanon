@@ -427,13 +427,21 @@ _FIELD_END = re.compile(r"[ \t\u00a0]*(?:[,;]|\r?\n|$)")
 _LABEL_GAP = re.compile(r":[ \t\u00a0]*")
 _SUBJECT_PREFIXES = frozenset(_words("dotyczy fw fwd odp pd re temat"))
 
-#: A day of the month before a word and a year after it, or both after it in the American order:
-#: "15 Jan 2024", "15. Mai 2024", "Jan 15, 2024".
+#: Space-based dates retain their original rules: "15 Jan 2024", "Jan 15, 2024".
 _DAY = r"(?:0?[1-9]|[12]\d|3[01])"
 _DAY_BEFORE = re.compile(rf"(?<![\d.,:]){_DAY}\.?[ \t\u00a0]+$")
 _YEAR_AFTER = re.compile(r"\.?,?[ \t\u00a0]+(?:19|20)\d\d(?!\d)")
 _DAY_AND_YEAR_AFTER = re.compile(
     rf"\.?[ \t\u00a0]+{_DAY}(?:st|nd|rd|th)?,?[ \t\u00a0]+(?:19|20)\d\d(?!\d)"
+)
+
+#: Punctuated dates require the same single separator on both sides of the month.
+_SEPARATED_DAY_BEFORE = re.compile(rf"(?<![\d.,:]){_DAY}(?P<separator>[-/.])$")
+_SEPARATED_YEAR_AFTER = re.compile(r"(?P<separator>[-/.])(?:19|20)\d\d(?!\d)")
+_SEPARATED_YEAR_BEFORE = re.compile(r"(?<![\d.,:])(?:19|20)\d\d(?P<separator>[-/.])$")
+_SEPARATED_DAY_AFTER = re.compile(rf"(?P<separator>[-/.]){_DAY}(?!\d)")
+_SEPARATED_DAY_AND_YEAR_AFTER = re.compile(
+    rf"(?P<separator>[-/.]){_DAY}(?:st|nd|rd|th)?(?P=separator)(?:19|20)\d\d(?!\d)"
 )
 
 
@@ -654,17 +662,35 @@ def _abbreviates(text: str, words: list[_Word], title: int, index: int) -> bool:
 
 
 def _in_a_date(text: str, word: _Word) -> bool:
-    """Whether a first name stands where a month does: "15 Jan 2024", "15. Mai 2024".
+    """Whether a first name occupies the month in a space-based or punctuated date.
 
-    English, German and French month names share their spelling with Jan and with Maja's
-    genitive. Between a day and a year, or before both, they are the month and never a person.
+    English, German and French months share spellings with Jan and Maja's genitive.
+    Punctuated dates use matching separators: "15-Jan-2024", "2024/Jan/15", "Jan.15.2024".
+    Spaces keep the original day-first/month-first rules, since "2023 Anna 2" is not a date.
     """
     if _DAY_AND_YEAR_AFTER.match(text, word.end) is not None:
         return True
-    return (
+    before = max(0, word.start - 8)
+    if (
         _YEAR_AFTER.match(text, word.end) is not None
-        and _DAY_BEFORE.search(text, max(0, word.start - 8), word.start) is not None
-    )
+        and _DAY_BEFORE.search(text, before, word.start) is not None
+    ):
+        return True
+    if _SEPARATED_DAY_AND_YEAR_AFTER.match(text, word.end) is not None:
+        return True
+    for before_pattern, after_pattern in (
+        (_SEPARATED_DAY_BEFORE, _SEPARATED_YEAR_AFTER),
+        (_SEPARATED_YEAR_BEFORE, _SEPARATED_DAY_AFTER),
+    ):
+        preceding = before_pattern.search(text, before, word.start)
+        following = after_pattern.match(text, word.end)
+        if (
+            preceding is not None
+            and following is not None
+            and preceding["separator"] == following["separator"]
+        ):
+            return True
+    return False
 
 
 def _labelled(text: str, words: list[_Word], index: int) -> bool:

@@ -1,0 +1,13 @@
+{
+  "source": "monthly_roster.txt",
+  "entities": [
+    {
+      "value": "Nowak Wiktoria",
+      "type": "PERSON"
+    },
+    {
+      "value": "Anna",
+      "type": "PERSON"
+    }
+  ]
+}

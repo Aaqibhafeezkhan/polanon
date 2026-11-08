@@ -1,6 +1,6 @@
 """The annotated sample corpus, used as a regression check on detection quality.
 
-Ten short synthetic documents are not a research benchmark, so the thresholds here are floors
+The short synthetic documents are not a research benchmark, so the thresholds here are floors
 rather than targets: they exist to make a drop in coverage fail the build instead of quietly
 shipping. `benchmarks/run.py` prints the same numbers in a readable table.
 """
