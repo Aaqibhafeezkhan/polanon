@@ -858,7 +858,7 @@ def test_a_long_chain_of_four_digit_groups_is_still_not_sliced_into_a_card():
     assert _found("Ref. 1234 4111 1111 1111 1111 9999", "CREDIT_CARD") == []
 
 
-# --- e-mails with the at written out and birth dates written in English ------------------------
+# --- e-mails with the at written out, streets without a prefix, English dates ------------------
 
 
 @pytest.mark.parametrize(
@@ -878,6 +878,28 @@ def test_an_address_with_its_at_written_out_is_masked_whole(address):
 
 def test_at_as_an_english_word_is_no_address():
     assert _found("Meet me at example.com tomorrow", "EMAIL") == []
+
+
+@pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Adres: Długa 5 m. 4, 00-238 Warszawa", "Długa 5 m. 4"),
+        ("Długa 5/12, 00-238 Warszawa", "Długa 5/12"),
+        ("Aleja Róż 3 31-150 Kraków", "Aleja Róż 3"),
+        ("3 Maja 12, 00-001 Warszawa", "3 Maja 12"),
+        ("Jan Kowalski, Kwiatowa 12, 30-001 Kraków", "Kwiatowa 12"),
+    ],
+)
+def test_a_street_without_its_prefix_is_masked_before_a_postcode(text, address):
+    """Only the postcode was masked, and the street in front of it went out."""
+    assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    "text", ["Windows 11, Office 365", "NIP 1234567890, 00-950 Warszawa", "Kwiatowa 12 w Krakowie"]
+)
+def test_a_word_and_a_number_with_no_postcode_after_them_are_no_address(text):
+    assert _found(text, "ADDRESS") == []
 
 
 @pytest.mark.parametrize(

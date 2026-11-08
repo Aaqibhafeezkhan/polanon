@@ -13,6 +13,9 @@ alone.
 
 - **An e-mail address with its "@" written out** is masked whole: `jan.kowalski [at] example.com`,
   `(at)`, `(małpa)`, also with `[dot]`. Only "jan" was masked, as a first name.
+- **A street written without "ul."** is masked when a postcode follows it: in
+  `Długa 5 m. 4, 00-238 Warszawa` only the postcode was. A word and a number with no postcode
+  after them, such as `Windows 11`, stay readable.
 - **A birth date written in English** is masked after its label: `Date of birth: 15 March 1985`,
   `DOB: March 15, 1985` and `born 3rd May 1985` went out whole. With `DATE` turned on, such dates
   are dates too.

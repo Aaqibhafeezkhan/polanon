@@ -184,6 +184,17 @@ ADDRESS_PATTERN = re.compile(
     rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*\s+{_HOUSE}"
 )
 
+#: A street written without its prefix, as forms and CVs often do: "Długa 5 m. 4, 00-238
+#: Warszawa". The postcode right after it is what makes it an address; without one, a capitalised
+#: word and a number are a product and its version ("Windows 11") far more often than a street. The
+#: numbers are short, so "NIP 1234567890, 00-950" is not read as a street.
+ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
+    rf"(?<![\w.]){_NAME_PART}(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*[ \t]+"
+    r"\d{1,4}[A-Za-z]?(?:[ \t]*/[ \t]*\d{1,4}[A-Za-z]?)?"
+    r"(?:[ \t]*(?:m|lok(?:al)?)\.?[ \t]*\d{1,4}[A-Za-z]?)?(?!\d)"
+    r"(?=[ \t]*,?[ \t]*\d{2}-\d{3}\b)"
+)
+
 _POLISH_LETTERS = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
 _EMAIL_LOCAL = rf"A-Za-z0-9._%+\-{_POLISH_LETTERS}"
 _EMAIL_LABEL = rf"[A-Za-z0-9\-{_POLISH_LETTERS}]+"
@@ -398,6 +409,7 @@ PATTERNS: list[Rule] = [
         lambda value: any(c.isalpha() for c in value),
     ),
     ("ADDRESS", ADDRESS_PATTERN, None),
+    ("ADDRESS", ADDRESS_BEFORE_POSTCODE_PATTERN, None),
     ("VIN", re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"), is_valid_vin),
     # A lowercase VIN only after its label: seventeen lowercase letters and digits are a request
     # id, a session key or a hash far more often, and a European VIN carries no check digit.
@@ -605,7 +617,23 @@ def _locate_regon(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     return [match.span()]
 
 
+def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return an address once: a street the rule with "ul." reads is left to that rule.
+
+    "ul. gen. Andersa 15, 00-159" is also "Andersa 15" before a postcode, and two spans for one
+    address made it two values.
+    """
+    if match.re is not ADDRESS_BEFORE_POSTCODE_PATTERN:
+        return [match.span()]
+    window = max(0, match.start() - 2 * _LABEL_REACH)
+    for prefixed in ADDRESS_PATTERN.finditer(text, window, match.end()):
+        if prefixed.start() <= match.start() < prefixed.end():
+            return []
+    return [match.span()]
+
+
 _LOCATORS: dict[str, Locator] = {
+    "ADDRESS": _locate_address,
     "PESEL": _locate_pesel,
     "REGON": _locate_regon,
     "IBAN": _locate_iban,
