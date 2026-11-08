@@ -61,12 +61,12 @@ Plusgiro and sort codes, international phone numbers, street addresses and postc
 | Polish identifiers with a checksum | PESEL, NIP, REGON, ID card, IBAN, payment cards | PESEL; IBAN and payment cards in general | PESEL, NIP, REGON, IBAN, payment cards; ID card and passport by pattern only | None; IBAN and payment cards in general |
 | Polish names in every grammatical case | For listed first names and the surnames that agree with them, without a language model; spaCy adds the rest | With a Polish spaCy model and its `persName` label mapped | Not detected | Not detected; its README suggests adding an NER model |
 | What the core needs | Nothing beyond the standard library | spaCy, numpy, pydantic and a few more; a language model only for names and places | pii-core and typer | Nothing beyond the standard library |
-| On polanon's [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) | 98% fully masked with `pl_core_news_md`, 85% with rules alone | 66% with the same model (presidio-analyzer 2.2.366) | Not measured | Not measured |
+| On polanon's [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) | 98% fully masked with `pl_core_news_md`, 86% with rules alone | 66% with the same model (presidio-analyzer 2.2.366) | Not measured | Not measured |
 | License | MIT | MIT | Apache-2.0 | MIT |
 
 Compared from each project's own documentation and source on 3 November 2026. Only Presidio was
 run on the sample documents, with the script in `benchmarks/`, and that is not neutral ground: the
-ten synthetic documents were written by polanon's author, who tuned its rules on them, and
+eleven synthetic documents were written by polanon's author, who tuned its rules on them, and
 Presidio had only the Polish model, also for the three invoices from abroad. Each has its place:
 Presidio for many languages, structured data and its Azure integration; pii-veil for Polish
 identifiers under Apache-2.0 when names do not matter; piimask for language-neutral identifiers
@@ -165,8 +165,8 @@ Text copied from PDFs, Word or macOS is read as a person would read it: letters 
 letter plus an accent, no-break spaces and en dashes inside numbers, and invisible zero-width
 characters do not hide a value. The mapping keeps each value as it was first written.
 
-On the annotated sample documents in the repository, the rules alone fully mask 85% of the
-values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Ten short
+On the annotated sample documents in the repository, the rules alone fully mask 86% of the
+values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Eleven short
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
 missed and why, and for Presidio on the same documents with the same model: 66% fully masked, 76%

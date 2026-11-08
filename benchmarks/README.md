@@ -1,20 +1,22 @@
 # How well polanon detects
 
-[`samples/`](samples/) holds ten synthetic documents. Seven are Polish — a CV, a VAT invoice, a
-customer complaint, an IT support ticket, an employment contract, an internal IT note, and chat
-messages typed the way people type them, in lowercase and without Polish letters — and three are
-invoices from abroad: British, Swedish and Swiss. [`gold/`](gold/) annotates the 164 values that
+[`samples/`](samples/) holds eleven synthetic documents. Eight are Polish — a CV, a VAT invoice, a
+customer complaint, an IT support ticket, an employment contract, an internal IT note, chat
+messages typed the way people type them, in lowercase and without Polish letters, and a monthly
+roster of surnames and periods — and three are
+invoices from abroad: British, Swedish and Swiss. [`gold/`](gold/) annotates the 169 values that
 must be masked, and [`run.py`](run.py) reports whether each one was **fully** covered, because half
 a masked PESEL is a leak rather than half a success. It scores the guards and the merging of
 their findings, not the pass that masks every later occurrence of a value already found: through
-`Anonymizer` the same documents come out a little better, 162 of 164 with the model.
+`Anonymizer`, which also masks every later occurrence of a value it has found, the same documents
+can only come out the same or better.
 
 | Configuration | Fully masked | Partially masked | Missed | Over-masked spans |
 |---|---:|---:|---:|---:|
-| polanon, guards only, no model | 140 / 164 (85%) | 0 | 24 | 0 |
-| polanon, guards + `pl_core_news_md` | **161 / 164 (98%)** | 0 | 3 | 7 |
-| Presidio 2.2.366, set up for Polish with the same model | 108 / 164 (66%) | 24 | 32 | 46 |
-| Presidio, phone recognizer at leniency 0 | 124 / 164 (76%) | 28 | 12 | 71 |
+| polanon, guards only, no model | 145 / 169 (86%) | 0 | 24 | 0 |
+| polanon, guards + `pl_core_news_md` | **166 / 169 (98%)** | 0 | 3 | 7 |
+| Presidio 2.2.366, set up for Polish with the same model | 112 / 169 (66%) | 25 | 32 | 47 |
+| Presidio, phone recognizer at leniency 0 | 128 / 169 (76%) | 29 | 12 | 76 |
 
 Presidio is the usual answer to "mask personal data before an LLM call", so it is the baseline.
 [`compare_presidio.py`](compare_presidio.py) gives it the same Polish spaCy model, every offline recognizer it
@@ -62,7 +64,7 @@ formula. What the model adds is places and company names without a legal form.
 
 </details>
 
-**Read the number honestly.** Ten short documents are a regression check, not a research
+**Read the number honestly.** Eleven short documents are a regression check, not a research
 benchmark, and the corpus was written by the same person who wrote the guards, who tuned them
 against it; Presidio was never tuned on it. The misses are
 instructive: the word *Kraków* is masked in one document and missed in another, and *Bristol* and
