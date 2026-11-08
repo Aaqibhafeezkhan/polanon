@@ -47,17 +47,17 @@ _MALE_NAMES = _words(
     """
     Adam Adrian Alan Albert Aleks Aleksander Alfred Andrzej Antoni Arkadiusz Artur August
     Bartłomiej Bartosz Benedykt Bernard Błażej Bogdan Bogumił Bogusław Bolesław Borys Bronisław
-    Cezary Czesław Damian Daniel Dariusz Dawid Dominik Edmund Edward Emanuel Emil Ernest Eryk
-    Eugeniusz Fabian Feliks Filip Florian Franciszek Fryderyk Gabriel Gerard Gracjan Grzegorz
+    Cezary Cyprian Czesław Damian Daniel Dariusz Dawid Dominik Edmund Edward Emanuel Emil Ernest
+    Eryk Eugeniusz Fabian Feliks Filip Florian Franciszek Fryderyk Gabriel Gerard Gracjan Grzegorz
     Gustaw Henryk Hieronim Hubert Ignacy Igor Ireneusz Jacek Jakub Jan Janusz Jarosław Jędrzej
     Jerzy Joachim Józef Julian Juliusz Kacper Kajetan Kamil Karol Kazimierz Klaudiusz Konrad
     Konstanty Kornel Krystian Krzysztof Ksawery Lech Leon Leonard Leszek Longin Lucjan Ludwik
-    Łukasz Maciej Maks Maksymilian Marcel Marcin Marek Marian Mariusz Mateusz Michał Mieczysław
-    Mikołaj Miłosz Mirosław Natan Nataniel Nikodem Norbert Olaf Olgierd Oliwer Oskar Patryk Paweł
-    Piotr Przemysław Radosław Rafał Remigiusz Robert Roman Ryszard Sebastian Seweryn Sławomir
-    Stanisław Stefan Szczepan Szymon Tadeusz Teodor Tobiasz Tomasz Tymon Tymoteusz Wacław Waldemar
-    Walenty Wiesław Wiktor Wincenty Witold Władysław Włodzimierz Wojciech Zbigniew Zdzisław Zenon
-    Zygmunt
+    Łukasz Maciej Maks Maksymilian Marcel Marcin Marek Marian Mariusz Mateusz Maurycy Michał
+    Mieczysław Mikołaj Miłosz Mirosław Natan Nataniel Nikodem Norbert Olaf Olgierd Oliwer Oliwier
+    Oskar Patryk Paweł Piotr Przemysław Radosław Rafał Remigiusz Robert Roman Ryszard Sebastian
+    Seweryn Sławomir Stanisław Stefan Szczepan Szymon Tadeusz Teodor Tobiasz Tomasz Tymon Tymoteusz
+    Wacław Waldemar Walenty Wiesław Wiktor Wincenty Witold Władysław Włodzimierz Wojciech Zbigniew
+    Zdzisław Zenon Zygmunt
     Adaś Antek Bartek Bolek Czesiek Darek Franek Grzesiek Heniek Janek Jarek Jasiek Jaś Józek
     Julek Jurek Kazek Krzysiek Kuba Kubuś Maciek Mietek Mirek Olek Piotrek Przemek Radek Romek
     Rysiek Sławek Staś Staszek Szymek Tadek Tadzio Tomek Tymek Waldek Wiesiek Witek Władek Wojtek
@@ -69,15 +69,16 @@ _FEMALE_NAMES = _words(
     """
     Ada Adrianna Agata Agnieszka Aldona Aleksandra Alicja Alina Amelia Anastazja Aneta Angelika
     Aniela Anita Anna Antonina Apolonia Aurelia Barbara Beata Bianka Blanka Bogumiła Bogusława
-    Bożena Bronisława Cecylia Czesława Dagmara Danuta Daria Diana Dominika Dorota Edyta Eliza
-    Elwira Elżbieta Emilia Emma Ewa Ewelina Felicja Gabriela Genowefa Grażyna Halina Hanna Helena
-    Honorata Iga Ilona Irena Iwona Izabela Jadwiga Jagoda Janina Joanna Jolanta Józefa Judyta
-    Julia Julita Justyna Kaja Kalina Kamila Karina Karolina Katarzyna Kinga Klara Klaudia Kornelia
-    Krystyna Laura Lena Leokadia Lidia Liliana Liwia Lucyna Ludmiła Łucja Magdalena Maja Malwina
-    Małgorzata Marcelina Maria Marianna Mariola Marta Martyna Marzena Michalina Milena Mirosława
-    Monika Nadia Natalia Nela Nikola Nina Olga Oliwia Patrycja Paula Paulina Pola Regina Renata
-    Roksana Rozalia Róża Sabina Sandra Sara Sonia Stanisława Stefania Sylwia Tamara Teresa Urszula
-    Wanda Weronika Wiesława Wiktoria Wioletta Władysława Zdzisława Zofia Zuzanna Żaneta
+    Bożena Bronisława Cecylia Celina Czesława Dagmara Danuta Daria Diana Dominika Dorota Edyta
+    Eliza Elwira Elżbieta Emilia Emma Ewa Ewelina Felicja Gabriela Genowefa Grażyna Halina Hanna
+    Helena Honorata Iga Ilona Irena Iwona Izabela Jadwiga Jagoda Janina Joanna Jolanta Józefa
+    Judyta Julia Julita Justyna Kaja Kalina Kamila Karina Karolina Katarzyna Kinga Klara Klaudia
+    Kornelia Krystyna Ksenia Laura Lena Leokadia Lidia Liliana Lilianna Liwia Lucyna Ludmiła Łucja
+    Magdalena Maja Malwina Małgorzata Marcelina Maria Marianna Mariola Marta Martyna Marzena
+    Matylda Melania Michalina Milena Mirosława Monika Nadia Natalia Nela Nikola Nina Olga Oliwia
+    Otylia Patrycja Paula Paulina Pola Regina Renata Roksana Rozalia Róża Sabina Sandra Sara Sonia
+    Stanisława Stefania Sylwia Tamara Teresa Urszula Wanda Weronika Wiesława Wiktoria Wioletta
+    Władysława Zdzisława Zofia Zuzanna Żaneta
     Aga Ania Asia Basia Baśka Danusia Ela Gosia Gośka Hania Iza Jadzia Joasia Jola Julka Kasia
     Kaśka Krysia Madzia Magda Majka Małgosia Marysia Ola Oliwka Tosia Ula Wiola Zosia Zuzia
     """

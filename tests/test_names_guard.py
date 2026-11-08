@@ -407,3 +407,23 @@ def test_a_noun_in_ka_after_pana_is_not_a_surname(text):
 )
 def test_a_lowercase_ek_surname_after_a_form_of_address_is_still_masked(text, expected):
     assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Oliwier Nowak", ["Oliwier Nowak"]),
+        ("Praktyki u Oliwiera Nowaka", ["Oliwiera Nowaka"]),
+        ("Opiekunka: Ksenia Lis-Kowalska", ["Ksenia Lis-Kowalska"]),
+        ("Matylda Nowak", ["Matylda Nowak"]),
+        ("rozmowa z Maurycym Kowalskim", ["Maurycym Kowalskim"]),
+        ("Celina Zając", ["Celina Zając"]),
+        ("Melania Kot", ["Melania Kot"]),
+        ("Otylia Wiśniewska", ["Otylia Wiśniewska"]),
+        ("Cyprian Lis", ["Cyprian Lis"]),
+        ("Lilianna Kowalczyk", ["Lilianna Kowalczyk"]),
+    ],
+)
+def test_popular_first_names_missing_from_the_list_are_known(text, expected):
+    """Oliwier, Ksenia and Matylda are common names, and "Oliwier Nowak" went out whole."""
+    assert _found(text) == expected

@@ -9,6 +9,11 @@ All notable changes to this project are recorded here. The format follows
 Found by masking synthetic CVs, profiles written as JSON and lists of repositories with the rules
 alone.
 
+### Added
+
+- **Popular first names missing from the list**: Oliwier, Cyprian, Maurycy, Celina, Ksenia,
+  Lilianna, Matylda, Melania and Otylia, with their surnames: "Oliwier Nowak" went out whole.
+
 ### Fixed
 
 - **An e-mail address with its "@" written out** is masked whole: `jan.kowalski [at] example.com`,
