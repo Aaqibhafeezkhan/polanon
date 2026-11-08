@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from polanon import __version__
 from polanon.__main__ import main
 
 TEXT = "Jan Kowalski, PESEL 50810112354, mail jan@example.com"
@@ -33,6 +34,15 @@ def test_empty_input_explains_itself_and_fails(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("   \n"))
     assert main([]) == 2
     assert "nothing to mask" in capsys.readouterr().err
+
+
+def test_version_exits_cleanly(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--version"])
+    assert exit_info.value.code == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == f"polanon {__version__}"
+    assert captured.err == ""
 
 
 def test_help_exits_cleanly(capsys):

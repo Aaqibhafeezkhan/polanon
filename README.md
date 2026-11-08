@@ -92,6 +92,7 @@ Text comes from the arguments, from a file with `--file`, or from standard input
 to stdout and the mapping to stderr, or to a file with `--mapping`:
 
 ```bash
+polanon --version  # print the installed version
 polanon "Jan Kowalski, PESEL 50810112354"
 polanon --file umowa.txt --ner --mapping mapping.json > masked.txt
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json

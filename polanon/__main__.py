@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TextIO
 
-from polanon import Anonymizer, default_guards
+from polanon import Anonymizer, __version__, default_guards
 
 DESCRIPTION = "Mask personal data in text before it goes to an LLM; the mapping goes to stderr."
 
@@ -48,6 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         mapping could not be written, 3 when --ner is given without spaCy.
     """
     parser = argparse.ArgumentParser(prog="polanon", description=DESCRIPTION)
+    parser.add_argument("--version", action="version", version=f"polanon {__version__}")
     parser.add_argument("text", nargs="*", help="text to mask; omit to read standard input")
     parser.add_argument(
         "--file",
