@@ -4,6 +4,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://github.com/boromat/polanon/blob/main/pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/boromat/polanon/blob/main/LICENSE)
 
+**English** | [Polski](https://github.com/boromat/polanon/blob/main/README.pl.md)
+
 **Reversible PII masking for LLM calls, Polish-first.** Mask personal data before a prompt leaves
 your network, send only tokens to the model, and put the originals back into its answer — even
 while it streams. Pure Python: the standard library is the whole core.

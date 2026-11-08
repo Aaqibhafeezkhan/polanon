@@ -31,6 +31,8 @@ offline, and are skipped without them.
   `feat(guards): recognise Czech VAT numbers`, `fix(pipeline): ...`, `docs: ...`, `test: ...`.
 - Synthetic data only. No real person's name, identifier, document or log belongs in an issue, a
   test or a commit.
+- `README.md` is English and `README.pl.md` is its Polish translation: a change to one is made to
+  the other in the same commit. A Polish translation can be rough; the maintainer will polish it.
 
 ## Changes written with AI tools
 
