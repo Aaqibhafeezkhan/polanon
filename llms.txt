@@ -1,6 +1,6 @@
 # polanon
 
-> Reversible PII masking for LLM calls, Polish-first. A pure-Python library (MIT, Python 3.11+, no core dependencies) that replaces personal data with stable tokens such as `<OSOBA_1>` before a prompt goes to Claude, GPT or a local model, and puts the originals back into the answer, also while it streams. It validates PESEL, NIP, REGON, ID card, IBAN and payment card checksums, and recognises Polish first names in all seven grammatical cases, with the surname that goes with them, without a language model; a surname standing alone is found by the optional spaCy model.
+> Reversible PII masking for LLM calls, Polish-first. A pure-Python library (MIT, Python 3.11+, no core dependencies) that replaces personal data with stable tokens such as `<OSOBA_1>` before a prompt goes to Claude, GPT or a local model, and puts the originals back into the answer, also while it streams. It validates PESEL, NIP, REGON, ID card, IBAN and payment card checksums, and recognises Polish first names in all seven grammatical cases, with the surname that goes with them, without a language model; a surname standing alone is found by the optional spaCy model. Links to a person's profile (LinkedIn, GitHub) are masked up to the handle.
 
 Use it when Polish text with personal data is sent to a language model API and the answer must come back with the real names and numbers in it. It is pseudonymisation, not legal anonymisation: no detector catches everything, and the mapping it returns must be kept as safe as the original document.
 

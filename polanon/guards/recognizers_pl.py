@@ -12,6 +12,12 @@ from itertools import takewhile
 from polanon.guards.base import Guard
 from polanon.types import Span
 
+
+def _words(block: str) -> list[str]:
+    """Split a whitespace-separated block, which keeps long word lists readable."""
+    return block.split()
+
+
 # ---------- validators ----------
 
 
@@ -207,6 +213,43 @@ OBFUSCATED_EMAIL_PATTERN = re.compile(
     rf"{_EMAIL_LABEL}(?:{_EMAIL_DOT}{_EMAIL_LABEL})*{_EMAIL_DOT}[A-Za-z{_POLISH_LETTERS}]{{2,}}"
 )
 
+#: Sites whose path starts with the handle of the person or the organisation the page belongs to.
+_HANDLE_SITES = (
+    r"github\.com|gitlab\.com|bitbucket\.org|codeberg\.org|behance\.net|dribbble\.com|kaggle\.com"
+    r"|codepen\.io|dev\.to|huggingface\.co|instagram\.com|facebook\.com|fb\.com|twitter\.com"
+    r"|x\.com|threads\.net|medium\.com|tiktok\.com|youtube\.com(?:/(?:c|user|channel))?"
+)
+#: A handle as it stands in a path. A full stop ends it unless more of the handle follows, so the
+#: one that closes a sentence is left out.
+_HANDLE = r"[\w%-]+(?:\.[\w%-]+)*"
+
+#: A link to a person's page: a LinkedIn profile, a GitHub or GitLab account and anything under it,
+#: a portfolio on GitHub Pages, a social media profile. The match ends with the handle.
+PROFILE_LINK_PATTERN = re.compile(
+    r"(?<![\w@./-])(?i:(?:https?://)?(?:"
+    r"(?:(?:www|m|mobile|gist|[a-z]{2})\.)?"
+    rf"(?:linkedin\.com/(?:in|pub)/|stackoverflow\.com/users/\d+/|leetcode\.com/u/"
+    rf"|(?:{_HANDLE_SITES})/@?)(?P<handle>{_HANDLE})"
+    r"|(?P<page>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.(?:github|gitlab)\.io(?![\w-])))"
+)
+
+#: Paths on those sites that are the site's own pages rather than somebody's: github.com/features,
+#: facebook.com/groups, youtube.com/watch, x.com/search.
+_SITE_PAGES = frozenset(
+    _words(
+        """
+        about accounts apps blog business challenges code codespaces collections competitions
+        compose contact copilot customer-stories dashboard datasets designers discussions docs
+        embed enterprise events explore features feed gaming groups hashtag help home i in intent
+        issues jobs join learn login marketplace messages models new notifications organizations
+        orgs p pages papers pen permalink.php photo photo.php playlist policies pricing profile.php
+        projects pulls readme reel reels results search security settings share sharer sharer.php
+        shorts shots signup site spaces sponsors stories story.php tag tags team topic topics
+        trending tv users watch
+        """
+    )
+)
+
 #: An IPv6 address in any of its written forms, including the "::" abbreviation and the
 #: IPv4-mapped tail. Validation is left to :func:`is_valid_ipv6`, which simply asks the standard
 #: library, so the pattern only has to be generous enough to find candidates.
@@ -385,6 +428,10 @@ PATTERNS: list[Rule] = [
     # An address written to slip past harvesters: "jan.kowalski [at] example.com", "(małpa)",
     # "[dot]". Only the bracketed forms: a bare "at" between two words is ordinary English.
     ("EMAIL", OBFUSCATED_EMAIL_PATTERN, None),
+    # A link to a person's own page: LinkedIn puts the name in it, and a GitHub login reappears in
+    # every repository and in the user's pages. Only the part up to the handle is masked, so
+    # "<LINK_1>/weather-app" still tells the model which project it is. See _LOCATORS.
+    ("LINK", PROFILE_LINK_PATTERN, None),
     (
         "PHONE",
         re.compile(
@@ -632,8 +679,21 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     return [match.span()]
 
 
+def _locate_profile_link(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return a profile link up to its handle, unless the path is one of the site's own pages."""
+    return [match.span()] if _handle_of(match) is not None else []
+
+
+def _handle_of(match: re.Match[str]) -> str | None:
+    handle = match.group("handle") or match.group("page")
+    if len(handle) < 2 or handle.lower() in _SITE_PAGES:
+        return None
+    return handle
+
+
 _LOCATORS: dict[str, Locator] = {
     "ADDRESS": _locate_address,
+    "LINK": _locate_profile_link,
     "PESEL": _locate_pesel,
     "REGON": _locate_regon,
     "IBAN": _locate_iban,

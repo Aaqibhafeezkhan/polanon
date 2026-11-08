@@ -11,6 +11,13 @@ alone.
 
 ### Added
 
+- **Links to a person's profile** are a new built-in type, `LINK` (tokens `<LINK_1>`): LinkedIn
+  (`linkedin.com/in/...`), GitHub, GitLab, Bitbucket, Codeberg, GitHub and GitLab Pages, Stack
+  Overflow, Kaggle, Behance, Dribbble, Medium, Instagram, Facebook, X, YouTube and a few more.
+  Only the link up to the handle is masked, so `<LINK_1>/weather-app` still names the project.
+  A LinkedIn link carried the person's name, and a GitHub login reappeared in every repository.
+  The paths of a site's own pages (`github.com/features`, `facebook.com/groups/...`,
+  `youtube.com/watch`) stay readable. A guard that declares `LINK` as its own type keeps working.
 - **Popular first names missing from the list**: Oliwier, Cyprian, Maurycy, Celina, Ksenia,
   Lilianna, Matylda, Melania and Otylia, with their surnames: "Oliwier Nowak" went out whole.
 

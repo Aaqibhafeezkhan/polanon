@@ -22,6 +22,7 @@ ENTITY_TYPES: dict[str, str] = {
     "IBAN": "IBAN",
     "CREDIT_CARD": "KARTA",
     "EMAIL": "EMAIL",
+    "LINK": "LINK",  # a link to a person's profile (LinkedIn, GitHub, ...) or the handle in it
     "PHONE": "TELEFON",
     "POSTAL_CODE": "KOD_POCZTOWY",
     "SECRET": "SEKRET",

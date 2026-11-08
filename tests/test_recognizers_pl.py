@@ -858,7 +858,54 @@ def test_a_long_chain_of_four_digit_groups_is_still_not_sliced_into_a_card():
     assert _found("Ref. 1234 4111 1111 1111 1111 9999", "CREDIT_CARD") == []
 
 
-# --- e-mails with the at written out, streets without a prefix, English dates ------------------
+# --- profile links, written-out e-mails, streets without a prefix and English dates ------------
+
+
+@pytest.mark.parametrize(
+    ("text", "link"),
+    [
+        (
+            "LinkedIn: https://www.linkedin.com/in/jan-kowalski-1a2b3c",
+            "https://www.linkedin.com/in/jan-kowalski-1a2b3c",
+        ),
+        ("linkedin.com/in/jan-kowalski-1a2b3c/", "linkedin.com/in/jan-kowalski-1a2b3c"),
+        ("pl.linkedin.com/in/jan-kowalski", "pl.linkedin.com/in/jan-kowalski"),
+        ("GitHub: github.com/jkowalski.", "github.com/jkowalski"),
+        ("Kod: https://github.com/jkowalski/weather-app", "https://github.com/jkowalski"),
+        ("Portfolio: https://jkowalski.github.io/projekty", "https://jkowalski.github.io"),
+        ("repozytorium jkowalski.github.io", "jkowalski.github.io"),
+        ("gist.github.com/jkowalski/abc", "gist.github.com/jkowalski"),
+        ("https://gitlab.com/jkowalski", "https://gitlab.com/jkowalski"),
+        ("Instagram: instagram.com/jan.kowalski", "instagram.com/jan.kowalski"),
+        ("https://x.com/jkowalski", "https://x.com/jkowalski"),
+        ("https://www.youtube.com/@jankowalski", "https://www.youtube.com/@jankowalski"),
+        ("https://medium.com/@jkowalski/moj-artykul-123", "https://medium.com/@jkowalski"),
+        (
+            "stackoverflow.com/users/123456/jan-kowalski",
+            "stackoverflow.com/users/123456/jan-kowalski",
+        ),
+    ],
+)
+def test_a_link_to_a_profile_is_masked_up_to_its_handle(text, link):
+    """A LinkedIn link carries the name, and a GitHub login reappears in every repository."""
+    assert _found(text, "LINK") == [link]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Zobacz github.com/features oraz https://github.com/topics/python",
+        "Grupa: https://www.facebook.com/groups/12345",
+        "Film: https://www.youtube.com/watch?v=abc123",
+        "Szukaj na https://x.com/search?q=praca",
+        "Aplikuj przez https://kariera.example.pl/oferty/123",
+        "LinkedIn firmy: linkedin.com/company/kodex",
+        "Dokumentacja: https://docs.github.com/en/get-started",
+        "Pisz na jan@github.com",
+    ],
+)
+def test_a_link_that_names_nobody_stays_readable(text):
+    assert _found(text, "LINK") == []
 
 
 @pytest.mark.parametrize(
