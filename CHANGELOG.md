@@ -4,6 +4,17 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Found by masking synthetic CVs, profiles written as JSON and lists of repositories with the rules
+alone.
+
+### Fixed
+
+- **A birth date written in English** is masked after its label: `Date of birth: 15 March 1985`,
+  `DOB: March 15, 1985` and `born 3rd May 1985` went out whole. With `DATE` turned on, such dates
+  are dates too.
+
 ## [0.2.1] - 2026-11-08
 
 ### Added

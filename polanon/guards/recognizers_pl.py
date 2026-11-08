@@ -198,11 +198,21 @@ _MONTHS = (
     "wrzesnia|października|pazdziernika|listopada|grudnia"
 )
 
-#: A written date: 15.03.1985, 15-03-1985, 15/03/1985, 15 marca 1985 or 1985-03-15.
+#: English month names and their abbreviations, for dates in a CV or a form written in English.
+_EN_MONTHS = (
+    "january|february|march|april|may|june|july|august|september|october|november|december"
+    "|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec"
+)
+
+#: A written date: 15.03.1985, 15-03-1985, 15/03/1985, 15 marca 1985, 1985-03-15, and in English
+#: 15 March 1985 or March 15, 1985. Without the English forms, "date of birth: 15 March 1985" went
+#: out whole.
 _DATE_VALUE = (
     r"\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4}"
     rf"|\d{{1,2}}\s+(?:{_MONTHS})\s+\d{{4}}"
     r"|\d{4}-\d{2}-\d{2}"
+    rf"|\d{{1,2}}(?:st|nd|rd|th)?\s+(?i:{_EN_MONTHS})\.?,?\s+\d{{4}}"
+    rf"|(?i:{_EN_MONTHS})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s+\d{{4}}"
 )
 #: Words that introduce a birth date: "ur.", "urodzona", "data urodzenia:", "DOB", "geb.".
 _BIRTH_LABEL = (

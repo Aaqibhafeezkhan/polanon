@@ -856,3 +856,25 @@ def test_a_card_right_after_a_four_digit_number_is_masked(text):
 def test_a_long_chain_of_four_digit_groups_is_still_not_sliced_into_a_card():
     """Five groups or more are an account or reference number, not a year and a card."""
     assert _found("Ref. 1234 4111 1111 1111 1111 9999", "CREDIT_CARD") == []
+
+
+# --- birth dates written in English ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "date"),
+    [
+        ("Date of birth: 15 March 1985", "15 March 1985"),
+        ("date of birth: 15 Mar 1985", "15 Mar 1985"),
+        ("DOB: March 15, 1985", "March 15, 1985"),
+        ("Born 3rd May 1985 in Kraków", "3rd May 1985"),
+    ],
+)
+def test_a_birth_date_written_in_english_is_masked(text, date):
+    """A date written in English went out in the clear after "date of birth" or "born"."""
+    assert _found(text, "BIRTH_DATE") == [date]
+
+
+def test_a_date_written_in_english_is_a_date_and_no_birth_date_without_its_label():
+    assert _found("Deadline: 15 June 2025", "DATE") == ["15 June 2025"]
+    assert _found("Deadline: 15 June 2025", "BIRTH_DATE") == []

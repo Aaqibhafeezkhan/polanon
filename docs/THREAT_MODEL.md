@@ -26,7 +26,7 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   rare. KRS numbers and passports are recognised next to their label.
 - **Contact details and devices.** E-mail addresses, phone numbers, street addresses and postcodes,
   IPv4 and IPv6, MAC addresses, VINs, vehicle registrations after their label, birth dates after
-  theirs.
+  theirs, in Polish or English.
 - **Credentials.** API keys, JWTs, private key blocks and `password=` style assignments, masked whole
   with whatever was found inside them, so pasted logs and configuration files do not leak secrets.
 - **People and companies by rule.** Polish first names in all seven cases, in any letter case and
