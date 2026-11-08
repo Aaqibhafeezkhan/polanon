@@ -184,6 +184,18 @@ ADDRESS_PATTERN = re.compile(
     rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*\s+{_HOUSE}"
 )
 
+_POLISH_LETTERS = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+_EMAIL_LOCAL = rf"A-Za-z0-9._%+\-{_POLISH_LETTERS}"
+_EMAIL_LABEL = rf"[A-Za-z0-9\-{_POLISH_LETTERS}]+"
+_EMAIL_AT = r"\s*[\[({]\s*(?i:at|małpa|malpa)\s*[\])}]\s*"
+_EMAIL_DOT = r"(?:\.|\s*[\[({]\s*(?i:dot|kropka)\s*[\])}]\s*)"
+
+#: An e-mail address with its "@" written out in brackets, and optionally its dots too.
+OBFUSCATED_EMAIL_PATTERN = re.compile(
+    rf"(?<![{_EMAIL_LOCAL}])[{_EMAIL_LOCAL}]+{_EMAIL_AT}"
+    rf"{_EMAIL_LABEL}(?:{_EMAIL_DOT}{_EMAIL_LABEL})*{_EMAIL_DOT}[A-Za-z{_POLISH_LETTERS}]{{2,}}"
+)
+
 #: An IPv6 address in any of its written forms, including the "::" abbreviation and the
 #: IPv4-mapped tail. Validation is left to :func:`is_valid_ipv6`, which simply asks the standard
 #: library, so the pattern only has to be generous enough to find candidates.
@@ -359,6 +371,9 @@ PATTERNS: list[Rule] = [
         ),
         None,
     ),
+    # An address written to slip past harvesters: "jan.kowalski [at] example.com", "(małpa)",
+    # "[dot]". Only the bracketed forms: a bare "at" between two words is ordinary English.
+    ("EMAIL", OBFUSCATED_EMAIL_PATTERN, None),
     (
         "PHONE",
         re.compile(

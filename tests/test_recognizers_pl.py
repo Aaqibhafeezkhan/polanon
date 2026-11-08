@@ -858,7 +858,26 @@ def test_a_long_chain_of_four_digit_groups_is_still_not_sliced_into_a_card():
     assert _found("Ref. 1234 4111 1111 1111 1111 9999", "CREDIT_CARD") == []
 
 
-# --- birth dates written in English ------------------------------------------------------------
+# --- e-mails with the at written out and birth dates written in English ------------------------
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "jan.kowalski [at] example.com",
+        "jan.kowalski(at)example.com",
+        "jan.kowalski (małpa) poczta.example.pl",
+        "jan.kowalski [at] example [dot] com",
+        "JAN.KOWALSKI [AT] EXAMPLE.COM",
+    ],
+)
+def test_an_address_with_its_at_written_out_is_masked_whole(address):
+    """ "jan.kowalski [at] example.com" went out with only "jan" masked, as a first name."""
+    assert _found(f"Pisz: {address}, odpowiem.", "EMAIL") == [address]
+
+
+def test_at_as_an_english_word_is_no_address():
+    assert _found("Meet me at example.com tomorrow", "EMAIL") == []
 
 
 @pytest.mark.parametrize(

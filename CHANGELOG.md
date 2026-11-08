@@ -11,6 +11,8 @@ alone.
 
 ### Fixed
 
+- **An e-mail address with its "@" written out** is masked whole: `jan.kowalski [at] example.com`,
+  `(at)`, `(małpa)`, also with `[dot]`. Only "jan" was masked, as a first name.
 - **A birth date written in English** is masked after its label: `Date of birth: 15 March 1985`,
   `DOB: March 15, 1985` and `born 3rd May 1985` went out whole. With `DATE` turned on, such dates
   are dates too.

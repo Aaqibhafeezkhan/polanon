@@ -24,9 +24,9 @@ tokens reach the provider, and puts the originals back into the answer, also whi
 - **Deterministic identifiers.** PESEL, NIP, REGON, ID card numbers, IBAN and payment cards are
   matched by pattern and confirmed by checksum, so detection is near-certain and false positives are
   rare. KRS numbers and passports are recognised next to their label.
-- **Contact details and devices.** E-mail addresses, phone numbers, street addresses and postcodes,
-  IPv4 and IPv6, MAC addresses, VINs, vehicle registrations after their label, birth dates after
-  theirs, in Polish or English.
+- **Contact details and devices.** E-mail addresses, also with "[at]" written out, phone numbers,
+  street addresses and postcodes, IPv4 and IPv6, MAC addresses, VINs, vehicle registrations after
+  their label, birth dates after theirs, in Polish or English.
 - **Credentials.** API keys, JWTs, private key blocks and `password=` style assignments, masked whole
   with whatever was found inside them, so pasted logs and configuration files do not leak secrets.
 - **People and companies by rule.** Polish first names in all seven cases, in any letter case and
