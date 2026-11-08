@@ -157,10 +157,12 @@ next to their label, e-mail addresses and phone numbers, street addresses and po
 a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
 and IPv6, MAC addresses, vehicle registrations after their label ("nr rej."), VINs, passport
 numbers, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
-company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). With the `ner`
-extra, a spaCy model adds places and the names nothing else marks. An optional second stage lets a
-small local model review the *masked* text for what still identifies someone by context. Other
-dates are recognised too, but left readable unless you ask for them.
+company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). Once a person or a
+profile link is masked, the surname or the handle alone is masked wherever it appears in the same
+text: "Kowalski" after "Jan Kowalski", "jkowalski" in a JSON field after "github.com/jkowalski".
+With the `ner` extra, a spaCy model adds places and the names nothing else marks. An optional
+second stage lets a small local model review the *masked* text for what still identifies someone
+by context. Other dates are recognised too, but left readable unless you ask for them.
 
 Text copied from PDFs, Word or macOS is read as a person would read it: letters written as a base
 letter plus an accent, no-break spaces and en dashes inside numbers, and invisible zero-width

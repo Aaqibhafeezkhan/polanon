@@ -238,8 +238,10 @@ async def test_a_judge_finding_that_quotes_or_cuts_a_token_allocates_nothing():
 
 
 async def test_judge_spans_record_exactly_what_was_replaced():
-    text = "Anna Nowak pracuje w Radomiu. Nowak pracuje też w Kielcach."
-    judge = SpyJudge([("Nowak pracuje", "PERSON")])
+    # Another surname in the second sentence: a lone "Nowak" is masked by stage 1 already, as the
+    # surname of the person it found.
+    text = "Anna Nowak pracuje w Radomiu. Kowal pracuje też w Kielcach."
+    judge = SpyJudge([("Kowal pracuje", "PERSON")])
     result = await mask(text, [FixedGuard(Span(0, 10, "PERSON"))], judge=judge)
     assert result.anonymized == "<OSOBA_1> pracuje w Radomiu. <OSOBA_2> też w Kielcach."
     token_of = {value: token for token, value in result.mapping.items()}

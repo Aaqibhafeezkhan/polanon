@@ -18,6 +18,7 @@ from polanon.guards.recognizers_pl import (
     is_valid_plate,
     is_valid_regon,
     is_valid_vin,
+    profile_handle,
 )
 from polanon.policy import ENTITY_TYPES
 from polanon.types import merge_spans
@@ -906,6 +907,20 @@ def test_a_link_to_a_profile_is_masked_up_to_its_handle(text, link):
 )
 def test_a_link_that_names_nobody_stays_readable(text):
     assert _found(text, "LINK") == []
+
+
+@pytest.mark.parametrize(
+    ("link", "handle"),
+    [
+        ("https://github.com/jkowalski/weather-app", "jkowalski"),
+        ("jkowalski.github.io", "jkowalski"),
+        ("https://www.linkedin.com/in/jan-kowalski-1a2b3c/", "jan-kowalski-1a2b3c"),
+        ("https://jankowalski.example", None),
+        ("https://github.com/features", None),
+    ],
+)
+def test_profile_handle_names_the_account_a_link_belongs_to(link, handle):
+    assert profile_handle(link) == handle
 
 
 @pytest.mark.parametrize(

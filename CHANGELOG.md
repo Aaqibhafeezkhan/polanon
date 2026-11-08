@@ -18,6 +18,12 @@ alone.
   A LinkedIn link carried the person's name, and a GitHub login reappeared in every repository.
   The paths of a site's own pages (`github.com/features`, `facebook.com/groups/...`,
   `youtube.com/watch`) stay readable. A guard that declares `LINK` as its own type keeps working.
+- **The surname of a masked person and the handle of a masked profile link are masked on their
+  own** wherever they appear in the text: "Kowalski" alone after "Jan Kowalski", and
+  `"login": "jkowalski"`, `@jkowalski` and `jkowalski.github.io` after `github.com/jkowalski`, went
+  out in the clear. A lone surname in lowercase stays an ordinary word, as any known one-word name
+  does; a name only the language model found gives its surname only next to a first name the rules
+  know, and the handles of well-known brands (`github.com/microsoft/...`) stay readable.
 - **Popular first names missing from the list**: Oliwier, Cyprian, Maurycy, Celina, Ksenia,
   Lilianna, Matylda, Melania and Otylia, with their surnames: "Oliwier Nowak" went out whole.
 

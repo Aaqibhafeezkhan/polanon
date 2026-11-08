@@ -37,8 +37,10 @@ tokens reach the provider, and puts the originals back into the answer, also whi
 - **Every later occurrence of a masked value.** Pass the mapping from the latest result to the next
   call and a value keeps its token wherever it appears again: in capitals, across a line break or a run of
   spaces, with a no-break space, an invisible character or a decomposed accent in it, and with an
-  identifier's groups written apart or together. `mask_known_values` does the same for text masked
-  earlier, such as conversation history sent again.
+  identifier's groups written apart or together. The surname of a masked person and the handle of a
+  masked profile link count as masked values of their own, so "Kowalski" after "Jan Kowalski" and
+  "jkowalski" after "github.com/jkowalski" are masked too. `mask_known_values` does the same for
+  text masked earlier, such as conversation history sent again.
 - **Your own placeholders.** A token such as `<PESEL_1>` already in your text is never handed to real
   data.
 - **The answer.** `StreamRestorer` never splits a token across chunks, and `sweep` reports tokens the
@@ -53,14 +55,18 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   misread, goes out as written. The checksum is what keeps random digits from being masked, and
   the price is this.
 - **Names and places are found partly by rule, partly statistically.** A surname on its own in
-  lowercase ("napisz do kowalskiego"), a rare or foreign first name and every place name depend on
-  the spaCy model, which leans on capital letters and misses what people type in lowercase. A miss
+  lowercase ("napisz do kowalskiego") or in a text where the full name never appears, a rare or
+  foreign first name and every place name depend on the spaCy model, which leans on capital letters and misses what people type in lowercase. A miss
   is a detection gap, not a bypass, but the value still reaches the provider. The stage-2 judge
   exists to narrow this gap, not to close it.
 - **A one-word name later written in lowercase.** A capitalised one-word name is not matched in all
   lowercase, because many Polish surnames are also ordinary words (Zima, Kot, Wilk): "kowalska
   dzwoniła" after "Pani Kowalska" goes out unless a detector recognises it on its own. Once one
   does, that spelling has a token of its own.
+- **A handle or a personal domain on its own.** A login is recognised inside a link to a profile
+  on a known site, and from there wherever it stands. A login with no such link anywhere in the
+  text ("mój GitHub to jkowalski") and a personal domain ("jankowalski.dev") are ordinary words to
+  the rules: put them on the denylist, or report them from a guard of your own, when you know them.
 - **A short number inside a longer one.** A PIN or another number under six digits is not masked
   inside a date, an amount or a longer number ("15.04.2025" when the PIN is 2025), so the model does
   not learn which numbers look like it. Where it stands alone it is masked.

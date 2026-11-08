@@ -9,6 +9,7 @@ from polanon.guards.names_pl import (
     decline_feminine,
     decline_masculine,
     is_common_adjective,
+    person_name_parts,
     surname_reading,
 )
 
@@ -427,3 +428,28 @@ def test_a_lowercase_ek_surname_after_a_form_of_address_is_still_masked(text, ex
 def test_popular_first_names_missing_from_the_list_are_known(text, expected):
     """Oliwier, Ksenia and Matylda are common names, and "Oliwier Nowak" went out whole."""
     assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "parts"),
+    [
+        ("Jan Kowalski", ["Kowalski"]),
+        ("JAN KOWALSKI", ["KOWALSKI"]),
+        ("Kowalski Jan", ["Kowalski"]),
+        ("Jana Kowalskiego", ["Kowalskiego"]),
+        ("dr Jan Kowalski", ["Kowalski"]),
+        ("Dyrektor Jan Kowalski", ["Kowalski"]),
+        ("Anna Nowak-Kępa", ["Nowak-Kępa", "Nowak", "Kępa"]),
+        ("Anna-Maria Nowak", ["Nowak"]),
+        ("Jan", []),
+    ],
+)
+def test_the_parts_of_a_name_that_point_to_the_person_are_its_surname(name, parts):
+    assert person_name_parts(name) == parts
+
+
+def test_a_name_with_no_known_first_name_gives_its_parts_only_when_trusted():
+    """A model that reads "Politechnika Krakowska" as a person must not mask "Politechnika"."""
+    assert person_name_parts("Politechnika Krakowska") == ["Politechnika"]
+    assert person_name_parts("Politechnika Krakowska", needs_first_name=True) == []
+    assert person_name_parts("Jan Kowalski", needs_first_name=True) == ["Kowalski"]

@@ -453,6 +453,46 @@ def is_common_adjective(word: str) -> bool:
     return match is not None and folded[: match.start("ending")] in _COMMON_ADJECTIVES
 
 
+def person_name_parts(name: str, *, needs_first_name: bool = False) -> list[str]:
+    """Return the words of a person's name that point to the person on their own: the surname.
+
+    "Jan Kowalski" gives "Kowalski", "Anna Nowak-Kępa" gives "Nowak-Kępa", "Nowak" and "Kępa".
+    A first name this guard knows is left out, and so are titles, initials and common adjectives:
+    "Jan" or "Krakowska" alone point to nobody. A first name the guard does not know is kept, since
+    nothing tells it from the surname.
+
+    Args:
+        name: a detected name of two to four words.
+        needs_first_name: give parts only when the name has a first name this guard knows, for a
+            name whose detection cannot be trusted on its own.
+    """
+    words = name.split()
+    if not 2 <= len(words) <= 4:
+        return []
+    parts: list[str] = []
+    has_first_name = False
+    for word in words:
+        bare = word.strip(".,;:()")
+        key = fold(bare)
+        if all(part in NAME_FORMS for part in key.split("-")):  # "Jan", "Anna-Maria"
+            has_first_name = True
+            continue
+        if len(bare) < 3 or not _WORD.fullmatch(bare) or not _name_shaped(bare):
+            continue
+        if key in HONORIFICS or key in _ABBREVIATIONS or key in _NOT_NAMES or key in _ROLES:
+            continue
+        if is_common_adjective(bare):
+            continue
+        parts.append(bare)
+        if "-" in bare:
+            parts.extend(
+                part for part in bare.split("-") if len(part) >= 3 and fold(part) not in NAME_FORMS
+            )
+    if needs_first_name and not has_first_name:
+        return []
+    return parts
+
+
 @dataclass(frozen=True, slots=True)
 class _Word:
     start: int

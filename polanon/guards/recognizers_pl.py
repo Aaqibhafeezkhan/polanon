@@ -691,6 +691,17 @@ def _handle_of(match: re.Match[str]) -> str | None:
     return handle
 
 
+def profile_handle(link: str) -> str | None:
+    """Return the handle a profile link names, or None when it is not a link to a person's page.
+
+    "https://github.com/jkowalski/weather-app" and "jkowalski.github.io" name "jkowalski", and
+    "linkedin.com/in/jan-kowalski-1a2b" names "jan-kowalski-1a2b". The pipeline masks such a handle
+    wherever it appears on its own: in a JSON field, after "@", in a repository's name.
+    """
+    match = PROFILE_LINK_PATTERN.match(link.strip())
+    return None if match is None else _handle_of(match)
+
+
 _LOCATORS: dict[str, Locator] = {
     "ADDRESS": _locate_address,
     "LINK": _locate_profile_link,

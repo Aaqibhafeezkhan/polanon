@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from polanon._detection import detect
+from polanon._known_parts import known_parts
 from polanon._matching import (
     TOKEN_RE,
     Haystack,
@@ -261,6 +262,20 @@ def _count(counts: dict[str, int], token: str) -> None:
     counts[entity_type] = counts.get(entity_type, 0) + 1
 
 
+#: Detections at or above this confidence come from a rule, a list or the caller, never from a
+#: language model (0.85) or the judge (0.5), so the parts of their values are trusted as well.
+_TRUSTED_SCORE = 0.9
+
+
+def _remember(
+    known: dict[tuple[str, bool], tuple[str, str]], value: str, entity_type: str, *, trusted: bool
+) -> None:
+    """Add a value to the known values, with the parts of it that identify on their own."""
+    known.setdefault((value.strip(), folds(entity_type)), (value, entity_type))
+    for part in known_parts(value, entity_type, trusted=trusted):
+        known.setdefault((part, folds(entity_type)), (part, entity_type))
+
+
 def _mask_stage1(
     text: str,
     detected: list[Span],
@@ -277,6 +292,9 @@ def _mask_stage1(
     An occurrence of a known value takes in what a guard found inside it: a signature that puts
     "Jan" and "Kowalski" on two lines is read as "Jan" by the name rule, and masking that alone
     sent the surname. Such detections give way to the occurrence, which is masked whole.
+
+    The parts of a value that point to the same thing on their own are known values too: the
+    surname of a person, the handle in a link to a profile. See :mod:`polanon._known_parts`.
     """
     if allowlist is not None:
         detected = allowlist.drop_allowed(detected, text)
@@ -288,11 +306,11 @@ def _mask_stage1(
     for token, value in existing_mapping.items():
         entity_type = type_of(token)
         if entity_type is not None and value != token:
-            known.setdefault((value.strip(), folds(entity_type)), (value, entity_type))
+            _remember(known, value, entity_type, trusted=False)
     for span in merged:
         if (span.start, span.end) in whole:
             value = text[span.start : span.end]
-            known.setdefault((value.strip(), folds(span.entity_type)), (value, span.entity_type))
+            _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
     occupied = [(span.start, span.end) for span in merged]
     found = known_value_matches(text, haystack, known.values(), occupied, absorb=True)
     covered = Ranges((start, end) for start, end, _ in found)
