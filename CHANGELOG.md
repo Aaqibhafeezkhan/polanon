@@ -4,7 +4,15 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.1] - 2026-11-08
+
+### Added
+
+- **`polanon --version`** prints the installed version. Contributed by barkya28 in
+  [#29](https://github.com/boromat/polanon/pull/29).
+- **An eleventh benchmark document**, a monthly roster of surnames and periods, which keeps names
+  beside ordinary numbers masked without a language model. The corpus now has 169 annotated
+  values: the rules alone fully mask 86% of them and the rules with `pl_core_news_md` 98%.
 
 ### Fixed
 
@@ -20,6 +28,17 @@ All notable changes to this project are recorded here. The format follows
   stayed in the clear. A valid PESEL that starts with 48 keeps its type, and the minutes of a time
   such as `10:48` are not pulled into the phone. Contributed by Aaqibhafeezkhan in
   [#26](https://github.com/boromat/polanon/pull/26).
+- **A restored name with a case ending is not reported as new**: "dla <OSOBA_1>a" restored as
+  "Jan Kowalskia" was flagged by the output sweep as personal data the model made up. A person,
+  company or place known from the conversation now covers its Polish case endings, while a longer
+  different name, letters glued on the left, and other types such as an address with a letter
+  added are still reported. Contributed by bfs2021 in
+  [#25](https://github.com/boromat/polanon/pull/25).
+- **A month spelled like a first name is left alone in a date** written with dashes, slashes or
+  dots: "Jan" in `15-Jan-2024`, `2024/Jan/15` or `15.Jan.2024` was masked as a person. The same
+  separator has to stand on both sides, so a name beside an ordinary number, as in
+  `Nowak Anna 03/2024`, is still masked. Contributed by ShahadatTest in
+  [#23](https://github.com/boromat/polanon/pull/23).
 
 ## [0.2.0] - 2026-11-03
 
