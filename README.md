@@ -206,6 +206,13 @@ def chat(history: list[dict], clients: list[str]) -> None:
 between two events, as in [Streaming](#streaming). The tests run this example as written here
 against the real `anthropic` SDK, offline, so it cannot drift from the library.
 
+**A turn or the lower API.** Take a turn whenever a model gets a list of messages, with tools or
+without: it keeps one mapping for all of them, masks a value found in a later message in the
+earlier ones too, and refuses on any failure, all of which you would otherwise write yourself. Call
+`anonymize_sync()`, `Anonymizer.restore()` and `StreamRestorer` directly for a single text, such as
+a document or a prompt you build yourself, when you need the spans of the result, or when the
+stage-2 judge must run, which a turn does not take.
+
 **One mapping for the turn.** A client in the history, in the question and in a tool result is the
 same `<FIRMA_1>`. To keep the tokens from one turn to the next, start the next one with
 `anonymizer.turn(mapping=turn.mapping)`.

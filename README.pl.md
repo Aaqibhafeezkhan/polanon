@@ -217,6 +217,13 @@ przecięty między dwoma zdarzeniami, tak jak w sekcji [Strumieniowanie](#strumi
 uruchamiają ten przykład dokładnie w tej postaci z prawdziwym SDK `anthropic`, offline, więc nie
 rozjedzie się z biblioteką.
 
+**Tura czy niższe API.** Sięgnij po turę zawsze, gdy model dostaje listę wiadomości, z narzędziami
+albo bez: trzyma jedno mapowanie dla nich wszystkich, maskuje wartość znalezioną w późniejszej
+wiadomości także we wcześniejszych i odmawia przy każdym błędzie, a bez niej to wszystko piszesz
+sam. `anonymize_sync()`, `Anonymizer.restore()` i `StreamRestorer` wywołuj bezpośrednio dla
+pojedynczego tekstu, na przykład dokumentu albo promptu, który składasz sam, gdy potrzebujesz
+pozycji wykrytych wartości albo gdy ma działać sędzia drugiego etapu, którego tura nie przyjmuje.
+
 **Jedno mapowanie na turę.** Klient w historii, w pytaniu i w wyniku narzędzia to ten sam
 `<FIRMA_1>`. Żeby tokeny przechodziły z tury na turę, zacznij następną od
 `anonymizer.turn(mapping=turn.mapping)`.
