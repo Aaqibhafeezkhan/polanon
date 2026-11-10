@@ -39,7 +39,7 @@ from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
 from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, token_for
 from polanon.stream_restore import StreamRestorer
-from polanon.turn import MaskedTurn
+from polanon.turn import MaskedTurn, UnknownBlocks
 from polanon.types import (
     AnonymizationResult,
     JudgeFallback,
@@ -287,7 +287,11 @@ class Anonymizer:
         return sweep(restored_text, mapping, self.guards, self.enabled, self.allowlist)
 
     def turn(
-        self, *, known: Iterable[str] = (), mapping: dict[str, str] | None = None
+        self,
+        *,
+        known: Iterable[str] = (),
+        mapping: dict[str, str] | None = None,
+        unknown_blocks: UnknownBlocks = "raise",
     ) -> MaskedTurn:
         """Start masking one call to a model: its history, question and tool results.
 
@@ -296,5 +300,6 @@ class Anonymizer:
         Args:
             known: values already known to be sensitive, masked wherever they appear.
             mapping: token -> original value from earlier turns of the same conversation.
+            unknown_blocks: ``"raise"`` or ``"drop"`` a message block that cannot be masked.
         """
-        return MaskedTurn(self, known=known, mapping=mapping)
+        return MaskedTurn(self, known=known, mapping=mapping, unknown_blocks=unknown_blocks)

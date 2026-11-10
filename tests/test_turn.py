@@ -1,6 +1,8 @@
 """One call to a model masked with one object: what it sends, and what it gets back."""
 
+import copy
 import datetime
+import json
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -177,3 +179,194 @@ def test_counts_leave_out_placeholders_the_caller_wrote():
     masked = turn.mask("Pole <PESEL_1> wypełnia Jan Kowalski, PESEL 50810112354")
     assert masked == "Pole <PESEL_1> wypełnia <OSOBA_1>, PESEL <PESEL_2>"
     assert turn.counts() == {"PERSON": 1, "PESEL": 1}
+
+
+ANTHROPIC = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "Znajdź klienta Jan Kowalski.",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+    },
+    {
+        "role": "assistant",
+        "content": [
+            {"type": "thinking", "thinking": "Szukam Jana Kowalskiego", "signature": "c2ln"},
+            {
+                "type": "text",
+                "text": "Sprawdzam.",
+                "citations": [{"type": "char_location", "cited_text": "Jan Kowalski"}],
+            },
+            {
+                "type": "tool_use",
+                "id": "toolu_01",
+                "name": "find_client",
+                "input": {"name": "Jan Kowalski", "limit": 5},
+            },
+        ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_01",
+                "content": json.dumps({"client": "Jan Kowalski", "pesel": "50810112354"}),
+                "is_error": False,
+            }
+        ],
+    },
+]
+
+
+def test_an_anthropic_history_is_masked_where_it_carries_data():
+    before = copy.deepcopy(ANTHROPIC)
+    question, answer, result = anonymizer.turn(unknown_blocks="drop").mask_messages(ANTHROPIC)
+    assert before == ANTHROPIC
+    assert question["content"] == [
+        {
+            "type": "text",
+            "text": "Znajdź klienta <OSOBA_1>.",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    assert answer["content"] == [
+        {"type": "text", "text": "Sprawdzam."},
+        {
+            "type": "tool_use",
+            "id": "toolu_01",
+            "name": "find_client",
+            "input": {"name": "<OSOBA_1>", "limit": 5},
+        },
+    ]
+    [block] = result["content"]
+    assert block["tool_use_id"] == "toolu_01"
+    assert block["is_error"] is False
+    assert json.loads(block["content"]) == {"client": "<OSOBA_1>", "pesel": "<PESEL_1>"}
+
+
+def test_a_block_that_cannot_be_masked_is_refused_unless_it_may_be_left_out():
+    with pytest.raises(MaskingUnavailableError, match="'thinking' block") as error:
+        anonymizer.turn().mask_messages(ANTHROPIC)
+    assert "Kowalsk" not in str(error.value)
+    image = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": ""}}
+    message = {
+        "role": "user",
+        "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_02", "content": [image]},
+            {"type": "text", "text": "Co jest na zdjęciu Anny Nowak?"},
+        ],
+    }
+    with pytest.raises(MaskingUnavailableError, match="'image' block"):
+        anonymizer.turn().mask_messages([message])
+    [masked] = anonymizer.turn(unknown_blocks="drop").mask_messages([message])
+    assert masked["content"] == [
+        {"type": "tool_result", "tool_use_id": "toolu_02", "content": []},
+        {"type": "text", "text": "Co jest na zdjęciu <OSOBA_1>?"},
+    ]
+
+
+def test_an_openai_history_keeps_its_arguments_and_tool_results_valid_json():
+    messages = [
+        {"role": "system", "content": "Jesteś asystentem CRM."},
+        {"role": "user", "content": [{"type": "text", "text": "Kim jest Anna Nowak?"}]},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "get_contact", "arguments": '{"name": "Anna Nowak"}'},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": '{"phone": "600 100 200"}'},
+        {"role": "tool", "tool_call_id": "call_2", "content": "Brak danych o Annie Nowak."},
+        {"role": "assistant", "content": None, "refusal": "Nie podam danych Anny Nowak."},
+    ]
+    system, user, call, result, note, refusal = anonymizer.turn().mask_messages(messages)
+    assert system == messages[0]
+    assert user["content"] == [{"type": "text", "text": "Kim jest <OSOBA_1>?"}]
+    [tool_call] = call["tool_calls"]
+    assert tool_call["id"] == "call_1"
+    assert tool_call["function"]["name"] == "get_contact"
+    assert json.loads(tool_call["function"]["arguments"]) == {"name": "<OSOBA_1>"}
+    assert result == {
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": '{"phone": "<TELEFON_1>"}',
+    }
+    assert note["content"] == "Brak danych o <OSOBA_2>."
+    assert refusal["refusal"] == "Nie podam danych <OSOBA_3>."
+
+
+def test_arguments_given_as_a_value_and_old_function_calls_are_masked():
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "function_call": {"name": "f", "arguments": {"who": "Anna Nowak"}},
+        },
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "call_3", "type": "custom", "custom": {"input": "Anna Nowak"}}],
+        },
+    ]
+    with pytest.raises(MaskingUnavailableError, match="not a function call"):
+        anonymizer.turn().mask_messages(messages)
+    old, custom = anonymizer.turn(unknown_blocks="drop").mask_messages(messages)
+    assert old["function_call"] == {"name": "f", "arguments": {"who": "<OSOBA_1>"}}
+    assert custom["tool_calls"] == []
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later", "masked"),
+    [
+        ("Kod 4821 nie działa.", "Mój PIN: 4821", "Kod <SEKRET_1> nie działa."),
+        ("Login admin2024 nie działa", "hasło: admin2024", "Login <SEKRET_1> nie działa"),
+        (
+            "Konieczny Jan spóźnił się.",
+            "Uczestnik: Konieczny Jan, ur. 1990",
+            "<OSOBA_2> spóźnił się.",
+        ),
+        (
+            "Kowalski dzwonił wczoraj.",
+            "Jan Kowalski prosi o fakturę.",
+            "<OSOBA_2> dzwonił wczoraj.",
+        ),
+    ],
+)
+def test_a_value_found_in_a_later_message_is_masked_in_an_earlier_one(earlier, later, masked):
+    assert anonymizer.turn().mask(earlier) != masked  # nothing recognises it on its own
+    first, _ = anonymizer.turn().mask_messages(
+        [{"role": "user", "content": earlier}, {"role": "user", "content": later}]
+    )
+    assert first["content"] == masked
+
+
+def test_messages_that_are_not_chat_messages_are_refused():
+    with pytest.raises(TypeError, match="a message is a dictionary"):
+        anonymizer.turn().mask_messages(["Jan Kowalski"])  # type: ignore[list-item]
+    with pytest.raises(TypeError, match="content is a str or a list"):
+        anonymizer.turn().mask_messages([{"role": "user", "content": 5}])
+    with pytest.raises(TypeError, match="a content block is a dictionary"):
+        anonymizer.turn().mask_messages([{"role": "user", "content": ["Jan Kowalski"]}])
+    with pytest.raises(ValueError, match="'raise' or 'drop'"):
+        anonymizer.turn(unknown_blocks="skip")  # type: ignore[arg-type]
+
+
+def test_empty_tool_results_calls_without_arguments_and_json_scalars_pass_through():
+    messages = [
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_03"}]},
+        {"role": "assistant", "function_call": {"name": "ping"}},
+        {"role": "tool", "tool_call_id": "call_4", "content": '"Anna Nowak"'},
+    ]
+    empty, ping, scalar = anonymizer.turn().mask_messages(messages)
+    assert empty == messages[0]
+    assert ping == messages[1]
+    assert scalar["content"] == '"<OSOBA_1>"'

@@ -15,6 +15,12 @@ All notable changes to this project are recorded here. The format follows
   such as its clients' names, go in `known=` and are masked wherever they appear. When a detector
   fails, every `mask` method raises `MaskingUnavailableError` and returns nothing half masked.
   PolCRM and PolSales each kept a copy of this as a `Masker` of their own.
+- **`MaskedTurn.mask_messages()`** masks a whole history written for the Anthropic or the OpenAI
+  API: text, `tool_use` input, `tool_result` and `"tool"` content, the arguments of `tool_calls`.
+  Tool results and arguments written as JSON stay valid JSON, and ids and tool names are left
+  alone. A value first recognised in a later message is masked in the earlier ones too. A block
+  nothing can mask, such as an image or a model's signed reasoning, is refused, or left out with
+  `unknown_blocks="drop"`.
 - **`MaskingUnavailableError`**, the one error an app catches to refuse sending text it could not
   mask. `default_guards(with_ner=True)` without spaCy or its model now raises
   `NerModelUnavailableError`, which is both a `MaskingUnavailableError` and the
