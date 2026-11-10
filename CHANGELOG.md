@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- **`MaskedTurn`**, from `anonymizer.turn()`: one object for everything a call to a model sends and
+  gets back. It masks the history, the question and the results of tools with one mapping, so a
+  value keeps one token across them, restores the arguments of tool calls and the answer, also
+  while it streams, and reports invented tokens. Values the caller already knows are sensitive,
+  such as its clients' names, go in `known=` and are masked wherever they appear. When a detector
+  fails, every `mask` method raises `MaskingUnavailableError` and returns nothing half masked.
+  PolCRM and PolSales each kept a copy of this as a `Masker` of their own.
 - **`MaskingUnavailableError`**, the one error an app catches to refuse sending text it could not
   mask. `default_guards(with_ner=True)` without spaCy or its model now raises
   `NerModelUnavailableError`, which is both a `MaskingUnavailableError` and the

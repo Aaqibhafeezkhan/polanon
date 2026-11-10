@@ -39,6 +39,7 @@ from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
 from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, token_for
 from polanon.stream_restore import StreamRestorer
+from polanon.turn import MaskedTurn
 from polanon.types import (
     AnonymizationResult,
     JudgeFallback,
@@ -64,6 +65,7 @@ __all__ = [
     "JudgeError",
     "JudgeFallback",
     "JudgeFinding",
+    "MaskedTurn",
     "MaskingUnavailableError",
     "MockJudge",
     "NerModelUnavailableError",
@@ -283,3 +285,16 @@ class Anonymizer:
     def sweep(self, restored_text: str, mapping: dict[str, str]) -> SweepReport:
         """Check a restored answer for invented tokens and unexpected personal data."""
         return sweep(restored_text, mapping, self.guards, self.enabled, self.allowlist)
+
+    def turn(
+        self, *, known: Iterable[str] = (), mapping: dict[str, str] | None = None
+    ) -> MaskedTurn:
+        """Start masking one call to a model: its history, question and tool results.
+
+        ``anonymizer.turn(...)`` is ``MaskedTurn(anonymizer, ...)``; see :class:`MaskedTurn`.
+
+        Args:
+            known: values already known to be sensitive, masked wherever they appear.
+            mapping: token -> original value from earlier turns of the same conversation.
+        """
+        return MaskedTurn(self, known=known, mapping=mapping)
