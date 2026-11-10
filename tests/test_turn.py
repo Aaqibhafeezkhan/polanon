@@ -3,6 +3,7 @@
 import copy
 import datetime
 import json
+import re
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -10,6 +11,8 @@ from unittest.mock import Mock
 import pytest
 
 from polanon import (
+    ENTITY_TYPES,
+    TOKEN_PATTERN,
     WELL_KNOWN_NAMES,
     Allowlist,
     Anonymizer,
@@ -18,6 +21,7 @@ from polanon import (
     MockJudge,
     RegexGuard,
     default_guards,
+    token_instructions,
 )
 from polanon.guards.base import Guard
 
@@ -370,3 +374,18 @@ def test_empty_tool_results_calls_without_arguments_and_json_scalars_pass_throug
     assert empty == messages[0]
     assert ping == messages[1]
     assert scalar["content"] == '"<OSOBA_1>"'
+
+
+@pytest.mark.parametrize("language", ["pl", "en"])
+def test_the_token_instructions_name_tokens_the_library_hands_out(language):
+    note = token_instructions(language)
+    tokens = re.findall(TOKEN_PATTERN, note)
+    assert len(tokens) == 3
+    assert {label for label, _ in tokens} <= set(ENTITY_TYPES.values())
+
+
+def test_the_token_instructions_are_polish_unless_asked_otherwise():
+    assert token_instructions() == token_instructions("pl")
+    assert "przepisz" in token_instructions()
+    with pytest.raises(ValueError, match="pl and en, not 'de'"):
+        token_instructions("de")

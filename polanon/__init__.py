@@ -39,7 +39,7 @@ from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
 from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, token_for
 from polanon.stream_restore import StreamRestorer
-from polanon.turn import MaskedTurn, UnknownBlocks
+from polanon.turn import MaskedTurn, UnknownBlocks, token_instructions
 from polanon.types import (
     AnonymizationResult,
     JudgeFallback,
@@ -81,6 +81,7 @@ __all__ = [
     "ner_available",
     "sweep",
     "token_for",
+    "token_instructions",
 ]
 
 __version__ = "0.2.2"

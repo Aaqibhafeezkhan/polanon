@@ -33,6 +33,44 @@ UnknownBlocks = Literal["raise", "drop"]
 
 _Text = Callable[[str], str]
 
+#: What the model is told about the tokens, in the language it is asked to answer in.
+_INSTRUCTIONS = {
+    "pl": (
+        "Dane osobowe w tej rozmowie, także w wynikach narzędzi, są zastąpione tokenami "
+        "w nawiasach ostrych, takimi jak <OSOBA_1>, <EMAIL_1> albo <FIRMA_1>. Traktuj token jak "
+        "prawdziwą wartość. Gdy przekazujesz go do narzędzia albo cytujesz w odpowiedzi, przepisz "
+        "go dokładnie tak, jak jest zapisany: bez odmiany, bez zmiany liter i bez spacji w środku. "
+        "Nie twórz nowych tokenów i nie zgaduj, co się pod nimi kryje."
+    ),
+    "en": (
+        "Personal data in this conversation, tool results included, is replaced by tokens in "
+        "angle brackets, such as <OSOBA_1>, <EMAIL_1> or <FIRMA_1>. Treat a token as the real "
+        "value. When you pass one to a tool or quote it in your answer, copy it exactly as "
+        "written: do not inflect it, change its letters or put spaces inside. Do not create new "
+        "tokens, and never guess the value behind one."
+    ),
+}
+
+
+def token_instructions(language: str = "pl") -> str:
+    """Return a note for the system prompt that tells the model what the tokens are.
+
+    A model that is not told tends to inflect a token, translate its label or make one up, and the
+    answer then restores with a value missing.
+
+    Args:
+        language: ``"pl"`` or ``"en"``, the language the model is asked to answer in.
+
+    Raises:
+        ValueError: for any other language.
+    """
+    try:
+        return _INSTRUCTIONS[language]
+    except KeyError:
+        raise ValueError(
+            f"the token instructions are written in {' and '.join(_INSTRUCTIONS)}, not {language!r}"
+        ) from None
+
 
 class MaskedTurn:
     """Masks everything one call to a model sends and restores everything it gets back.

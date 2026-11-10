@@ -21,6 +21,8 @@ All notable changes to this project are recorded here. The format follows
   alone. A value first recognised in a later message is masked in the earlier ones too. A block
   nothing can mask, such as an image or a model's signed reasoning, is refused, or left out with
   `unknown_blocks="drop"`.
+- **`token_instructions("pl" | "en")`**: a note for the system prompt that tells the model what the
+  tokens are and to copy them exactly, the one both apps wrote out for themselves.
 - **`MaskingUnavailableError`**, the one error an app catches to refuse sending text it could not
   mask. `default_guards(with_ner=True)` without spaCy or its model now raises
   `NerModelUnavailableError`, which is both a `MaskingUnavailableError` and the
