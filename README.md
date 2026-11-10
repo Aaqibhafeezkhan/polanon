@@ -152,6 +152,82 @@ a local Ollama), and `anthropic_chat.py` holds a conversation whose history keep
 so an answer restored for the reader is never sent back in the clear. Both are tested in CI against
 the real SDKs, offline.
 
+## A chat turn with tools
+
+A turn of a chat with tools sends more than the question: the history, and the result of every tool
+the model calls. `anonymizer.turn()` masks all of it with one mapping, puts the originals back into
+the tool arguments and the answer, and refuses instead of sending anything it could not mask:
+
+```python
+import json
+
+import anthropic
+from polanon import (
+    WELL_KNOWN_NAMES,
+    Allowlist,
+    Anonymizer,
+    MaskingUnavailableError,
+    default_guards,
+    token_instructions,
+)
+
+anonymizer = Anonymizer(default_guards(with_ner=False), allowlist=Allowlist(WELL_KNOWN_NAMES))
+client = anthropic.Anthropic()
+
+
+def chat(history: list[dict], clients: list[str]) -> str:
+    """One turn. `history` ends with the question; SYSTEM, TOOLS and run_tool are your own."""
+    try:
+        turn = anonymizer.turn(known=clients, unknown_blocks="drop")
+        messages = turn.mask_messages(history)
+        while True:
+            response = client.messages.create(
+                model="claude-opus-5-5",
+                max_tokens=16000,
+                system=SYSTEM + "\n\n" + token_instructions("en"),
+                tools=TOOLS,
+                messages=messages,
+            )
+            messages.append({"role": "assistant", "content": response.content})
+            if response.stop_reason != "tool_use":
+                return turn.restore("".join(b.text for b in response.content if b.type == "text"))
+            results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    result = run_tool(block.name, turn.restore_data(block.input))
+                    masked = json.dumps(turn.mask_data(result, default=str), ensure_ascii=False)
+                    results.append(
+                        {"type": "tool_result", "tool_use_id": block.id, "content": masked}
+                    )
+            messages.append({"role": "user", "content": results})
+    except MaskingUnavailableError:
+        return "Masking is on but not working, so nothing more was sent to the model."
+```
+
+To stream the answer, take `turn.stream_restorer()` for every response, as in
+[Streaming](#streaming).
+
+**One mapping for the turn.** A client in the history, in the question and in a tool result is the
+same `<FIRMA_1>`. To keep the tokens from one turn to the next, start the next one with
+`anonymizer.turn(mapping=turn.mapping)`.
+
+**What `mask_messages` masks.** Messages in the Anthropic or the OpenAI format: their text, the
+input of `tool_use`, tool results and the arguments of `tool_calls`, with JSON kept valid and ids
+and tool names left alone. A value recognised only in the question is masked where it stood earlier
+in the history, unrecognised. A block nothing can mask, such as an image or a model's signed
+reasoning, is refused, or left out with `unknown_blocks="drop"`. `mask_data` masks the strings in a
+value; keys and numbers stay as they are, so keep personal data in string values, and an object
+such as a date needs `default=str`.
+
+**Values you already know.** `known=` takes what you know is sensitive, such as your clients' names
+from the database. They are masked wherever they appear, also when they are on the allowlist.
+
+**Refusing instead of leaking.** Whatever fails while masking raises `MaskingUnavailableError`, and
+nothing half masked comes back. `default_guards()` raises `NerModelUnavailableError`, which is one,
+when spaCy or the model is missing, and `ner_available()` tells a settings page whether they are
+installed. Once the answer is in, `turn.unknown_tokens(answer)` lists the tokens the model made up,
+and `turn.sweep(restored)` also looks for personal data the answer added.
+
 ## What it detects
 
 Checksum-validated Polish identifiers (PESEL, NIP, REGON, ID card, IBAN, payment cards), KRS numbers
@@ -313,6 +389,7 @@ values a conversation has already masked stay masked.
 | `policy.py` | the entity taxonomy and the token naming (`<OSOBA_1>`, `<PESEL_1>`) |
 | `judge/` | the optional second stage: a model reviews the masked text for what still identifies |
 | `stream_restore.py` | puts originals back into a streamed reply without splitting a token |
+| `turn.py` | masks everything one call to a model sends, with one mapping, and restores what it gets back |
 | `output_sweep.py` | flags invented tokens and personal data the answer introduced |
 
 ## Adding a detector

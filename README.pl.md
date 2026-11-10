@@ -161,6 +161,84 @@ Ollama), a `anthropic_chat.py` prowadzi rozmowę, której historia zawiera wył�
 tekst, więc odpowiedź przywrócona dla czytelnika nigdy nie jest odsyłana jawnym tekstem. Oba
 przykłady są testowane w CI z prawdziwymi SDK, offline.
 
+## Tura rozmowy z narzędziami
+
+Tura rozmowy z narzędziami wysyła więcej niż samo pytanie: także historię i wynik każdego
+narzędzia, które wywoła model. `anonymizer.turn()` maskuje to wszystko jednym mapowaniem, wstawia
+oryginały z powrotem do argumentów narzędzi i do odpowiedzi, a gdy czegoś nie da się zamaskować,
+odmawia, zamiast to wysłać:
+
+```python
+import json
+
+import anthropic
+from polanon import (
+    WELL_KNOWN_NAMES,
+    Allowlist,
+    Anonymizer,
+    MaskingUnavailableError,
+    default_guards,
+    token_instructions,
+)
+
+anonymizer = Anonymizer(default_guards(with_ner=False), allowlist=Allowlist(WELL_KNOWN_NAMES))
+client = anthropic.Anthropic()
+
+
+def chat(history: list[dict], clients: list[str]) -> str:
+    """Jedna tura. `history` kończy się pytaniem; SYSTEM, TOOLS i run_tool są twoje."""
+    try:
+        turn = anonymizer.turn(known=clients, unknown_blocks="drop")
+        messages = turn.mask_messages(history)
+        while True:
+            response = client.messages.create(
+                model="claude-opus-5-5",
+                max_tokens=16000,
+                system=SYSTEM + "\n\n" + token_instructions("pl"),
+                tools=TOOLS,
+                messages=messages,
+            )
+            messages.append({"role": "assistant", "content": response.content})
+            if response.stop_reason != "tool_use":
+                return turn.restore("".join(b.text for b in response.content if b.type == "text"))
+            results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    result = run_tool(block.name, turn.restore_data(block.input))
+                    masked = json.dumps(turn.mask_data(result, default=str), ensure_ascii=False)
+                    results.append(
+                        {"type": "tool_result", "tool_use_id": block.id, "content": masked}
+                    )
+            messages.append({"role": "user", "content": results})
+    except MaskingUnavailableError:
+        return "Maskowanie jest włączone, ale nie działa, więc nic więcej nie trafiło do modelu."
+```
+
+Żeby odpowiedź przychodziła strumieniowo, weź `turn.stream_restorer()` dla każdej odpowiedzi, tak
+jak w sekcji [Strumieniowanie](#strumieniowanie).
+
+**Jedno mapowanie na turę.** Klient w historii, w pytaniu i w wyniku narzędzia to ten sam
+`<FIRMA_1>`. Żeby tokeny przechodziły z tury na turę, zacznij następną od
+`anonymizer.turn(mapping=turn.mapping)`.
+
+**Co maskuje `mask_messages`.** Wiadomości w formacie Anthropic albo OpenAI: ich tekst, `input`
+bloku `tool_use`, wyniki narzędzi i argumenty `tool_calls`; JSON zostaje poprawny, a identyfikatory
+i nazwy narzędzi bez zmian. Wartość rozpoznana dopiero w pytaniu jest maskowana także tam, gdzie
+wcześniej w historii nikt jej nie rozpoznał. Blok, którego nie da się zamaskować, na przykład obraz
+albo podpisane rozumowanie modelu, powoduje odmowę albo jest pomijany przy
+`unknown_blocks="drop"`. `mask_data` maskuje teksty wewnątrz wartości; klucze i liczby zostają bez
+zmian, więc dane osobowe trzymaj w wartościach tekstowych, a obiekt taki jak data potrzebuje
+`default=str`.
+
+**Wartości, które już znasz.** `known=` przyjmuje to, o czym wiesz, że jest wrażliwe, na przykład
+nazwy klientów z bazy. Są maskowane wszędzie, gdzie się pojawią, także gdy są na allowliście.
+
+**Odmowa zamiast wycieku.** Każdy błąd maskowania kończy się `MaskingUnavailableError` i nic
+zamaskowanego tylko w części nie wraca. `default_guards()` zgłasza `NerModelUnavailableError`, który
+też nim jest, gdy brakuje spaCy albo modelu, a `ner_available()` pozwala stronie ustawień sprawdzić,
+czy są zainstalowane. Gdy przyjdzie odpowiedź, `turn.unknown_tokens(answer)` wypisuje tokeny
+wymyślone przez model, a `turn.sweep(restored)` szuka też danych osobowych, które dodała odpowiedź.
+
 ## Co wykrywa
 
 Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód osobisty, IBAN, karty
@@ -335,6 +413,7 @@ wpisy z denylisty i wartości zamaskowane już wcześniej w rozmowie pozostają 
 | `policy.py` | taksonomia typów encji i nazewnictwo tokenów (`<OSOBA_1>`, `<PESEL_1>`) |
 | `judge/` | opcjonalny drugi etap: model przegląda zamaskowany tekst pod kątem tego, co wciąż pozwala kogoś zidentyfikować |
 | `stream_restore.py` | wstawia oryginały z powrotem do odpowiedzi przesyłanej strumieniowo, nie rozcinając tokenu |
+| `turn.py` | maskuje jednym mapowaniem wszystko, co wysyła jedno wywołanie modelu, i przywraca to, co wraca |
 | `output_sweep.py` | oznacza wymyślone tokeny i dane osobowe, które wprowadziła odpowiedź |
 
 ## Dodawanie detektora

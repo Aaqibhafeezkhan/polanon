@@ -15,6 +15,11 @@ Public API (stable):
     Anonymizer.restore("Dzień dobry <OSOBA_1>", result.mapping)   # original back in the answer
     restorer = Anonymizer.stream_restorer(result.mapping)         # for token-by-token streams
 
+    turn = anonymizer.turn(known=["Klub Orlik"])   # one call: history, question, tool results
+    messages = turn.mask_messages(history)         # Anthropic or OpenAI messages, one mapping
+    turn.mask_data(tool_result)                    # MaskingUnavailableError: send nothing
+    turn.restore_data(tool_input), turn.restore(answer), turn.stream_restorer()
+
 Runtime dependencies of the core: the standard library only. `NerGuard` needs spaCy and a language
 model, the remote judges need httpx, and both are imported lazily so neither is required to mask
 identifiers.
