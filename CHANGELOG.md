@@ -24,10 +24,20 @@ All notable changes to this project are recorded here. The format follows
 - **`token_instructions("pl" | "en")`**: a note for the system prompt that tells the model what the
   tokens are and to copy them exactly, the one both apps wrote out for themselves.
 - **`MaskingUnavailableError`**, the one error an app catches to refuse sending text it could not
-  mask. `default_guards(with_ner=True)` without spaCy or its model now raises
-  `NerModelUnavailableError`, which is both a `MaskingUnavailableError` and the
-  `ModuleNotFoundError` it raised before, with the same message. **`ner_available()`** runs the same
-  check without loading anything, for a settings page.
+  mask, and **`NerModelUnavailableError`**, the one of them raised when spaCy or its model is
+  missing. **`ner_available()`** runs the same check as `default_guards()` without loading
+  anything, for a settings page.
+
+### Changed
+
+- `default_guards(with_ner=True)` without spaCy or its model raises `NerModelUnavailableError`
+  instead of a plain `ModuleNotFoundError`. It is a subclass of `ModuleNotFoundError` with the same
+  message, so `except ModuleNotFoundError` and `except ImportError` still catch it. Through
+  `MaskingUnavailableError` it is also a `RuntimeError`, so an `except RuntimeError` around
+  `default_guards()` now catches it too, and a check of the exact type, such as
+  `type(exc) is ModuleNotFoundError`, no longer matches. Nothing else in the 0.2.2 API changed:
+  every name and signature is still there, and every benchmark document masks to the same text,
+  tokens and spans, with the language model and without it.
 
 ## [0.2.2] - 2026-11-08
 
