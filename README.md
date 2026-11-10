@@ -162,35 +162,33 @@ the tool arguments and the answer, and refuses instead of sending anything it co
 import json
 
 import anthropic
-from polanon import (
-    WELL_KNOWN_NAMES,
-    Allowlist,
-    Anonymizer,
-    MaskingUnavailableError,
-    default_guards,
-    token_instructions,
-)
+from polanon import Anonymizer, MaskingUnavailableError, default_guards, token_instructions
 
-anonymizer = Anonymizer(default_guards(with_ner=False), allowlist=Allowlist(WELL_KNOWN_NAMES))
+anonymizer = Anonymizer(default_guards(with_ner=False))
 client = anthropic.Anthropic()
 
 
-def chat(history: list[dict], clients: list[str]) -> str:
+def chat(history: list[dict], clients: list[str]) -> None:
     """One turn. `history` ends with the question; SYSTEM, TOOLS and run_tool are your own."""
     try:
         turn = anonymizer.turn(known=clients, unknown_blocks="drop")
         messages = turn.mask_messages(history)
         while True:
-            response = client.messages.create(
+            restorer = turn.stream_restorer()
+            with client.messages.stream(
                 model="claude-opus-5-5",
-                max_tokens=16000,
+                max_tokens=64000,
                 system=SYSTEM + "\n\n" + token_instructions("en"),
                 tools=TOOLS,
                 messages=messages,
-            )
+            ) as stream:
+                for text in stream.text_stream:
+                    print(restorer.feed(text), end="")
+                response = stream.get_final_message()
+            print(restorer.flush())
             messages.append({"role": "assistant", "content": response.content})
             if response.stop_reason != "tool_use":
-                return turn.restore("".join(b.text for b in response.content if b.type == "text"))
+                return
             results = []
             for block in response.content:
                 if block.type == "tool_use":
@@ -201,11 +199,12 @@ def chat(history: list[dict], clients: list[str]) -> str:
                     )
             messages.append({"role": "user", "content": results})
     except MaskingUnavailableError:
-        return "Masking is on but not working, so nothing more was sent to the model."
+        print("Masking is on but not working, so nothing more was sent to the model.")
 ```
 
-To stream the answer, take `turn.stream_restorer()` for every response, as in
-[Streaming](#streaming).
+`turn.stream_restorer()` puts the originals back as each response streams in, also a token cut
+between two events, as in [Streaming](#streaming). The tests run this example as written here
+against the real `anthropic` SDK, offline, so it cannot drift from the library.
 
 **One mapping for the turn.** A client in the history, in the question and in a tool result is the
 same `<FIRMA_1>`. To keep the tokens from one turn to the next, start the next one with

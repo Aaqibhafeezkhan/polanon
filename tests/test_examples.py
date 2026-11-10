@@ -1,4 +1,4 @@
-"""The integration recipes in examples/ work with the real provider SDKs, offline.
+"""The integration recipes in examples/ and the READMEs work with the real provider SDKs, offline.
 
 Each SDK talks to an httpx2 MockTransport that plays the provider: it records every request and
 answers with the tokens it was sent. That checks both halves of what a recipe promises: the
@@ -11,11 +11,12 @@ import importlib.util
 import json
 import re
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from polanon import TOKEN_PATTERN
+from polanon import TOKEN_PATTERN, Anonymizer, Guard
 
 anthropic = pytest.importorskip("anthropic")
 openai = pytest.importorskip("openai")
@@ -188,3 +189,147 @@ def test_openai_streaming_recipe_restores_tokens_split_across_chunks(chat_endpoi
     answer = "".join(_load("openai_chat").ask_streaming(client, "test-model", QUESTION))
     provider.assert_saw_no_raw_value()
     assert answer == RESTORED + CUT_SHORT
+
+
+# The chat-turn example in both READMEs, run as written: a model that looks a client up with a
+# tool, then answers from the tool's result, streamed in pieces.
+README_TURN = {
+    "README.md": "## A chat turn with tools",
+    "README.pl.md": "## Tura rozmowy z narzędziami",
+}
+HISTORY = [
+    {"role": "user", "content": "Klub Orlik to nasz klient, kontakt: jan.kowalski@example.com."},
+    {"role": "assistant", "content": "Zapisane. W czym pomóc?"},
+    {"role": "user", "content": "Czy Klub Orlik zapłacił fakturę dla Jana Kowalskiego?"},
+]
+TOOL = {
+    "name": "find_invoice",
+    "description": "The last invoice of a client.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"client": {"type": "string"}},
+        "required": ["client"],
+    },
+}
+INVOICE = {
+    "client": "Klub Orlik",
+    "contact": "Anna Nowak",
+    "email": "anna.nowak@example.com",
+    "paid": True,
+    "due": date(2026, 11, 3),
+}
+RAW_IN_THE_TURN = ("Klub Orlik", "kowalsk", "Anna Nowak", "anna.nowak")
+
+
+def _readme_turn(name):
+    """The code of the chat-turn example in one of the READMEs, exactly as written there."""
+    text = (EXAMPLES.parent / name).read_text(encoding="utf-8")
+    section = text[text.index(README_TURN[name]) :]
+    return section.split("```python\n", 1)[1].split("\n```", 1)[0]
+
+
+def _claude_turn_events(text, tool_input=None):
+    """A streamed reply: the text in pieces, then a call to the tool when there is an input."""
+    events = [
+        ("message_start", {"message": _claude_message("")}),
+        ("content_block_start", {"index": 0, "content_block": {"type": "text", "text": ""}}),
+        *[
+            ("content_block_delta", {"index": 0, "delta": {"type": "text_delta", "text": piece}})
+            for piece in _pieces(text)
+        ],
+        ("content_block_stop", {"index": 0}),
+    ]
+    stop_reason = "end_turn"
+    if tool_input is not None:
+        call = {"type": "tool_use", "id": "toolu_test", "name": TOOL["name"], "input": {}}
+        delta = [
+            {"type": "input_json_delta", "partial_json": piece} for piece in _pieces(tool_input)
+        ]
+        events += [
+            ("content_block_start", {"index": 1, "content_block": call}),
+            *[("content_block_delta", {"index": 1, "delta": piece}) for piece in delta],
+            ("content_block_stop", {"index": 1}),
+        ]
+        stop_reason = "tool_use"
+    events += [
+        ("message_delta", {"delta": {"stop_reason": stop_reason}, "usage": {"output_tokens": 1}}),
+        ("message_stop", {}),
+    ]
+    return "".join(
+        f"event: {name}\ndata: {json.dumps({'type': name, **data})}\n\n" for name, data in events
+    )
+
+
+class ToolModel:
+    """Looks up the first value of the question with the tool, then answers with its result."""
+
+    def __init__(self) -> None:
+        self.bodies: list[str] = []
+
+    def handle(self, request):
+        body = request.content.decode()
+        self.bodies.append(body)
+        last = json.loads(body)["messages"][-1]
+        tokens = list(dict.fromkeys(match.group(0) for match in TOKEN.finditer(json.dumps(last))))
+        if isinstance(last["content"], str):
+            reply = _claude_turn_events(
+                f"Sprawdzam {tokens[0]}.", json.dumps({"client": tokens[0]})
+            )
+        else:
+            reply = _claude_turn_events("Tak: " + ", ".join(tokens) + ".")
+        headers = {"content-type": "text/event-stream"}
+        return httpx2.Response(200, headers=headers, content=reply.encode())
+
+
+class BrokenGuard(Guard):
+    name = "broken"
+
+    def detect(self, text, enabled):
+        raise KeyError(text)
+
+
+@pytest.fixture(params=sorted(README_TURN))
+def readme_turn(request, monkeypatch):
+    model = ToolModel()
+    http = anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(model.handle))
+    client = anthropic.Anthropic(api_key="test", http_client=http, max_retries=0)
+    monkeypatch.setattr(anthropic, "Anthropic", lambda: client)
+    calls = []
+
+    def run_tool(name, arguments):
+        calls.append((name, arguments))
+        return INVOICE
+
+    code = _readme_turn(request.param)
+    namespace = {"SYSTEM": "Pomagasz biuru rachunkowemu.", "TOOLS": [TOOL], "run_tool": run_tool}
+    exec(compile(code, request.param, "exec"), namespace)  # noqa: S102 - the README's own code
+    return namespace, model, calls, code
+
+
+def test_readme_turn_masks_history_and_tool_result_and_restores_the_stream(readme_turn, capsys):
+    namespace, model, calls, _ = readme_turn
+    namespace["chat"](HISTORY, ["Klub Orlik"])
+    shown = capsys.readouterr().out
+    assert len(model.bodies) == 2
+    for body in model.bodies:
+        for value in RAW_IN_THE_TURN:
+            assert value.lower() not in body.lower()
+    assert calls == [("find_invoice", {"client": "Klub Orlik"})]
+    sent = json.loads(json.loads(model.bodies[1])["messages"][-1]["content"][0]["content"])
+    assert sent["paid"] is True
+    assert sent["due"] == "2026-11-03"
+    assert shown.splitlines() == [
+        "Sprawdzam Klub Orlik.",
+        "Tak: Klub Orlik, Anna Nowak, anna.nowak@example.com.",
+    ]
+
+
+def test_readme_turn_refuses_and_sends_nothing_when_masking_fails(readme_turn, capsys):
+    namespace, model, calls, code = readme_turn
+    namespace["anonymizer"] = Anonymizer([BrokenGuard()])
+    namespace["chat"](HISTORY, ["Klub Orlik"])
+    shown = capsys.readouterr().out.strip()
+    assert model.bodies == []
+    assert calls == []
+    assert shown
+    assert shown in code

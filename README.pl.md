@@ -172,35 +172,33 @@ odmawia, zamiast to wysłać:
 import json
 
 import anthropic
-from polanon import (
-    WELL_KNOWN_NAMES,
-    Allowlist,
-    Anonymizer,
-    MaskingUnavailableError,
-    default_guards,
-    token_instructions,
-)
+from polanon import Anonymizer, MaskingUnavailableError, default_guards, token_instructions
 
-anonymizer = Anonymizer(default_guards(with_ner=False), allowlist=Allowlist(WELL_KNOWN_NAMES))
+anonymizer = Anonymizer(default_guards(with_ner=False))
 client = anthropic.Anthropic()
 
 
-def chat(history: list[dict], clients: list[str]) -> str:
+def chat(history: list[dict], clients: list[str]) -> None:
     """Jedna tura. `history` kończy się pytaniem; SYSTEM, TOOLS i run_tool są twoje."""
     try:
         turn = anonymizer.turn(known=clients, unknown_blocks="drop")
         messages = turn.mask_messages(history)
         while True:
-            response = client.messages.create(
+            restorer = turn.stream_restorer()
+            with client.messages.stream(
                 model="claude-opus-5-5",
-                max_tokens=16000,
+                max_tokens=64000,
                 system=SYSTEM + "\n\n" + token_instructions("pl"),
                 tools=TOOLS,
                 messages=messages,
-            )
+            ) as stream:
+                for text in stream.text_stream:
+                    print(restorer.feed(text), end="")
+                response = stream.get_final_message()
+            print(restorer.flush())
             messages.append({"role": "assistant", "content": response.content})
             if response.stop_reason != "tool_use":
-                return turn.restore("".join(b.text for b in response.content if b.type == "text"))
+                return
             results = []
             for block in response.content:
                 if block.type == "tool_use":
@@ -211,11 +209,13 @@ def chat(history: list[dict], clients: list[str]) -> str:
                     )
             messages.append({"role": "user", "content": results})
     except MaskingUnavailableError:
-        return "Maskowanie jest włączone, ale nie działa, więc nic więcej nie trafiło do modelu."
+        print("Maskowanie jest włączone, ale nie działa, więc nic więcej nie trafiło do modelu.")
 ```
 
-Żeby odpowiedź przychodziła strumieniowo, weź `turn.stream_restorer()` dla każdej odpowiedzi, tak
-jak w sekcji [Strumieniowanie](#strumieniowanie).
+`turn.stream_restorer()` wstawia oryginały, gdy każda odpowiedź spływa strumieniem, także token
+przecięty między dwoma zdarzeniami, tak jak w sekcji [Strumieniowanie](#strumieniowanie). Testy
+uruchamiają ten przykład dokładnie w tej postaci z prawdziwym SDK `anthropic`, offline, więc nie
+rozjedzie się z biblioteką.
 
 **Jedno mapowanie na turę.** Klient w historii, w pytaniu i w wyniku narzędzia to ten sam
 `<FIRMA_1>`. Żeby tokeny przechodziły z tury na turę, zacznij następną od
