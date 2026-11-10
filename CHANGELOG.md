@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`MaskingUnavailableError`**, the one error an app catches to refuse sending text it could not
+  mask. `default_guards(with_ner=True)` without spaCy or its model now raises
+  `NerModelUnavailableError`, which is both a `MaskingUnavailableError` and the
+  `ModuleNotFoundError` it raised before, with the same message. **`ner_available()`** runs the same
+  check without loading anything, for a settings page.
+
 ## [0.2.2] - 2026-11-08
 
 Found by masking synthetic CVs, profiles written as JSON and lists of repositories with the rules

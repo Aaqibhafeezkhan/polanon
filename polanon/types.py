@@ -16,6 +16,22 @@ class JudgeFallback(StrEnum):
     BLOCK = "block"  # raise JudgeError to the caller; nothing is sent
 
 
+class MaskingUnavailableError(RuntimeError):
+    """Masking was asked for and cannot run, so nothing may be sent to the model.
+
+    The message names the failure and never holds the text that was being masked; the error that
+    caused it is chained for the logs.
+    """
+
+
+class NerModelUnavailableError(MaskingUnavailableError, ModuleNotFoundError):
+    """spaCy or its language model is not installed.
+
+    Still a ModuleNotFoundError, which is what ``default_guards`` raised for it before, so code that
+    catches that keeps working.
+    """
+
+
 @dataclass(frozen=True, order=True)
 class Span:
     """A detected sensitive span in the ORIGINAL text. `end` is exclusive."""

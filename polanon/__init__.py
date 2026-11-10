@@ -39,7 +39,14 @@ from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
 from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, token_for
 from polanon.stream_restore import StreamRestorer
-from polanon.types import AnonymizationResult, JudgeFallback, Span, merge_spans
+from polanon.types import (
+    AnonymizationResult,
+    JudgeFallback,
+    MaskingUnavailableError,
+    NerModelUnavailableError,
+    Span,
+    merge_spans,
+)
 
 __all__ = [
     "DEFAULT_ENABLED",
@@ -57,7 +64,9 @@ __all__ = [
     "JudgeError",
     "JudgeFallback",
     "JudgeFinding",
+    "MaskingUnavailableError",
     "MockJudge",
+    "NerModelUnavailableError",
     "PersonNameGuard",
     "RegexGuard",
     "SecretsGuard",
@@ -67,6 +76,7 @@ __all__ = [
     "default_guards",
     "mask_known_values",
     "merge_spans",
+    "ner_available",
     "sweep",
     "token_for",
 ]
@@ -100,8 +110,9 @@ def default_guards(
 
     Raises:
         TypeError: when `denylist` is a single string, which would be read letter by letter.
-        ModuleNotFoundError: when `with_ner` is on and spaCy or the model is not installed. It is
-            raised here rather than on the first text to mask, with the command that fixes it.
+        NerModelUnavailableError: when `with_ner` is on and spaCy or the model is not installed.
+            It is raised here rather than on the first text to mask, with the command that fixes
+            it, and it is both a ModuleNotFoundError and a MaskingUnavailableError.
     """
     if isinstance(denylist, str):
         # The term itself stays out of the message: it is what the caller wants kept hidden.
@@ -115,7 +126,10 @@ def default_guards(
         DenylistGuard(list(denylist)),
     ]
     if with_ner:
-        _require_spacy(spacy_model)
+        try:
+            _require_spacy(spacy_model)
+        except ModuleNotFoundError as exc:
+            raise NerModelUnavailableError(str(exc)) from None
         from polanon.guards.ner import NerGuard
 
         guards.append(NerGuard(spacy_model=spacy_model))
@@ -130,6 +144,22 @@ def _require_spacy(spacy_model: str) -> None:
     # A model can also be loaded from a path, which find_spec cannot check; spaCy reports that one.
     if spacy_model.isidentifier() and importlib.util.find_spec(spacy_model) is None:
         raise ModuleNotFoundError(f"the spaCy model {spacy_model!r} is not installed: {hint}")
+
+
+def ner_available(spacy_model: str = "pl_core_news_md") -> bool:
+    """Return whether ``default_guards(with_ner=True)`` would find spaCy and the model.
+
+    It runs the same check as :func:`default_guards` without loading anything, so a settings page
+    can show whether the language model can be switched on.
+
+    Args:
+        spacy_model: the spaCy model the guard would load.
+    """
+    try:
+        _require_spacy(spacy_model)
+    except ModuleNotFoundError:
+        return False
+    return True
 
 
 class Anonymizer:

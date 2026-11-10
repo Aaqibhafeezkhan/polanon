@@ -10,8 +10,11 @@ from polanon import (
     Allowlist,
     Anonymizer,
     JudgeError,
+    MaskingUnavailableError,
+    NerModelUnavailableError,
     RegexGuard,
     default_guards,
+    ner_available,
 )
 from polanon.guards.base import Guard
 from polanon.judge.mock import MockJudge
@@ -177,3 +180,27 @@ def test_a_returned_type_spelled_like_a_built_in_label_is_refused():
 def test_a_declared_type_that_cannot_label_a_token_is_refused():
     with pytest.raises(ValueError, match="uppercase letters and underscores"):
         Anonymizer([LabelGuard("Employee_Id")])
+
+
+@pytest.mark.parametrize("found", [set(), {"spacy"}], ids=["without spaCy", "without the model"])
+def test_a_missing_language_model_is_also_masking_unavailable(monkeypatch, found):
+    """An app that refuses to send unmasked text catches one error, whatever is missing."""
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name in found else None
+    )
+    with pytest.raises(MaskingUnavailableError) as error:
+        default_guards()
+    assert isinstance(error.value, NerModelUnavailableError)
+    assert isinstance(error.value, ModuleNotFoundError)
+    assert "with_ner=False" in str(error.value)
+
+
+def test_the_language_model_is_reported_available_only_when_it_is_installed(monkeypatch):
+    installed = {"spacy", "pl_core_news_md"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name in installed else None
+    )
+    assert ner_available()
+    assert not ner_available("pl_core_news_lg")
+    installed.discard("spacy")
+    assert not ner_available()
