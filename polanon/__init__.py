@@ -89,7 +89,7 @@ __all__ = [
     "token_instructions",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 #: The entity types an Anonymizer masks unless told otherwise: every built-in type except DATE.
 #: A date rarely identifies anyone on its own, and masking every deadline and invoice date leaves
