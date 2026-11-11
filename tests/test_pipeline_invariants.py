@@ -390,6 +390,32 @@ async def test_known_value_inside_the_last_word_takes_all_of_it():
     assert result.mapping["<OSOBA_2>"] == "Kowalskiego"
 
 
+async def test_known_value_that_only_partly_overlaps_a_detection_is_masked_whole():
+    """The name rule reads "Anna Nowak", and skipping the known value sent "z Kowalskich"."""
+    text = "Pani Anna Nowak z Kowalskich"
+    result = await mask(text, mapping={"<OSOBA_1>": "Nowak z Kowalskich"})
+    assert result.anonymized == "Pani <OSOBA_2>"
+    assert result.mapping["<OSOBA_2>"] == "Anna Nowak z Kowalskich"
+    assert is_lossless(result)
+
+
+async def test_two_known_values_that_overlap_are_masked_together():
+    text = "Pani Anna Nowak z Kowalskich"
+    mapping = {"<OSOBA_1>": "Anna Nowak", "<OSOBA_2>": "Nowak z Kowalskich"}
+    result = await mask(text, [], mapping=mapping)
+    assert result.anonymized == "Pani <OSOBA_3>"
+    assert is_lossless(result)
+
+
+async def test_known_value_crossing_a_surer_detection_keeps_the_rest_under_its_own_type():
+    text = "Firma Nowak z Kowalskich"
+    guard = FixedGuard(Span(0, 11, "ORG", 1.0))
+    result = await mask(text, [guard], mapping={"<OSOBA_1>": "Nowak z Kowalskich"})
+    assert result.anonymized == "<FIRMA_1> <OSOBA_2>"
+    assert result.mapping["<OSOBA_2>"] == "z Kowalskich"
+    assert is_lossless(result)
+
+
 async def test_leftover_sharing_the_start_of_its_detection_is_not_masked_elsewhere():
     """The address rule starts at "NIP" and loses the number to the NIP rule: the bare word left
     over is masked in place, not in every sentence that mentions a NIP."""

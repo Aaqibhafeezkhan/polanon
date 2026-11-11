@@ -24,6 +24,7 @@ from polanon._matching import (
     Ranges,
     folds,
     known_value_matches,
+    place_known_values,
     type_of,
     value_keys,
 )
@@ -291,7 +292,9 @@ def _mask_stage1(
 
     An occurrence of a known value takes in what a guard found inside it: a signature that puts
     "Jan" and "Kowalski" on two lines is read as "Jan" by the name rule, and masking that alone
-    sent the surname. Such detections give way to the occurrence, which is masked whole.
+    sent the surname. Such detections give way to the occurrence, which is masked whole. One that
+    only partly overlaps a detection, or another known value, is resolved with it as two
+    detections are, so no letter of either reaches the model.
 
     The parts of a value that point to the same thing on their own are known values too: the
     surname of a person, the handle in a link to a profile. See :mod:`polanon._known_parts`.
@@ -312,11 +315,15 @@ def _mask_stage1(
             value = text[span.start : span.end]
             _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
     occupied = [(span.start, span.end) for span in merged]
-    found = known_value_matches(text, haystack, known.values(), occupied, absorb=True)
-    covered = Ranges((start, end) for start, end, _ in found)
+    placement = place_known_values(
+        text, haystack, known.values(), occupied, absorb=True, cross_occupied=True
+    )
+    covered = Ranges((start, end) for start, end, _ in placement.matches)
     kept = [span for span in merged if not covered.overlaps(span.start, span.end)]
+    occurrences = placement.matches + placement.crossing
     spans = merge_spans(
-        kept + [Span(start, end, kind, 0.9, "known_value") for start, end, kind in found], text
+        kept + [Span(start, end, kind, 0.9, "known_value") for start, end, kind in occurrences],
+        text,
     )
 
     reserved = (match.group(0) for match in TOKEN_RE.finditer(text))

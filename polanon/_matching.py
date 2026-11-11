@@ -185,14 +185,16 @@ class Ranges:
 
     def only_inside(self, start: int, end: int) -> bool:
         """Return whether every stored range the range touches lies inside it and is shorter."""
+        return all(
+            start <= first and last <= end and (first, last) != (start, end)
+            for first, last in self.touching(start, end)
+        )
+
+    def touching(self, start: int, end: int) -> list[tuple[int, int]]:
+        """Return the stored ranges the range from `start` to `end` overlaps, in order."""
         first = bisect_right(self._ends, start)
         last = bisect_left(self._starts, end)
-        return all(
-            start <= self._starts[i]
-            and self._ends[i] <= end
-            and (self._starts[i], self._ends[i]) != (start, end)
-            for i in range(first, last)
-        )
+        return [(self._starts[i], self._ends[i]) for i in range(first, last)]
 
     def add(self, start: int, end: int) -> None:
         """Store a range that overlaps none of the stored ones."""
@@ -449,6 +451,20 @@ def known_value_ranges(
     return ranges
 
 
+@dataclass(frozen=True)
+class Placement:
+    """What the occurrences of known values mask, as ``(start, end, payload)`` in the text.
+
+    `matches` never overlap each other or the ranges the search had to step around. `crossing`
+    holds the occurrences that run past such a range with a letter or digit of their own: masking
+    only the matches would send that part in the clear, so the caller resolves each one with the
+    range it crosses, as :func:`~polanon.types.merge_spans` does.
+    """
+
+    matches: list[tuple[int, int, str]]
+    crossing: list[tuple[int, int, str]]
+
+
 def known_value_matches(
     text: str,
     haystack: Haystack,
@@ -458,6 +474,22 @@ def known_value_matches(
     absorb: bool = False,
 ) -> list[tuple[int, int, str]]:
     """Find every occurrence of a known value, as ``(start, end, payload)`` in `text`.
+
+    The matches of :func:`place_known_values`, for a caller that cannot resolve an overlap.
+    """
+    return place_known_values(text, haystack, values, occupied, absorb=absorb).matches
+
+
+def place_known_values(
+    text: str,
+    haystack: Haystack,
+    values: Iterable[tuple[str, str]],
+    occupied: Iterable[tuple[int, int]],
+    *,
+    absorb: bool = False,
+    cross_occupied: bool = False,
+) -> Placement:
+    """Find every occurrence of a known value, and the ones that cross another range.
 
     The entity filter is deliberately not applied here. A value the conversation already treats as
     sensitive keeps being masked after the enabled types are narrowed; otherwise a later turn that
@@ -473,10 +505,15 @@ def known_value_matches(
     written exactly. Ranges in `occupied` are never cut into. With `absorb`, an occurrence of the
     value itself may cover ranges of `occupied` whole, as "Jan" + line break + "Kowalski" covers a
     guard's "Jan": the caller drops what it covers and masks the occurrence instead.
+
+    An occurrence that only partly overlaps an occurrence placed before it is returned in
+    `crossing`, and with `cross_occupied` so is one that partly overlaps a range of `occupied`,
+    such as a guard's detection the caller can still merge with it. Without it, a range of
+    `occupied` is a token that must stay whole, and an occurrence crossing it is left out.
     """
     found = needles(values)
     where = _find(text, haystack, found)
-    placer = _Placer(Ranges(occupied), absorb=absorb)
+    placer = _Placer(Ranges(occupied), text, absorb=absorb, cross_occupied=cross_occupied)
 
     def as_written(start: int, end: int) -> tuple[int, int]:
         return start, end
@@ -498,17 +535,22 @@ def known_value_matches(
             first, end = haystack.regrouped(start, start + length)
             if _stands_alone(haystack.text, first, end):
                 placer.place(haystack.text, first, end, needle, haystack.to_original)
-    return placer.matches
+    return Placement(placer.matches, placer.crossing)
 
 
 class _Placer:
     """Decides what each occurrence masks, keeping the ranges placed so far."""
 
-    def __init__(self, guarded: Ranges, *, absorb: bool) -> None:
+    def __init__(
+        self, guarded: Ranges, original: str, *, absorb: bool, cross_occupied: bool
+    ) -> None:
         self.placed = Ranges()
         self.guarded = guarded
+        self.original = original
         self.absorb = absorb
+        self.cross_occupied = cross_occupied
         self.matches: list[tuple[int, int, str]] = []
+        self.crossing: list[tuple[int, int, str]] = []
         #: The last word that could not be masked whole, and the text it is a word of. Later
         #: occurrences inside it go straight to the value alone: widening each of them again
         #: rescanned the whole word every time.
@@ -540,6 +582,8 @@ class _Placer:
         # letters and digits each occurrence would otherwise rescan the whole run.
         bare = to_original(start, end)
         if self.blocked(*bare):
+            if self._runs_past(*bare) and _occurrence(text, start, end, needle, through_view):
+                self.crossing.append((*bare, needle.payload))
             return
         kind = _occurrence(text, start, end, needle, through_view)
         if kind is None:
@@ -552,6 +596,23 @@ class _Placer:
                 return
             self._blocked_word = (text, *word)
         self._accept(bare, needle.payload)
+
+    def _runs_past(self, start: int, end: int) -> bool:
+        """Return whether a blocked occurrence has a letter or digit outside what blocks it.
+
+        "Nowak z Kowalskich" known from an earlier turn meets a guard's "Anna Nowak": skipping the
+        occurrence sent "z Kowalskich" in the clear. An occurrence that crosses a range of
+        `guarded` counts only with `cross_occupied`, since otherwise that range is a token.
+        """
+        guarded = self.guarded.touching(start, end)
+        if guarded and not self.cross_occupied:
+            return False
+        cursor = start
+        for first, last in sorted(self.placed.touching(start, end) + guarded):
+            if first > cursor and _has_word_character(self.original[cursor:first]):
+                return True
+            cursor = max(cursor, last)
+        return cursor < end and _has_word_character(self.original[cursor:end])
 
     def _inside_blocked_word(self, text: str, start: int, end: int) -> bool:
         word = self._blocked_word
@@ -580,6 +641,10 @@ def _occurrence(text: str, start: int, end: int, needle: Needle, through_view: b
 def _is_word_character(char: str) -> bool:
     """Letters and digits, the combining marks of decomposed text, and invisible characters."""
     return char.isalnum() or unicodedata.combining(char) > 0 or char in INVISIBLE
+
+
+def _has_word_character(text: str) -> bool:
+    return any(_is_word_character(char) for char in text)
 
 
 def _stands_alone(text: str, start: int, end: int) -> bool:
