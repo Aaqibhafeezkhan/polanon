@@ -432,3 +432,29 @@ def test_a_known_short_number_in_a_long_line_of_numbers_is_masked_in_linear_time
     result = Anonymizer([]).anonymize_sync(text, {"<SEKRET_1>": "2025"})
     assert time.perf_counter() - started < 1.0
     assert result.anonymized == "Lata: " + ",".join(["<SEKRET_1>"] * 10_000)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Umowa na okres 01.01.2025-31.12.2025.",
+        "Rok szkolny 2024/2025.",
+        "Rok szkolny 2025/26.",
+        "Raport 2025-01-01/2025-12-31.",
+        "Pismo z dnia 15.04.2025r.",
+        "Umowę podpisano w 2025r.",
+    ],
+)
+def test_a_known_pin_that_equals_a_year_leaves_dates_joined_to_dates_readable(text):
+    """Two dates joined by "-" or "/" were read as one number, and the PIN in them as a PIN."""
+    first = Anonymizer([SecretsGuard()]).anonymize_sync("Mój PIN do karty: 2025.")
+    assert first.mapping == {"<SEKRET_1>": "2025"}
+    assert Anonymizer([]).anonymize_sync(text, first.mapping).anonymized == text
+
+
+@pytest.mark.parametrize(
+    "text", ["Kody 2025-7319.", "Kody 2025/4821.", "PIN 2025rok.", "PIN 2025R."]
+)
+def test_a_known_pin_joined_to_what_is_no_date_is_still_masked(text):
+    result = Anonymizer([]).anonymize_sync(text, {"<SEKRET_1>": "2025"})
+    assert "2025" not in result.anonymized

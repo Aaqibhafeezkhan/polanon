@@ -46,7 +46,7 @@ _DATE_TIME_OR_AMOUNT = re.compile(
     r"\d{1,2}[./-]\d{1,2}[./-](?:\d{2}|(?:19|20)\d{2})"
     r"|(?:19|20)\d{2}[./-]\d{1,2}(?:[./-]\d{1,2})?"
     r"|\d{1,2}[./-](?:19|20)\d{2}"
-    r"|(?:19|20)\d{2}-(?:19|20)?\d{2}"
+    r"|(?:19|20)\d{2}[-/](?:19|20)?\d{2}"
     r"|\d{1,2}:\d{2}(?::\d{2})?"
     r"|\d+[.,]\d{1,2}"
     r"|\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?"
@@ -107,6 +107,12 @@ _PLAIN_DASHES = str.maketrans(dict.fromkeys(DASHES, "-"))
 #: Longer than any date, time or amount the check around a short number reads, as written with
 #: its joiners: "1.234.567.890,12" is 16 characters.
 _LONGEST_SHAPE = 20
+
+#: Joiners that may stand between two dates, two years or two amounts as well as inside one.
+_BETWEEN_TWO = "-/"
+
+#: A year with the abbreviation of "rok" glued on: "15.04.2025r.", "w 2025r".
+_YEAR_WITH_R = re.compile(r"(?:19|20)\d{2}r(?!\w)")
 
 #: Digits and the joiners between them, after a short number and before it.
 _JOINED = re.compile(rf"[\d{re.escape(NUMBER_JOINERS)}]*")
@@ -641,7 +647,9 @@ def _occurrence(text: str, start: int, end: int, needle: Needle, through_view: b
         return "alone"
     if len(needle.read) < MIN_EMBEDDED_LENGTH:
         return None
-    if needle.is_short_number and _next_to_a_digit(text, start, end):
+    if needle.is_short_number and (
+        _next_to_a_digit(text, start, end) or _a_year_with_r(text, start, end)
+    ):
         return None
     return "inside a word"
 
@@ -682,6 +690,12 @@ def _whole_words(text: str, start: int, end: int) -> tuple[int, int]:
     return start, end
 
 
+def _a_year_with_r(text: str, start: int, end: int) -> bool:
+    """Return whether `start`..`end` is a year followed by a glued "r", as in "15.04.2025r."."""
+    year = _YEAR_WITH_R.match(text, start)
+    return year is not None and year.end() == end + 1
+
+
 def _next_to_a_digit(text: str, start: int, end: int) -> bool:
     return (start > 0 and text[start - 1].isdigit()) or (end < len(text) and text[end].isdigit())
 
@@ -702,8 +716,18 @@ def _in_a_date_time_or_amount(text: str, start: int, end: int) -> bool:
         first = next((i + 1 for i in range(first, start) if text[i] in NUMBER_JOINERS), start)
     if last < len(text) and _in_a_number(text[last]):
         last = next((i for i in range(last - 1, end - 1, -1) if text[i] in NUMBER_JOINERS), end)
-    run = text[first:last].translate(_PLAIN_DASHES).strip(".,-/:")
-    return run != text[start:end] and _DATE_TIME_OR_AMOUNT.fullmatch(run) is not None
+    # "-" and "/" also stand between two dates or amounts, as in "01.01.2025-31.12.2025", so
+    # every stretch of the run between them that holds the number is read on its own.
+    run = text[first:last].translate(_PLAIN_DASHES)
+    number = text[start:end]
+    lefts = [0, *(i + 1 for i in range(start - first) if run[i] in _BETWEEN_TWO)]
+    rights = [len(run), *(i for i in range(end - first, len(run)) if run[i] in _BETWEEN_TWO)]
+    for left in lefts:
+        for right in rights:
+            piece = run[left:right].strip(".,-/:")
+            if piece != number and _DATE_TIME_OR_AMOUNT.fullmatch(piece) is not None:
+                return True
+    return False
 
 
 def _in_a_number(char: str) -> bool:
