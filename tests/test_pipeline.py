@@ -1,5 +1,7 @@
 """Stage-1 + stage-2 pipeline behaviour. Uses stdlib-only guards so no spaCy model is needed."""
 
+import time
+
 import pytest
 
 from polanon import Anonymizer, DenylistGuard, MockJudge, RegexGuard, SecretsGuard
@@ -420,3 +422,13 @@ def test_mask_known_values_never_rewrites_a_token_already_in_the_text():
 def test_mask_known_values_places_the_longest_value_first():
     mapping = {"<OSOBA_1>": "Anna", "<OSOBA_2>": "Anna Wiśniewska"}
     assert mask_known_values("Anna Wiśniewska i Anna", mapping) == "<OSOBA_2> i <OSOBA_1>"
+
+
+def test_a_known_short_number_in_a_long_line_of_numbers_is_masked_in_linear_time():
+    """Each occurrence was checked against the whole run of joined numbers around it."""
+    text = "Lata: " + ",".join(["2025"] * 10_000)
+    assert len(text) > 50_000
+    started = time.perf_counter()
+    result = Anonymizer([]).anonymize_sync(text, {"<SEKRET_1>": "2025"})
+    assert time.perf_counter() - started < 1.0
+    assert result.anonymized == "Lata: " + ",".join(["<SEKRET_1>"] * 10_000)

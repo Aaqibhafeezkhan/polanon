@@ -104,6 +104,14 @@ _FOLD_FIX = str.maketrans({chr(0x03C2): chr(0x03C3), chr(0x0131): "i"})
 
 _PLAIN_DASHES = str.maketrans(dict.fromkeys(DASHES, "-"))
 
+#: Longer than any date, time or amount the check around a short number reads, as written with
+#: its joiners: "1.234.567.890,12" is 16 characters.
+_LONGEST_SHAPE = 20
+
+#: Digits and the joiners between them, after a short number and before it.
+_JOINED = re.compile(rf"[\d{re.escape(NUMBER_JOINERS)}]*")
+_JOINED_BEFORE = re.compile(rf"[\d{re.escape(NUMBER_JOINERS)}]*\Z")
+
 
 def type_of(token: str) -> str | None:
     """Return the entity type a token stands for, or None when the string is not a token."""
@@ -679,11 +687,24 @@ def _next_to_a_digit(text: str, start: int, end: int) -> bool:
 
 
 def _in_a_date_time_or_amount(text: str, start: int, end: int) -> bool:
-    """Return whether digits at `start`..`end` are part of a date, a time or an amount."""
-    first, last = start, end
-    while first > 0 and (text[first - 1].isdigit() or text[first - 1] in NUMBER_JOINERS):
-        first -= 1
-    while last < len(text) and (text[last].isdigit() or text[last] in NUMBER_JOINERS):
-        last += 1
+    """Return whether digits at `start`..`end` are part of a date, a time or an amount.
+
+    Only :data:`_LONGEST_SHAPE` characters on either side are looked at, which is more than any
+    date, time or amount takes. Scanning the whole run of joined numbers for every occurrence made
+    masking quadratic on one long line of numbers: 50 KB of a known PIN took most of a minute.
+    """
+    before = _JOINED_BEFORE.search(text, max(0, start - _LONGEST_SHAPE), start)
+    after = _JOINED.match(text, end, min(len(text), end + _LONGEST_SHAPE))
+    first = before.start() if before is not None else start
+    last = after.end() if after is not None else end
+    # A run cut off by the limit starts and ends at a joiner, so no number is read halfway.
+    if first > 0 and _in_a_number(text[first - 1]):
+        first = next((i + 1 for i in range(first, start) if text[i] in NUMBER_JOINERS), start)
+    if last < len(text) and _in_a_number(text[last]):
+        last = next((i for i in range(last - 1, end - 1, -1) if text[i] in NUMBER_JOINERS), end)
     run = text[first:last].translate(_PLAIN_DASHES).strip(".,-/:")
     return run != text[start:end] and _DATE_TIME_OR_AMOUNT.fullmatch(run) is not None
+
+
+def _in_a_number(char: str) -> bool:
+    return char.isdigit() or char in NUMBER_JOINERS
