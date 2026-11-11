@@ -1,5 +1,7 @@
 """LLM-backed judges: strict parsing and failure handling, all with mocked transports."""
 
+import json
+
 import pytest
 
 httpx = pytest.importorskip("httpx")
@@ -366,3 +368,37 @@ async def test_a_finding_quoted_with_other_whitespace_is_still_masked():
     result = await anonymize(text, enabled={"PERSON"}, guards=[], judge=judge, existing_mapping={})
     assert "Stalowej" not in result.anonymized
     assert result.judge_failed is False
+
+
+def _findings(*found):
+    return json.dumps({"findings": [{"text": text, "type": kind} for text, kind in found]})
+
+
+async def test_overlapping_findings_of_two_types_mask_both():
+    """Masking only the longer quote sent the first name, and judge_hits still said it was done."""
+    text = (
+        "Sprawę prowadzi Ngozi Okonkwo-Brzęczyszczykiewicz z kancelarii w Chrząszczyrzewoszycach."
+    )
+    judge = _ollama(
+        _findings(
+            ("Ngozi Okonkwo-Brzęczyszczykiewicz", "PERSON"),
+            ("Okonkwo-Brzęczyszczykiewicz z kancelarii w Chrząszczyrzewoszycach", "ORG"),
+        )
+    )
+    result = await anonymize(
+        text, enabled={"PERSON", "ORG"}, guards=[], judge=judge, existing_mapping={}
+    )
+    assert result.anonymized == "Sprawę prowadzi <OSOBA_1> <FIRMA_1>."
+    assert result.mapping["<OSOBA_1>"] == "Ngozi"
+    assert result.judge_hits == 2
+
+
+async def test_overlapping_findings_of_one_type_become_one_token():
+    text = "Sprawę prowadzi Ngozi Okonkwo-Brzęczyszczykiewicz."
+    judge = _ollama(
+        _findings(("Ngozi Okonkwo", "PERSON"), ("Okonkwo-Brzęczyszczykiewicz", "PERSON"))
+    )
+    result = await anonymize(text, enabled={"PERSON"}, guards=[], judge=judge, existing_mapping={})
+    assert result.anonymized == "Sprawę prowadzi <OSOBA_1>."
+    assert result.mapping == {"<OSOBA_1>": "Ngozi Okonkwo-Brzęczyszczykiewicz"}
+    assert result.judge_hits == 1

@@ -356,6 +356,10 @@ def _apply_findings(
     nothing inside an existing token is touched. All findings are applied in one pass, a token is
     allocated only for what is actually replaced, and every replacement is recorded in original
     coordinates, so `spans` describes exactly what the anonymized text hides.
+
+    Small models often quote overlapping pieces of one name. Findings that overlap are resolved as
+    two detections are, by :func:`~polanon.types.merge_spans`: masking only the longer one sent the
+    first name of "Ngozi Okonkwo-Brzęczyszczykiewicz z kancelarii ..." in the clear.
     """
     wanted = [
         (finding.text.strip(), finding.entity_type)
@@ -367,20 +371,25 @@ def _apply_findings(
     ]
     masked = masking.masked
     haystack = Haystack.of(masked, detection_view(masked))
-    matches = sorted(known_value_matches(masked, haystack, wanted, _token_ranges(masked)))
+    placement = place_known_values(masked, haystack, wanted, _token_ranges(masked))
+    found = [
+        Span(start, end, entity_type, 0.5, "judge")
+        for start, end, entity_type in placement.matches + placement.crossing
+    ]
+    replaced = merge_spans(found, masked)
     parts: list[str] = []
     cursor = 0
-    for start, end, entity_type in matches:
-        token = masking.allocator.allocate(masked[start:end], entity_type)
-        parts.append(masked[cursor:start])
+    for span in replaced:
+        token = masking.allocator.allocate(masked[span.start : span.end], span.entity_type)
+        parts.append(masked[cursor : span.start])
         parts.append(token)
-        cursor = end
+        cursor = span.end
         _count(masking.entity_counts, token)
-        original_start, original_end = masking.to_original(start, end)
-        masking.spans.append(Span(original_start, original_end, entity_type, 0.5, "judge"))
+        original_start, original_end = masking.to_original(span.start, span.end)
+        masking.spans.append(Span(original_start, original_end, span.entity_type, 0.5, "judge"))
     parts.append(masked[cursor:])
     masking.masked = "".join(parts)
-    masking.judge_hits += len(matches)
+    masking.judge_hits += len(replaced)
 
 
 async def anonymize(
