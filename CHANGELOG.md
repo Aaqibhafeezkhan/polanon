@@ -4,6 +4,22 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A known value that only partly overlaps a new detection** is masked whole: "Nowak z
+  Kowalskich" known from an earlier turn met the name rule's "Anna Nowak", and "z Kowalskich" went
+  out in the clear. The same holds for two known values that overlap.
+- **Two findings of the judge that overlap** are both masked. A small model that quoted "Ngozi
+  Okonkwo-Brzęczyszczykiewicz" and "Okonkwo-Brzęczyszczykiewicz z kancelarii ..." had its first
+  name sent, while `judge_hits` reported success.
+- **A PIN that equals a year** stays out of two dates joined by "-" or "/", a span of years such as
+  `2024/2025` and a date ending in `2025r.`: in `01.01.<SEKRET_1>-31.12.<SEKRET_1>` the dates around
+  the token gave it away.
+- **A known short number in one long line of numbers**, such as a minified JSON array, no longer
+  makes masking quadratic: 50 KB took most of a minute, and now takes under a second.
+
 ## [0.3.0] - 2026-11-11
 
 ### Added
