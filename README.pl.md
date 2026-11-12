@@ -246,6 +246,87 @@ też nim jest, gdy brakuje spaCy albo modelu, a `ner_available()` pozwala stroni
 czy są zainstalowane. Gdy przyjdzie odpowiedź, `turn.unknown_tokens(answer)` wypisuje tokeny
 wymyślone przez model, a `turn.sweep(restored)` szuka też danych osobowych, które dodała odpowiedź.
 
+## Maskowanie dla RAG i indeksów wyszukiwania
+
+Tokeny numerowane w każdym wywołaniu od nowa nic nie znaczą poza swoją rozmową: umowa zamaskowana
+do indeksu wyszukiwania i pytanie zamaskowane tydzień później mogą nazwać `<OSOBA_1>` dwie różne
+osoby, a wyszukiwanie nic nie znajdzie. Daj anonimizatorowi tajny klucz, a każdy token będzie
+obliczany: z HMAC-SHA256 wartości pod tym kluczem, taki sam w każdym dokumencie, każdym procesie
+i każdym pytaniu, bez żadnego wspólnego stanu. „Jan Kowalski”, „Jana Kowalskiego” i „z Janem
+Kowalskim” dostają jeden token, tak samo NIP zapisany z myślnikami i bez nich.
+
+```python
+import os
+
+from polanon import Anonymizer, InMemoryMappingStore, Pseudonyms, default_guards, stored_mapping
+
+key = bytes.fromhex(os.environ["POLANON_KEY"])  # 32 losowe bajty na firmę, z magazynu sekretów
+store = InMemoryMappingStore()  # w produkcji twoja zaszyfrowana tabela, poza indeksem
+pseudonyms = Pseudonyms(key, collisions=store.collisions)
+anonymizer = Anonymizer(default_guards(with_ner=False), pseudonyms=pseudonyms)
+
+document = anonymizer.index_chunks(
+    [
+        "Umowę z Firmą Kot Sp. z o.o. podpisał Jan Kowalski.",
+        "Pełnomocnikiem Jana Kowalskiego jest Anna Nowak, tel. 600 100 200.",
+    ],
+    store,
+)
+for text in document.texts:  # same tokeny: to idzie do embeddera i do indeksu
+    index.add(text, embed(text))  # index i embed są twoje
+
+question = anonymizer.mask_query("Kto jest pełnomocnikiem Jana Kowalskiego?", store)
+passages = index.search(embed(question.anonymized))  # pytanie ma tokeny fragmentów
+
+mapping = question.mapping | stored_mapping(store, question.anonymized, *passages)
+restorer = Anonymizer.stream_restorer(mapping)  # przywraca odpowiedź, jak w Strumieniowaniu
+```
+
+Testy uruchamiają ten przykład dokładnie w tej postaci, z zastępczym indeksem i embedderem. Po
+kolei:
+
+**Nic w indeksie nie nazywa wartości.** `document.texts` zawiera tokeny w miejscu wartości, a to,
+co każdy token oznacza, trafia do magazynu. Nigdy nie kopiuj mapowania do metadanych fragmentu,
+które są zapisywane i przeszukiwane razem z nim. `document.mappings[i]` przywraca fragment `i`
+dokładnie tak, jak został napisany, „Jana Kowalskiego” w dopełniaczu; trzymaj je przy fragmencie,
+zaszyfrowane, poza indeksem.
+
+**Własny magazyn.** `MappingStore` ma dwie metody: `get(tokens)` i `add(entries)`, która zapisuje
+tylko tokeny, których jeszcze nie ma, atomowo dla każdego tokenu, jak robi to unikalny klucz na
+tokenie. Dla pozostałych zwraca to, co już ma. Szyfruj `StoredValue.value`, bo to są dane osobowe;
+`fingerprint` bez klucza niczego nie zdradza. Trzymaj obok `store.collisions` i przekazuj go do
+każdego `Pseudonyms`: są tam tylko tokeny i odciski, nic więcej.
+
+**W jakiej formie wraca nazwisko.** Jeden token oznacza „Jan Kowalski” i „Jana Kowalskiego”.
+Magazyn trzyma mianownik, bo model wpisuje token we własne zdanie, a „Umowę podpisał Jana
+Kowalskiego” byłoby błędem bez względu na to, który dokument trafił do indeksu pierwszy. Fragment
+przywrócony własnym mapowaniem zachowuje przypadek, w którym go napisano.
+
+**Nazwiska, które magazyn już zna.** Samo nazwisko, jak w „Co podpisał Kowalczyk?”, to nazwa,
+której nie odczyta żadna reguła. `mask_query` i `index_chunks` sprawdzają w magazynie każdy ciąg
+do czterech słów i maskują te, dla których ma token, więc pytanie dostaje token fragmentów, a
+nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym. Przy magazynie, który
+jest na to za wolny, przekaż `lookup=False`.
+
+**Klucz.** Co najmniej 32 losowe bajty, jeden klucz na firmę i osobny `scope=` dla indeksu, którego
+nie wolno powiązać z innym. Trzymaj go w menedżerze sekretów, poza indeksem, kodem i logami;
+`Pseudonyms` nigdy go nie pokazuje, nie serializuje ani nie kopiuje. Nowy klucz, zakres albo liczba
+cyfr zmienia każdy token, więc indeks trzeba zbudować od nowa: zapisz `pseudonyms.settings` razem z
+indeksem i porównuj je przy starcie. Żeby usunąć dane osoby, usuń fragmenty zawierające
+`pseudonyms.token(name, "PERSON")`. Samo usunięcie wpisu z magazynu nie zrywa powiązania, bo klucz
+zamienia odgadniętą wartość z powrotem w token.
+
+**Kolizje.** Przy dwunastu cyfrach dwie wartości jednego typu dzielą token z szansą około 1 do
+20 000 przy 10 000 wartości i 1 do 200 przy 100 000. Gdziekolwiek takie dwie wartości się spotkają,
+w magazynie albo w jednym tekście, ta, która przyszła druga, dostaje cztery cyfry więcej.
+
+**Ograniczenia.** Imię albo nazwisko, którego reguły nie umieją odmienić, na przykład rzadkie imię
+albo „Krawca” od „Krawiec”, i nazwa firmy w innym przypadku, „Firmą Kot” obok „Firma Kot”, mają token na
+każdą formę, co kosztuje chybione wyszukiwanie, ale niczego nie ujawnia. Samotne słowo pisane małą
+literą nigdy nie jest sprawdzane w magazynie. A jeden token wszędzie to cel i zarazem cena: kto czyta
+wiele zamaskowanych fragmentów, widzi, które dotyczą tej samej osoby. Co to oznacza, opisuje
+[model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#stable-pseudonyms-for-search-indexes).
+
 ## Co wykrywa
 
 Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód osobisty, IBAN, karty
@@ -275,9 +356,10 @@ modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie licz
 
 ## Warto wiedzieć
 
-**Tokeny są stabilne w obrębie rozmowy, a nie globalnie.** Przekaż mapowanie z ostatniego wyniku do
-kolejnego wywołania: ta sama wartość zachowuje ten sam token, a token nigdy nie zostaje ponownie
-użyty dla innej wartości. Przekazane mapowanie jest tylko odczytywane, a nie zmieniane, więc
+**Tokeny są stabilne w obrębie rozmowy, a nie globalnie**, chyba że podasz klucz, jak dla
+[indeksu wyszukiwania](#maskowanie-dla-rag-i-indeksów-wyszukiwania). Przekaż mapowanie z ostatniego
+wyniku do kolejnego wywołania: ta sama wartość zachowuje ten sam token, a token nigdy nie zostaje
+ponownie użyty dla innej wartości. Przekazane mapowanie jest tylko odczytywane, a nie zmieniane, więc
 zachowuj to, które zwraca każdy wynik:
 
 ```python
@@ -421,6 +503,8 @@ wpisy z denylisty i wartości zamaskowane już wcześniej w rozmowie pozostają 
 | `judge/` | opcjonalny drugi etap: model przegląda zamaskowany tekst pod kątem tego, co wciąż pozwala kogoś zidentyfikować |
 | `stream_restore.py` | wstawia oryginały z powrotem do odpowiedzi przesyłanej strumieniowo, nie rozcinając tokenu |
 | `turn.py` | maskuje jednym mapowaniem wszystko, co wysyła jedno wywołanie modelu, i przywraca to, co wraca |
+| `pseudonyms.py` | oblicza stałe tokeny z tajnego klucza, takie same w każdym dokumencie i procesie |
+| `index.py` | maskuje dokumenty i pytania dla indeksu wyszukiwania, z magazynem tego, co kryją tokeny |
 | `output_sweep.py` | oznacza wymyślone tokeny i dane osobowe, które wprowadziła odpowiedź |
 
 ## Dodawanie detektora
