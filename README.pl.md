@@ -94,6 +94,10 @@ modelu, gdy imiona i nazwiska w nim zawarte oraz przywrócona odpowiedź liczą 
 
 Następnie użyj `default_guards()` z modelem albo `default_guards(with_ner=False)` bez niego.
 Inny model spaCy to kwestia jednego argumentu: `default_guards(spacy_model="pl_core_news_lg")`.
+Działają też nazwy pakietów skopiowane z pip (`pl-core-news-lg`). Model z lokalnego katalogu można
+podać jako ścieżkę; katalog musi zawierać `meta.json` i `config.cfg`. Brak pakietu albo katalogu
+z modelem jest zgłaszany już przy budowaniu detektorów, a sam model ładuje się przy pierwszym użyciu.
+Zainstalowany pakiet modelu ma pierwszeństwo przed lokalną ścieżką o tej samej nazwie.
 
 ## Z wiersza poleceń
 

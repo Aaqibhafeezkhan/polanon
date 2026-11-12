@@ -1,6 +1,10 @@
 """The facade someone meets right after pip install polanon: defaults, checks, blocking call."""
 
 import asyncio
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -112,6 +116,98 @@ def test_a_missing_model_names_the_command_that_installs_it(monkeypatch):
     )
     with pytest.raises(ModuleNotFoundError, match="spacy download pl_core_news_md"):
         default_guards()
+
+
+@pytest.mark.parametrize("model", ["pl_core_news_md", "pl-core-news-md"])
+def test_a_model_package_is_checked_and_loaded_by_its_import_name(monkeypatch, model):
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in {"spacy", "pl_core_news_md"} else None,
+    )
+    load = Mock(return_value=lambda text: SimpleNamespace(ents=[]))
+    monkeypatch.setitem(sys.modules, "spacy", SimpleNamespace(load=load))
+    guards = default_guards(spacy_model=model)
+    load.assert_not_called()
+    assert "<PESEL_1>" in Anonymizer(guards).anonymize_sync(TEXT).anonymized
+    load.assert_called_once_with("pl_core_news_md", exclude=["lemmatizer", "tagger"])
+
+
+@pytest.mark.parametrize("local_kind", ["directory", "file"])
+@pytest.mark.parametrize("model", [None, "pl-core-news-md"])
+def test_an_installed_model_takes_priority_over_a_same_named_path(
+    monkeypatch, tmp_path, local_kind, model
+):
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / (model or "pl_core_news_md")
+    if local_kind == "directory":
+        path.mkdir()
+    else:
+        path.write_text("not a model", encoding="utf-8")
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in {"spacy", "pl_core_news_md"} else None,
+    )
+    load = Mock(return_value=lambda text: SimpleNamespace(ents=[]))
+    monkeypatch.setitem(sys.modules, "spacy", SimpleNamespace(load=load))
+    guards = default_guards() if model is None else default_guards(spacy_model=model)
+    load.assert_not_called()
+    Anonymizer(guards).anonymize_sync(TEXT)
+    load.assert_called_once_with("pl_core_news_md", exclude=["lemmatizer", "tagger"])
+
+
+def test_a_missing_hyphenated_model_names_the_normalized_download(monkeypatch):
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name == "spacy" else None
+    )
+    with pytest.raises(ModuleNotFoundError, match="spacy download pl_core_news_md"):
+        default_guards(spacy_model="pl-core-news-md")
+
+
+@pytest.mark.parametrize("contents", ["missing", "file", "empty", "meta", "config"])
+def test_a_path_without_a_model_is_reported_when_guards_are_built(monkeypatch, tmp_path, contents):
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: object())
+    path = tmp_path / "synthetic-model"
+    if contents == "file":
+        path.write_text("not a model", encoding="utf-8")
+    elif contents != "missing":
+        path.mkdir()
+        if contents == "meta":
+            (path / "meta.json").write_text("{}", encoding="utf-8")
+        elif contents == "config":
+            (path / "config.cfg").write_text("", encoding="utf-8")
+    with pytest.raises(ModuleNotFoundError) as error:
+        default_guards(spacy_model=str(path))
+    assert f"no spaCy model at {path}" in str(error.value)
+    assert "spacy download" not in str(error.value)
+
+
+@pytest.mark.parametrize("model_path", ["synthetic-model", "synthetic_model", "./synthetic-model"])
+def test_a_model_path_is_preserved_and_loaded_lazily(monkeypatch, tmp_path, model_path):
+    monkeypatch.chdir(tmp_path)
+    path = Path(model_path)
+    path.mkdir()
+    (path / "meta.json").write_text("{}", encoding="utf-8")
+    (path / "config.cfg").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name == "spacy" else None
+    )
+    load = Mock(return_value=lambda text: SimpleNamespace(ents=[]))
+    monkeypatch.setitem(sys.modules, "spacy", SimpleNamespace(load=load))
+    guards = default_guards(spacy_model=model_path)
+    load.assert_not_called()
+    Anonymizer(guards).anonymize_sync(TEXT)
+    load.assert_called_once_with(path, exclude=["lemmatizer", "tagger"])
+
+
+def test_a_path_load_failure_does_not_suggest_downloading_the_path(monkeypatch, tmp_path):
+    from polanon.guards.ner import NerGuard
+
+    load = Mock(side_effect=OSError("missing model data"))
+    monkeypatch.setitem(sys.modules, "spacy", SimpleNamespace(load=load))
+    with pytest.raises(RuntimeError) as error:
+        NerGuard(str(tmp_path)).detect("Jan Kowalski", {"PERSON"})
+    assert f"no spaCy model at {tmp_path}" in str(error.value)
+    assert "spacy download" not in str(error.value)
 
 
 class WordGuard(Guard):

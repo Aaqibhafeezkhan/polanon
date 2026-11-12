@@ -158,6 +158,9 @@ alone.
 
 ### Fixed
 
+- **spaCy model setup errors are reported before the first request.** Package names copied from
+  pip, such as `pl-core-news-md`, load by their underscore spelling. A path without `meta.json`
+  and `config.cfg` is reported as missing a model, without an unusable download command.
 - **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
   as a name and half an address, and an address on an internationalised domain not at all.
   Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).

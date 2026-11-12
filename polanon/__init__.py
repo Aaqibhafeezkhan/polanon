@@ -28,6 +28,7 @@ identifiers.
 import importlib.util
 import re
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 
 from polanon._detection import custom_type_problem
 from polanon.allowlist import WELL_KNOWN_NAMES, Allowlist
@@ -134,13 +135,16 @@ def default_guards(
     Args:
         denylist: terms that must always be masked, as a list.
         with_ner: add the spaCy guard for places and the names no rule can see.
-        spacy_model: the spaCy model that guard loads on first use.
+        spacy_model: the installed spaCy model's package name (underscores or hyphens), or a
+            model directory. The directory must contain meta.json and config.cfg; the pipeline
+            itself loads on first use.
 
     Raises:
         TypeError: when `denylist` is a single string, which would be read letter by letter.
         NerModelUnavailableError: when `with_ner` is on and spaCy or the model is not installed.
             It is raised here rather than on the first text to mask, with the command that fixes
             it, and it is both a ModuleNotFoundError and a MaskingUnavailableError.
+            Also raised for a model directory without `meta.json` or `config.cfg`.
     """
     if isinstance(denylist, str):
         # The term itself stays out of the message: it is what the caller wants kept hidden.
@@ -166,12 +170,21 @@ def default_guards(
 
 def _require_spacy(spacy_model: str) -> None:
     """Fail now, with the command that fixes it, instead of on the first text to mask."""
-    hint = _NER_INSTALL.format(model=spacy_model)
+    from polanon.guards.ner import _model_reference
+
+    model = _model_reference(spacy_model)
+    hint = (
+        'pip install "polanon[ner]"; or call default_guards(with_ner=False)'
+        if isinstance(model, Path)
+        else _NER_INSTALL.format(model=model)
+    )
     if importlib.util.find_spec("spacy") is None:
         raise ModuleNotFoundError(f"the language model guard needs spaCy: {hint}")
-    # A model can also be loaded from a path, which find_spec cannot check; spaCy reports that one.
-    if spacy_model.isidentifier() and importlib.util.find_spec(spacy_model) is None:
-        raise ModuleNotFoundError(f"the spaCy model {spacy_model!r} is not installed: {hint}")
+    if isinstance(model, Path):
+        if not (model / "meta.json").is_file() or not (model / "config.cfg").is_file():
+            raise ModuleNotFoundError(f"no spaCy model at {model}")
+    elif importlib.util.find_spec(model) is None:
+        raise ModuleNotFoundError(f"the spaCy model {model!r} is not installed: {hint}")
 
 
 def ner_available(spacy_model: str = "pl_core_news_md") -> bool:

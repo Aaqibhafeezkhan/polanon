@@ -7,10 +7,12 @@ so it silently returns nothing. Talking to spaCy ourselves keeps the mapping exp
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import re
 import threading
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 from polanon.guards.base import Guard
@@ -367,6 +369,17 @@ def _cut(text: str, start: int, stop: int) -> int:
     return stop
 
 
+def _model_reference(spacy_model: str) -> str | Path:
+    """Normalize a package's pip spelling without rewriting a model directory's name."""
+    package = spacy_model.replace("-", "_")
+    path = Path(spacy_model)
+    if package.isidentifier() and (
+        importlib.util.find_spec(package) is not None or not path.exists()
+    ):
+        return package
+    return path
+
+
 class NerGuard(Guard):
     """Detects people, places and organisations with a spaCy pipeline."""
 
@@ -395,12 +408,14 @@ class NerGuard(Guard):
             import spacy
         except ImportError as exc:  # pragma: no cover - only without the dependency
             raise RuntimeError('spaCy is not installed. Run: pip install "polanon[ner]"') from exc
+        model = _model_reference(self.spacy_model)
         try:
-            nlp = spacy.load(self.spacy_model, exclude=["lemmatizer", "tagger"])
+            nlp = spacy.load(model, exclude=["lemmatizer", "tagger"])
         except OSError as exc:
+            if isinstance(model, Path):
+                raise RuntimeError(f"no spaCy model at {model}") from exc
             raise RuntimeError(
-                f"spaCy model {self.spacy_model!r} is missing. "
-                f"Run: python -m spacy download {self.spacy_model}"
+                f"spaCy model {model!r} is missing. Run: python -m spacy download {model}"
             ) from exc
         logger.info("spaCy NER ready (model=%s)", self.spacy_model)
         return nlp

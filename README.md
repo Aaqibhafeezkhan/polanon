@@ -88,6 +88,10 @@ and the restored answer matter as much as the numbers.
 
 Then use `default_guards()` with the model, or `default_guards(with_ner=False)` without it.
 Another spaCy model is one argument away: `default_guards(spacy_model="pl_core_news_lg")`.
+Package names copied from pip work too (`pl-core-news-lg`). A local model directory can be passed
+as a path; it must contain `meta.json` and `config.cfg`. Missing packages or model directories are
+reported when the guards are built, while the model itself loads on first use.
+An installed model package takes priority over a local path with the same name.
 
 ## From the command line
 
