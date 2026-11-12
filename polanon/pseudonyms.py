@@ -45,9 +45,6 @@ _MAX_DIGITS = 24
 #: Lengthenings tried before giving up; a third collision in a row means the key is broken.
 _LEVELS = 3
 
-#: Stands for the owner of a token the caller wrote as a placeholder, which no value may take.
-_PLACEHOLDER = "placeholder"
-
 
 class PseudonymCollisionError(RuntimeError):
     """Raised when a value collides with others at every length; the message names no value."""
@@ -170,8 +167,10 @@ class Pseudonyms:
             digits = self._digits + level * COLLISION_STEP
             number = int.from_bytes(self._digest(message, level), "big") % 10**digits
             token = f"<{label}_{number:0{digits}d}>"
-            owner = self._collisions.get(token) or taken(token)
-            if owner is None or owner == owner_of_value:
+            # The record and the caller's mapping must both leave the token to this value: a
+            # conversation may hold it for another value since before the record named an owner.
+            owners = (self._collisions.get(token), taken(token))
+            if all(owner is None or owner == owner_of_value for owner in owners):
                 return token
         raise PseudonymCollisionError(
             f"a {entity_type} value collides with another at {_LEVELS} lengths of its token, "
@@ -222,9 +221,11 @@ def owner_lookup(
 ) -> Callable[[str], str | None]:
     """Return a `taken` callback for :meth:`Pseudonyms.allocate` that reads a mapping.
 
-    A token the mapping holds belongs to the value it holds, and a token that stands for itself is
-    a placeholder the caller wrote, which no value may take. The mapping may grow between calls,
-    so only an answer that names an owner is kept.
+    A token the mapping holds belongs to the value it holds. A token that stands for itself is
+    token-shaped text the caller wrote, and a computed token equal to it is that value's own token
+    pasted back, such as a passage from the index quoted in a question: twelve digits of HMAC do
+    not come up by chance, so it does not hold the token against its value. The mapping may grow
+    between calls, so only an answer that names an owner is kept.
     """
     owners: dict[str, str] = {}
 
@@ -233,9 +234,9 @@ def owner_lookup(
             return owners[token]
         held = mapping.get(token)
         entity_type = type_of(token)
-        if held is None or entity_type is None:
+        if held is None or entity_type is None or held == token:
             return None
-        owner = _PLACEHOLDER if held == token else pseudonyms.fingerprint(held, entity_type)
+        owner = pseudonyms.fingerprint(held, entity_type)
         owners[token] = owner
         return owner
 

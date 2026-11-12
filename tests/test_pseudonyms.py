@@ -19,7 +19,6 @@ from polanon import (
     MockJudge,
     PseudonymCollisionError,
     Pseudonyms,
-    RegexGuard,
     default_guards,
 )
 from polanon._matching import type_of
@@ -300,17 +299,40 @@ def test_a_value_colliding_at_every_length_is_refused_without_naming_it():
     assert "50810112354" not in str(raised.value)
 
 
-def test_a_placeholder_the_caller_wrote_is_never_handed_to_a_value():
+def test_a_value_keeps_its_token_where_that_token_was_pasted_into_the_text():
+    """A passage from the index quoted in a question carries the token the value has anyway.
+
+    Taking that for a placeholder gave the value a longer token, and the search found nothing.
+    """
     pseudonyms = Pseudonyms(KEY)
-    token = pseudonyms.token("50810112354", "PESEL")
-    result = Anonymizer([RegexGuard()], pseudonyms=pseudonyms).anonymize_sync(
-        f"Szablon: {token}. PESEL 50810112354."
-    )
+    token = pseudonyms.token("Jan Kowalski", "PERSON")
+    anonymizer = stable()
+    pasted = f"Kontekst: Umowę podpisał {token}. Czy to Jan Kowalski?"
+    result = anonymizer.anonymize_sync(pasted)
+    assert result.anonymized == pasted.replace("Jan Kowalski", token)
+    assert result.mapping == {token: "Jan Kowalski"}
+    later = anonymizer.anonymize_sync("Co podpisał Jan Kowalski?", result.mapping)
+    assert tokens(later.anonymized) == [token]
+
+
+def test_a_placeholder_numbered_by_hand_is_never_handed_to_a_value():
+    result = stable().anonymize_sync("W polu <PESEL_1> wpisz PESEL 50810112354.")
     placeholder, value = tokens(result.anonymized)
-    assert placeholder == token
-    assert result.mapping[token] == token
-    assert value != token
+    assert placeholder == "<PESEL_1>"
+    assert result.mapping["<PESEL_1>"] == "<PESEL_1>"
     assert result.mapping[value] == "50810112354"
+
+
+def test_a_recorded_owner_does_not_take_a_token_the_conversation_holds_for_another_value():
+    """The record named the first value; the conversation had given the token to the second."""
+    first, second, token = colliding_pair(Pseudonyms(KEY, digits=6))
+    record = {token: Pseudonyms(KEY, digits=6).fingerprint(first, "PESEL")}
+    pseudonyms = Pseudonyms(KEY, digits=6, collisions=record)
+    anonymizer = Anonymizer([FixedValues(first)], enabled={"PESEL"}, pseudonyms=pseudonyms)
+    result = anonymizer.anonymize_sync(f"Numer {first}.", {token: second})
+    (masked,) = tokens(result.anonymized)
+    assert masked != token
+    assert Anonymizer.restore(result.anonymized, result.mapping) == f"Numer {first}."
 
 
 # --- the rest of the library keeps the tokens ---

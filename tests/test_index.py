@@ -213,6 +213,21 @@ def test_a_question_about_a_value_that_collides_finds_nothing_of_the_other():
     )
 
 
+def test_a_later_turn_of_a_conversation_that_holds_a_colliding_token_is_not_refused():
+    """The question gave the second value the token before the first was indexed under it."""
+    store = InMemoryMappingStore()
+    anonymizer, _ = short_tokens(store)
+    first, second, token = colliding_pair(Pseudonyms(KEY, digits=6))
+    asked = anonymizer.mask_query(f"Czyj jest numer {second}?", store)
+    assert token in asked.anonymized
+    anonymizer.index_chunks([f"Numer {first}."], store)
+    later = anonymizer.mask_query("A co dalej?", store, asked.mapping)
+    assert later.anonymized == "A co dalej?"
+    again = anonymizer.mask_query(f"A {first}?", store, asked.mapping)
+    assert token not in again.anonymized
+    assert Anonymizer.restore(again.anonymized, again.mapping) == f"A {first}?"
+
+
 def test_a_collision_inside_one_document_is_recorded_for_the_texts_after_it():
     store = InMemoryMappingStore()
     anonymizer, pseudonyms = short_tokens(store)

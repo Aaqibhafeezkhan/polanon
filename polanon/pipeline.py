@@ -53,8 +53,9 @@ class _TokenAllocator:
     mapping the caller already passes along.
 
     With `pseudonyms`, a new value's token is computed rather than counted, so it is the same in
-    every document and process. One that another value of the mapping, or a placeholder, already
-    holds is lengthened past it.
+    every document and process. One that another value of the mapping already holds is lengthened
+    past it. Token-shaped text equal to it is the value's own token written back, and takes the
+    value: a placeholder numbered by hand never has twelve digits that match an HMAC.
     """
 
     def __init__(
@@ -109,6 +110,9 @@ class _TokenAllocator:
             token = token_for(entity_type, number)
         for key in keys:
             self._by_value.setdefault(key, token)
+        if self._mapping.get(token) == token:
+            # The value's own stable token, written in the text before: it now stands for it.
+            self._mapping[token] = value
         # Another spelling of the value may hold the token already: the first one written stays.
         self._mapping.setdefault(token, value)
         return token

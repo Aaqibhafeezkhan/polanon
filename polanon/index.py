@@ -204,7 +204,10 @@ def mask_query(
     for _ in range(_ATTEMPTS):
         masker = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else anonymizer
         result = _mask(masker, text, dict(mapping or {}))
-        entries = _entries(pseudonyms, result.mapping)
+        # Tokens the conversation held before keep their values, collision or not: masking the
+        # question again cannot change them, and refusing every later turn would help nobody.
+        new = {t: v for t, v in result.mapping.items() if t not in (mapping or {})}
+        entries = _entries(pseudonyms, new)
         held = store.get(list(entries))
         if not _record_collisions(pseudonyms, entries, held):
             return result
