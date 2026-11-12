@@ -15,10 +15,18 @@ import dataclasses
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
-from haystack import Document, component, default_from_dict, default_to_dict
-from haystack.core.errors import SerializationError
-from haystack.dataclasses import ChatMessage, ChatRole, StreamingChunk
-from haystack.utils import Secret
+try:
+    from haystack import Document, component, default_from_dict, default_to_dict
+    from haystack.core.errors import SerializationError
+    from haystack.dataclasses import ChatMessage, ChatRole, StreamingChunk
+    from haystack.utils import Secret
+except ModuleNotFoundError as missing:  # pragma: no cover - the haystack job has it installed
+    if missing.name is None or missing.name.split(".")[0] != "haystack":
+        raise
+    raise ModuleNotFoundError(
+        'the Haystack components need Haystack 3: pip install "polanon[haystack]"',
+        name="haystack",
+    ) from None
 
 from polanon import (
     Anonymizer,
