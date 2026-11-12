@@ -152,6 +152,30 @@ is what lets a masked question find the masked passages, and it changes the risk
   token, so two people who share it are linked by it, as they are by the surname itself. A word
   that names no stored value, and a lone word in lowercase, are not masked this way.
 
+## Haystack pipelines
+
+The components in `polanon.integrations.haystack` keep the document store and the embeddings to
+masked text: tokens in the content and in every string of `meta`, an `id` computed from the masked
+text, and keyed fingerprints in place of the identifiers a splitter writes into `meta`, each a
+plain hash of an original text. A document with a `blob` or an embedding is refused. What the
+pipeline around them does is the application's part:
+
+- **Content tracing.** With `HAYSTACK_CONTENT_TRACING_ENABLED`, Haystack sends what every component
+  receives to the tracing backend, and the maskers receive the originals. It is off by default;
+  keep it off, or the tracer holds the documents and the questions in the clear.
+- **Failure snapshots.** A run that fails attaches a snapshot of the inputs to its
+  `PipelineRuntimeError`, and writes it to disk with `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`.
+  Do not log the snapshot. The error's message names what failed, not the values.
+- **What is not masked.** Numbers and dates in `meta` stay as they are, and so do the positions a
+  splitter records, which tell where a passage stood and how long it was, not what it said. Put
+  personal data in strings, as everywhere in this library.
+- **What comes out of `PolanonRestorer`.** Restored replies and documents are originals. Never
+  write them back to a document store or send them to a model.
+- **Order.** Masking after a splitter reads each passage alone, and a value cut in two by the
+  splitter may not be recognised. Mask whole documents, before the splitter.
+- **A saved pipeline** holds the name of the key's variable, never the key, and the mapping store
+  only as its own `to_dict` describes it.
+
 ## Residual risk to accept consciously
 
 Detection is imperfect, so the right mental model is "much less personal data leaves, not none".
