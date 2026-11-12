@@ -14,6 +14,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   masking with a `ValueError`. A new token still skips every token the mapping holds, so
   `<OSOBA_999999>` followed by a new person never hands out one token twice. Contributed by Sonike
   in [#24](https://github.com/boromat/polanon/pull/24).
+- **A spaCy model named as pip writes it**, such as `pl-core-news-md`, loads, and a model directory
+  without `meta.json` and `config.cfg` is reported when the guards are built, without a download
+  command that could not work. An installed model still wins over a file or folder of the same
+  name in the working directory. Contributed by Sonike in
+  [#27](https://github.com/boromat/polanon/pull/27).
 
 ## [0.3.2] - 2026-11-12
 
@@ -158,9 +163,6 @@ alone.
 
 ### Fixed
 
-- **spaCy model setup errors are reported before the first request.** Package names copied from
-  pip, such as `pl-core-news-md`, load by their underscore spelling. A path without `meta.json`
-  and `config.cfg` is reported as missing a model, without an unusable download command.
 - **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
   as a name and half an address, and an address on an internationalised domain not at all.
   Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).
