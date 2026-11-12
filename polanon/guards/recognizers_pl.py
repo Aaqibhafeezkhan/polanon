@@ -181,27 +181,36 @@ _NAME_PART = r"(?:[A-ZŁŚŻŹĆÓĄĘŃ][\w'\u2019-]*|\d{1,2}(?=\s+[A-ZŁŚŻŹ
 _TITLE = r"(?i:gen|ks|św|sw|prof|kard|marsz|płk|plk|abp|bp|bł|dr|mjr|kpt|ppor|por|hetm)\."
 #: A house number, optionally with a flat number: "43A", "12/4", "15 m. 3", "5 lok. 12".
 _HOUSE = r"\d+[A-Za-z]?(?:\s*/\s*\d+[A-Za-z]?)?(?:\s*(?:m|lok(?:al)?)\.?\s*\d+[A-Za-z]?)?"
+#: The most words a street's name takes, and the most titles in front of it: "Jana Pawła II",
+#: "Jana III Sobieskiego" and "gen. Józefa Bema" have three. The bound keeps every address rule
+#: linear: without it, each capitalised word of a long run started a street that ran to the end of
+#: the run, so "Ulica Ulica ..." or "Z Z ..." of 5,000 words took seconds.
+_STREET_WORDS = 8
+_TITLES = 3
+#: The words of a street's name after its first one: "Pawła II", "im. Jana", "pod Lipami".
+_MORE_STREET_WORDS = rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}"
 
 ADDRESS_PATTERN = re.compile(
     # The word boundary matters: without it the "al" at the end of "TOTAL" reads as "al." (aleja),
     # and an invoice line such as "TOTAL M0061 Catalyst 1" became an address cut mid-word.
     # PDF output and quick typing drop the space after the prefix's dot: "ul.Długa 5".
-    rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:{_TITLE}\s+)*{_NAME_PART}"
-    rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*\s+{_HOUSE}"
+    rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:{_TITLE}\s+){{0,{_TITLES}}}{_NAME_PART}"
+    rf"{_MORE_STREET_WORDS}\s+{_HOUSE}"
 )
 
-#: A street written without its prefix, as forms and CVs often do: "Długa 5 m. 4, 00-238
-#: Warszawa". The postcode right after it is what makes it an address; without one, a capitalised
-#: word and a number are a product and its version ("Windows 11") far more often than a street. The
-#: numbers are short, so "NIP 1234567890, 00-950" is not read as a street.
 #: A short house number of a street written without its prefix, with a flat number if any.
 _SHORT_HOUSE = (
     r"\d{1,4}[A-Za-z]?(?:[ \t]*/[ \t]*\d{1,4}[A-Za-z]?)?"
     r"(?:[ \t]*(?:m|lok(?:al)?)\.?[ \t]*\d{1,4}[A-Za-z]?)?(?!\d)"
 )
 
+#: A street written without its prefix, as forms and CVs often do: "Długa 5 m. 4, 00-238
+#: Warszawa". The postcode right after it is what makes it an address; without one, a capitalised
+#: word and a number are a product and its version ("Windows 11") far more often than a street. The
+#: numbers are short, so "NIP 1234567890, 00-950" is not read as a street.
 ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
-    rf"(?<![\w.]){_NAME_PART}(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*[ \t]+"
+    rf"(?<![\w.]){_NAME_PART}"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}[ \t]+"
     rf"{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
 )
 
@@ -211,7 +220,8 @@ ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
 #: postcode does above; "Windows 11 w Polsce" has neither. The number must not run on into a
 #: dotted number, so "Adres IP 10.0.0.1" is no street. See :func:`_locate_address`.
 _STREET_WITHOUT_PREFIX = (
-    rf"(?:{_TITLE}[ \t]+)*{_NAME_PART}(?:[ \t]+(?:{_NAME_PART}|{_TITLE}))*?"
+    rf"(?:{_TITLE}[ \t]+){{0,{_TITLES}}}{_NAME_PART}"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE})){{0,{_STREET_WORDS - 1}}}?"
     rf"[ \t]+(?P<house>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
 )
 ADDRESS_AFTER_LABEL_PATTERN = re.compile(

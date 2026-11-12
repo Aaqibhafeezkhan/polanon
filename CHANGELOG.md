@@ -40,6 +40,10 @@ describes. More is masked than under 0.3.2, so a text may carry more tokens, and
   Japczaka 17", "zam. Długa 5", "mieszka przy Długiej 5", and after "z", "na", "przy" or "do"
   with a town right after the number, "z Długiej 17 w Białymstoku". Both went out in clear.
   "Windows 11 w Polsce", "na Windows 11 w firmie" and "Excel 365 w biurze" stay as they are.
+- **An address is found in linear time** in a long run of capitalised words: each word started a
+  street that ran to the end of the run, so 5,000 words such as "Ulica Ulica ..." or "I I ..."
+  took several seconds, and ten times as many a hundred times longer. A street's name now takes
+  at most eight words and three titles, more than any Polish street needs.
 - **ZUS, Płatnik and the institutions staff name every day** are on `WELL_KNOWN_NAMES`: with the
   allowlist, "Jak to rozliczyć w ZUS?" and "zna program Płatnik" went out as `<FIRMA_1>`, since
   the language model reads them as organisations. Added: ZUS, PUE ZUS, eZUS, Płatnik, KRUS, NFZ,

@@ -122,6 +122,24 @@ def test_address_match_fails_fast_when_a_street_prefix_precedes_a_run_of_capital
     assert time.perf_counter() - started < 1.0
 
 
+@pytest.mark.parametrize(
+    "word",
+    [
+        "I",  # every capitalised word starts a street before a postcode
+        "Ulica",  # a street word, and a capitalised word of the street's name
+        "Al",
+        "Adres",  # an address label, and a word of a street's name
+        "Z",  # a preposition before a street, and a word of its name
+        "Do",
+    ],
+)
+def test_an_address_is_found_in_linear_time_in_a_long_run_of_capitalised_words(word):
+    """Each word started a street that ran to the end of the run: 5,000 words took seconds."""
+    started = time.perf_counter()
+    RegexGuard().detect(f"{word} " * 5000, {"ADDRESS"})
+    assert time.perf_counter() - started < 1.0
+
+
 def test_email_match_stays_linear_when_a_long_run_has_no_at_sign():
     """A pasted hex dump or base64 blob was rescanned from every one of its positions."""
     started = time.perf_counter()
