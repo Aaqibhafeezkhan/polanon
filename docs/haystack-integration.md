@@ -93,8 +93,8 @@ indexing.connect("embed", "write")
 The query pipeline puts `PolanonQueryMasker` first and `PolanonRestorer` after the generator. A
 complete example, which runs offline with Haystack's mock embedders and chat generator, is
 [examples/haystack_rag.py](https://github.com/boromat/polanon/blob/main/examples/haystack_rag.py).
-To load a saved pipeline, allow the module:
-`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"])`.
+To load a saved pipeline, allow this module and the module of your mapping store:
+`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack", "myapp.vault"])`.
 
 ### License
 

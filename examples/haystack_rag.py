@@ -127,7 +127,9 @@ def main() -> dict:
     indexing, asking = build(document_store, mappings)
 
     indexing.run({"mask": {"documents": DOCUMENTS}})
-    print("In the document store, tokens only:")
+    # Places need the language model (with_ner=True and the ner extra): with the rules alone,
+    # "w Gdańsku" stays as it is, as the output shows.
+    print("In the document store, masked:")
     for document in document_store.filter_documents():
         print("  ", document.content.strip(), "| author:", document.meta.get("author"))
 

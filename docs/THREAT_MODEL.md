@@ -156,9 +156,10 @@ is what lets a masked question find the masked passages, and it changes the risk
 
 The components in `polanon.integrations.haystack` keep the document store and the embeddings to
 masked text: tokens in the content and in every string of `meta`, an `id` computed from the masked
-text, and keyed fingerprints in place of the identifiers a splitter writes into `meta`, each a
-plain hash of an original text. A document with a `blob` or an embedding is refused. What the
-pipeline around them does is the application's part:
+text, and in place of every string of `meta` shaped like a SHA-256, which is what splitters write
+there and a plain hash of an original text, the `id` of its masked twin or a keyed fingerprint. A
+document with a `blob` or an embedding is refused. What the pipeline around them does is the
+application's part:
 
 - **Content tracing.** With `HAYSTACK_CONTENT_TRACING_ENABLED`, Haystack sends what every component
   receives to the tracing backend, and the maskers receive the originals. It is off by default;
@@ -172,7 +173,12 @@ pipeline around them does is the application's part:
 - **What comes out of `PolanonRestorer`.** Restored replies and documents are originals. Never
   write them back to a document store or send them to a model.
 - **Order.** Masking after a splitter reads each passage alone, and a value cut in two by the
-  splitter may not be recognised. Mask whole documents, before the splitter.
+  splitter may not be recognised. Mask whole documents, before the splitter, and split by words,
+  sentences or passages: a splitter that counts characters cuts tokens in two.
+- **Two documents that differ only in a value written differently**, such as "Jan Kowalski" and
+  "JAN KOWALSKI", mask to one text and one `id`, and a writer keeps one of them.
+- **An `id` you choose** is masked like text and stays in the store; keep personal data out of it
+  where you can.
 - **A saved pipeline** holds the name of the key's variable, never the key, and the mapping store
   only as its own `to_dict` describes it.
 

@@ -366,12 +366,16 @@ is the same with OpenAI's embedder and model: it is paid, so the tests only buil
 **Mask first.** The document masker comes before the splitter, so a whole document is read and a
 company or an address is masked where it stands: cut at full stops first, "Firmą Kot Sp. z o.o."
 fell apart and went out unmasked. Passages that come split already are masked together when they
-share a `source_id`.
+name one source in `source_id`, `parent_id` or `__parent_id`. Split by word, sentence, period or
+passage: a splitter that counts characters cuts tokens in two, and a half matches nothing.
 
 **Nothing in the document store names a value.** The masked documents are new ones: tokens in the
-content and in every string of `meta`, and an `id` computed from the masked text. A document's
-`id` is a plain SHA-256 of its text, so the identifiers a splitter writes into `meta` are replaced
-too. What the tokens stand for goes to the mapping store only, never into `meta`. A document with
+content and in every string of `meta`, nested keys and the members of sets included. A document's
+`id` is a plain SHA-256 of its text, so every string of `meta` shaped like one, which is what
+splitters write there, points to the masked twin of its document or becomes a keyed fingerprint.
+An `id` Haystack computed is computed again from the masked document; one you chose is masked like
+text and kept, so upserts and deleting by `id` still work. What the tokens stand for goes to the
+mapping store only, never into `meta`. A document with
 a `blob` or an embedding is refused, since both were made from the original. The tests check every
 document in the store, and the file it saves, for each original value.
 
@@ -386,8 +390,8 @@ never end up in a saved pipeline.
 **Saving a pipeline.** The key is a Haystack `Secret`, and a saved pipeline holds the name of its
 variable only. A mapping store is saved through its own `to_dict`, which should say where it
 connects and never what it holds; `InMemoryMappingStore` has none, so a pipeline with it is built
-in code. Haystack 3 loads classes from its own modules only:
-`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"])`.
+in code. Haystack 3 loads classes from its own modules only, so allow this one and your store's:
+`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack", "myapp.vault"])`.
 
 **Keep content tracing off.** With `HAYSTACK_CONTENT_TRACING_ENABLED`, Haystack records what every
 component receives, and the masker receives the originals. A run that fails keeps its inputs in

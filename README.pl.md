@@ -380,12 +380,16 @@ to samo z embedderem i modelem OpenAI: jest płatny, więc testy tylko go buduj�
 **Najpierw maskowanie.** Maskownik dokumentów stoi przed splitterem, więc czyta cały dokument i
 maskuje firmę czy adres tam, gdzie stoją: pocięta najpierw na kropkach „Firmą Kot Sp. z o.o.”
 rozpadła się i poszła niezamaskowana. Fragmenty, które przychodzą już pocięte, są maskowane razem,
-gdy mają wspólne `source_id`.
+gdy wskazują jedno źródło w `source_id`, `parent_id` albo `__parent_id`. Tnij po słowach, zdaniach,
+kropkach albo akapitach: splitter liczący znaki przecina tokeny na pół, a połówka niczego nie trafia.
 
 **Nic w magazynie dokumentów nie nazywa wartości.** Zamaskowane dokumenty są nowe: tokeny w treści
-i w każdym tekście `meta`, a `id` liczone z zamaskowanego tekstu. `id` dokumentu to zwykły SHA-256
-jego tekstu, więc identyfikatory, które splitter zapisuje w `meta`, też są zastępowane. To, co
-oznaczają tokeny, trafia wyłącznie do magazynu mapowań, nigdy do `meta`. Dokument z `blob` albo z
+i w każdym tekście `meta`, także w kluczach zagnieżdżonych słowników i w elementach zbiorów. `id`
+dokumentu to zwykły SHA-256 jego tekstu, więc każdy napis w `meta` w tym kształcie, czyli to, co
+zapisują tam splittery, wskazuje na zamaskowany odpowiednik swojego dokumentu albo staje się
+odciskiem z kluczem. `id` policzone przez Haystacka jest liczone od nowa z zamaskowanego dokumentu, a
+nadane przez ciebie jest maskowane jak tekst i zostaje, więc upsert i usuwanie po `id` dalej działają.
+To, co oznaczają tokeny, trafia wyłącznie do magazynu mapowań, nigdy do `meta`. Dokument z `blob` albo z
 embeddingiem jest odrzucany, bo oba powstały z oryginału. Testy sprawdzają każdy dokument w
 magazynie i zapisany przez niego plik pod kątem każdej oryginalnej wartości.
 
@@ -401,8 +405,8 @@ potoku.
 **Zapisywanie potoku.** Klucz to `Secret` Haystacka, a zapisany potok zawiera tylko nazwę jego
 zmiennej. Magazyn mapowań zapisuje się przez własne `to_dict`, które powinno mówić, dokąd się łączy,
 a nigdy, co przechowuje; `InMemoryMappingStore` go nie ma, więc potok z nim budujesz w kodzie.
-Haystack 3 wczytuje klasy tylko z własnych modułów:
-`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"])`.
+Haystack 3 wczytuje klasy tylko z własnych modułów, więc dopuść ten moduł i moduł swojego magazynu:
+`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack", "myapp.vault"])`.
 
 **Content tracing zostaw wyłączony.** Przy `HAYSTACK_CONTENT_TRACING_ENABLED` Haystack zapisuje
 to, co dostaje każdy komponent, a maskownik dostaje oryginały. Nieudane uruchomienie zachowuje swoje

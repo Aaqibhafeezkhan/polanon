@@ -7,8 +7,9 @@ question masked with the same key meets the same tokens. What each token stands 
 into a document's ``meta``. The answer of the generator and the documents found are restored for
 the reader, also while the answer streams.
 
-Pipelines built from these components in code need nothing more. To load one from YAML, allow the
-module: ``Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"])``.
+Pipelines built from these components in code need nothing more. To load one from YAML, allow
+this module and the module of the mapping store:
+``Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack", "myapp.vault"])``.
 """
 
 import dataclasses
