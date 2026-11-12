@@ -26,6 +26,14 @@ All notable changes to this project are recorded here. The format follows
   surname written alone, which no rule reads and the store keeps for every indexed person. `mask_chunks`, `stored_mapping`
   and `tokens_in` mask without a store and restore found passages and answers, also while they
   stream; each passage also comes with its mapping as written, to restore it exactly.
+- **Haystack 3 components**, with `pip install "polanon[haystack]"`: `PolanonDocumentMasker` masks
+  documents before the splitter and the embedder of an indexing pipeline, `PolanonQueryMasker`
+  gives a question the documents' tokens, `PolanonRestorer` restores the replies and the documents
+  found, and `PolanonStreamRestorer` restores a streamed answer as a streaming callback. Nothing
+  that names a value reaches the document store: not the content, not `meta`, and no `id` that is
+  a plain hash of an original text. What the tokens stand for goes to the application's mapping
+  store only. The key is a Haystack `Secret`, read from `POLANON_KEY` and saved by name only.
+  `examples/haystack_rag.py` runs offline; `examples/haystack_openai.py` uses OpenAI and is paid.
 
 ### Fixed
 
