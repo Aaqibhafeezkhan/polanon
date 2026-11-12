@@ -2,7 +2,8 @@
 
 All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
-[semantic versioning](https://semver.org/spec/v2.0.0.html).
+[semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
+only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 

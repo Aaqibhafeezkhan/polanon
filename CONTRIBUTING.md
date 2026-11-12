@@ -56,3 +56,12 @@ Subclass `Guard`, return `Span`s in original-text coordinates and respect the `e
 README's *Adding a detector* section has a complete example. Score 1.0 for what a checksum, a label
 or an official format vouches for and 0.85 for a statistical guess, and add the type to
 `polanon/policy.py` if it should be built in.
+
+## Version numbers
+
+Until 1.0 the second number goes up only when something that worked stops working the same way: a
+public name or signature that changes or goes away, a Python version that is dropped, or a new
+scheme of stable pseudonyms, which gives an index built before other tokens than the questions
+after it. New features and fixes go out under the third number, also when a fix changes what is
+masked, since that is what it is for. Each release says in `CHANGELOG.md` which of these it is.
+1.0.0 comes once the public API has settled.
