@@ -341,7 +341,9 @@ class Anonymizer:
         """
         return mask_chunks(self, chunks, mapping)
 
-    def index_chunks(self, chunks: str | Sequence[str], store: MappingStore) -> MaskedChunks:
+    def index_chunks(
+        self, chunks: str | Sequence[str], store: MappingStore, *, lookup: bool = True
+    ) -> MaskedChunks:
         """Mask a document for a search index, and put what its tokens hide into `store`.
 
         It needs stable tokens (``pseudonyms=``), so a question masked later finds the same ones.
@@ -352,6 +354,10 @@ class Anonymizer:
         Args:
             chunks: the passages of the document, in order, or the document as one str.
             store: the application's store of what tokens hide, kept apart from the index.
+            lookup: also mask the names the store already holds a token for, such as a surname
+                that stands alone here and was masked in full in another document. It asks the
+                store once for every run of up to four words; pass False for a store too slow
+                for that.
 
         Returns:
             The masked passages for the embedder and the index, and the mapping of each as written
@@ -363,10 +369,15 @@ class Anonymizer:
             PseudonymCollisionError: when collisions keep coming back, which a working key and a
                 store shared by every process do not cause.
         """
-        return index_chunks(self, chunks, store)
+        return index_chunks(self, chunks, store, lookup=lookup)
 
     def mask_query(
-        self, text: str, store: MappingStore, mapping: dict[str, str] | None = None
+        self,
+        text: str,
+        store: MappingStore,
+        mapping: dict[str, str] | None = None,
+        *,
+        lookup: bool = True,
     ) -> AnonymizationResult:
         """Mask a question to a search index with the tokens the documents got.
 
@@ -377,12 +388,14 @@ class Anonymizer:
             text: the question.
             store: the store the documents were indexed into.
             mapping: token -> original value from earlier turns of the conversation.
+            lookup: also mask the names the store holds a token for, such as "Co podpisał
+                Kowalczyk?", where no rule reads the surname alone.
 
         Raises:
             MaskingUnavailableError: when masking fails; nothing of the question may be sent.
             ValueError: without pseudonyms, or with a stage-2 judge.
         """
-        return mask_query(self, text, store, mapping)
+        return mask_query(self, text, store, mapping, lookup=lookup)
 
     def turn(
         self,

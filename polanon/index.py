@@ -19,11 +19,14 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from polanon import _canonical
 from polanon._canonical import base_form
-from polanon._matching import type_of
+from polanon._matching import Ranges, type_of
+from polanon._view import detection_view
+from polanon.guards.base import Guard
 from polanon.policy import TOKEN_PATTERN
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
-from polanon.types import AnonymizationResult, MaskingUnavailableError
+from polanon.types import AnonymizationResult, MaskingUnavailableError, Span
 
 if TYPE_CHECKING:
     from polanon import Anonymizer
@@ -32,6 +35,14 @@ _TOKEN_RE = re.compile(TOKEN_PATTERN)
 
 #: Masking passes tried when the store reports collisions; each pass settles every one it reports.
 _ATTEMPTS = 3
+
+#: The types a text is looked up in the store for. Identifiers have checksums, labels and formats
+#: the rules read anyway; a name in a question often has nothing but the store to go by.
+_LOOKED_UP = ("PERSON", "ORG", "LOCATION")
+#: The longest run of words looked up as one value.
+_LONGEST = 4
+_WORD = re.compile(r"[^\W\d_]+(?:['\u2019-][^\W\d_]+)*")
+_GAP = re.compile(r"[ \t\u00a0]+")
 
 
 @dataclass(frozen=True)
@@ -158,13 +169,18 @@ def mask_chunks(
 
 
 def index_chunks(
-    anonymizer: Anonymizer, chunks: str | Sequence[str], store: MappingStore
+    anonymizer: Anonymizer,
+    chunks: str | Sequence[str],
+    store: MappingStore,
+    *,
+    lookup: bool = True,
 ) -> MaskedChunks:
     """Mask a document for an index and store its tokens; see :meth:`Anonymizer.index_chunks`."""
     pseudonyms = _pseudonyms(anonymizer, "index_chunks")
     texts = _chunks(chunks)
     for _ in range(_ATTEMPTS):
-        masked = mask_chunks(anonymizer, texts)
+        masker = _with_store_hits(anonymizer, pseudonyms, texts, store) if lookup else anonymizer
+        masked = mask_chunks(masker, texts)
         entries = _entries(pseudonyms, masked.mapping)
         held = store.add(entries)
         if not _record_collisions(pseudonyms, entries, held):
@@ -178,13 +194,16 @@ def mask_query(
     text: str,
     store: MappingStore,
     mapping: Mapping[str, str] | None = None,
+    *,
+    lookup: bool = True,
 ) -> AnonymizationResult:
     """Mask a question to an index; see :meth:`Anonymizer.mask_query`."""
     pseudonyms = _pseudonyms(anonymizer, "mask_query")
     if not isinstance(text, str):
         raise TypeError(f"mask_query takes a str, not {type(text).__name__}")
     for _ in range(_ATTEMPTS):
-        result = _mask(anonymizer, text, dict(mapping or {}))
+        masker = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else anonymizer
+        result = _mask(masker, text, dict(mapping or {}))
         entries = _entries(pseudonyms, result.mapping)
         held = store.get(list(entries))
         if not _record_collisions(pseudonyms, entries, held):
@@ -289,3 +308,79 @@ def _record_local_collisions(pseudonyms: Pseudonyms, mapping: Mapping[str, str])
         owner = mapping.get(expected)
         if expected != token and owner is not None and owner != expected:
             pseudonyms.record_collision(expected, pseudonyms.fingerprint(owner, entity_type))
+
+
+class _StoreHits(Guard):
+    """Reports the values a text names that the mapping store already holds a token for."""
+
+    name = "mapping_store"
+
+    def __init__(self, hits: Mapping[str, list[Span]]) -> None:
+        self._hits = hits
+
+    def detect(self, text: str, enabled: set[str]) -> list[Span]:
+        """Return the hits found in this text, whatever types are enabled: they are known values."""
+        return list(self._hits.get(text, ()))
+
+
+def _with_store_hits(
+    anonymizer: Anonymizer, pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
+) -> Anonymizer:
+    """Return the anonymizer with one more guard: the values of `texts` the store knows.
+
+    A surname written alone, "Co podpisał Kowalczyk?", is a name no rule reads, and a question
+    that sent it in the clear also found nothing. Its token is computed for every run of up to four
+    words that could be a name, and the ones the store holds for the same value are masked like
+    any detection, so the question gets the token the documents have. A capitalised word alone
+    counts only when it is no bare first name, as a lowercase one never does.
+    """
+    from polanon import Anonymizer as Facade  # the facade imports this module
+
+    wanted: dict[str, list[tuple[str, int, int, str]]] = {}
+    for text in texts:
+        view = detection_view(text)
+        seen = text if view is None else view.text
+        for start, end in _candidates(seen):
+            for entity_type in _LOOKED_UP:
+                token = pseudonyms.token(seen[start:end], entity_type)
+                wanted.setdefault(token, []).append((seen, start, end, entity_type))
+    held = store.get(list(wanted))
+    hits: dict[str, list[Span]] = {}
+    for token, entry in held.items():
+        for seen, start, end, entity_type in wanted.get(token, ()):
+            if pseudonyms.fingerprint(seen[start:end], entity_type) == entry.fingerprint:
+                hits.setdefault(seen, []).append(
+                    Span(start, end, entity_type, 0.9, _StoreHits.name)
+                )
+    if not hits:
+        return anonymizer
+    return Facade(
+        [*anonymizer.guards, _StoreHits(hits)],
+        enabled=anonymizer.enabled,
+        allowlist=anonymizer.allowlist,
+        pseudonyms=anonymizer.pseudonyms,
+    )
+
+
+def _candidates(text: str) -> list[tuple[int, int]]:
+    """Return every run of one to four words of `text` that could be a name, outside its tokens."""
+    tokens = Ranges(match.span() for match in _TOKEN_RE.finditer(text))
+    words = [
+        match for match in _WORD.finditer(text) if not tokens.overlaps(match.start(), match.end())
+    ]
+    runs: list[tuple[int, int]] = []
+    for first, word in enumerate(words):
+        for last in range(first, min(first + _LONGEST, len(words))):
+            gap = text[words[last - 1].end() : words[last].start()]
+            if last > first and _GAP.fullmatch(gap) is None:
+                break
+            if last > first or _could_be_named_alone(word.group(0)):
+                runs.append((word.start(), words[last].end()))
+    return runs
+
+
+def _could_be_named_alone(word: str) -> bool:
+    """Whether one word on its own could be a value: capitalised, and no bare first name."""
+    if len(word) < 3 or not word[0].isupper():
+        return False
+    return bool(_canonical._surname(word)) or not _canonical._first_name(word)

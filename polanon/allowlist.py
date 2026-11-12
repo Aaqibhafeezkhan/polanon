@@ -32,8 +32,9 @@ from polanon.types import Span
 #: Entity types an allowlist may remove. Identifiers are absent on purpose.
 NAME_TYPES = frozenset({"PERSON", "ORG", "LOCATION", "OTHER"})
 
-#: Guards whose detections are never removed: what somebody asked to mask stays masked.
-PROTECTED_SOURCES = frozenset({"denylist"})
+#: Guards whose detections are never removed: what somebody asked to mask stays masked, and so does
+#: a value the mapping store of an index already holds a token for.
+PROTECTED_SOURCES = frozenset({"denylist", "mapping_store"})
 
 #: Guards whose people are never removed either, because they report a person only on evidence. A
 #: brand a statistical model mistakes for a person is still released.

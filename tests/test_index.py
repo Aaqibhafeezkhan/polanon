@@ -309,3 +309,99 @@ def test_a_placeholder_in_a_passage_stands_for_itself_and_is_not_stored():
     assert Anonymizer.restore(masked.texts[0], masked.mappings[0]) == (
         "Szablon: <PESEL_1>. Klient Jan Kowalski."
     )
+
+
+# --- names the store knows ---
+
+APPLICATION = ["Wniosek złożył Tomasz Kowalczyk. Kowalczyk prosi o szybką odpowiedź."]
+
+
+def indexed():
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(APPLICATION, store)
+    return anonymizer, store, Pseudonyms(KEY).token("Kowalczyk", "PERSON")
+
+
+@pytest.mark.parametrize(
+    ("question", "masked"),
+    [
+        ("Co podpisał Kowalczyk?", "Co podpisał {}?"),
+        ("Umowy Kowalczyka z 2025 roku", "Umowy {} z 2025 roku"),
+        ("Czy Kowalczykiem ktoś się zajął?", "Czy {} ktoś się zajął?"),
+    ],
+)
+def test_a_surname_alone_in_a_question_gets_the_token_the_store_holds(question, masked):
+    """No rule reads a lone surname: without the store it went out and found nothing."""
+    anonymizer, store, surname = indexed()
+    assert anonymizer.mask_query(question, store).anonymized == masked.format(surname)
+    assert anonymizer.mask_query(question, store, lookup=False).anonymized == question
+
+
+def test_a_surname_alone_in_another_document_is_masked_through_the_store():
+    anonymizer, store, surname = indexed()
+    later = anonymizer.index_chunks(["Kowalczyk dzwonił w sprawie terminu."], store)
+    assert later.texts == [f"{surname} dzwonił w sprawie terminu."]
+    alone = anonymizer.index_chunks(["Kowalczyk dzwonił."], store, lookup=False)
+    assert alone.texts == ["Kowalczyk dzwonił."]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "co wiemy o kowalczyku",  # a lowercase word alone is never read as a name
+        "Kowalczykowska pisała",  # another word that starts the same way
+    ],
+)
+def test_the_store_is_not_asked_about_words_that_are_no_names_of_its_values(question):
+    anonymizer, store, _ = indexed()
+    assert anonymizer.mask_query(question, store).anonymized == question
+
+
+def test_a_first_name_alone_is_not_looked_up():
+    """Every Anna would share one token with the one Anna somebody wrote alone once."""
+    store = InMemoryMappingStore()
+    pseudonyms = Pseudonyms(KEY)
+    store.add(
+        {
+            pseudonyms.token("Anna", "PERSON"): StoredValue(
+                "Anna", pseudonyms.fingerprint("Anna", "PERSON")
+            )
+        }
+    )
+    plain = Anonymizer([RegexGuard()], pseudonyms=pseudonyms)
+    assert plain.mask_query("Anna pisała wczoraj.", store).anonymized == "Anna pisała wczoraj."
+
+
+def test_a_stored_value_is_masked_even_where_the_allowlist_would_release_it():
+    """A client masked through known= stays masked in a question that names it alone."""
+    from polanon import Allowlist
+
+    store = InMemoryMappingStore()
+    pseudonyms = Pseudonyms(KEY)
+    token = pseudonyms.token("Orange", "ORG")
+    store.add({token: StoredValue("Orange", pseudonyms.fingerprint("Orange", "ORG"))})
+    anonymizer = Anonymizer(
+        default_guards(with_ner=False), allowlist=Allowlist(["Orange"]), pseudonyms=pseudonyms
+    )
+    assert anonymizer.mask_query("Faktura dla Orange", store).anonymized == f"Faktura dla {token}"
+
+
+def test_a_token_the_store_holds_for_another_value_is_no_hit():
+    store = InMemoryMappingStore()
+    pseudonyms = Pseudonyms(KEY)
+    store.add({pseudonyms.token("Kowalczyk", "PERSON"): StoredValue("Nowak", "someone else")})
+    plain = Anonymizer([RegexGuard()], pseudonyms=pseudonyms)
+    assert plain.mask_query("Co podpisał Kowalczyk?", store, lookup=True).anonymized == (
+        "Co podpisał Kowalczyk?"
+    )
+
+
+def test_a_run_of_words_broken_by_punctuation_is_not_looked_up_as_one_value():
+    store = InMemoryMappingStore()
+    pseudonyms = Pseudonyms(KEY)
+    token = pseudonyms.token("Kot Nowak", "ORG")
+    store.add({token: StoredValue("Kot Nowak", pseudonyms.fingerprint("Kot Nowak", "ORG"))})
+    plain = Anonymizer([RegexGuard()], pseudonyms=pseudonyms)
+    assert plain.mask_query("Firma Kot Nowak", store).anonymized == f"Firma {token}"
+    assert plain.mask_query("Kot. Nowak", store).anonymized == "Kot. Nowak"
