@@ -128,6 +128,36 @@ def test_credential_is_masked_when_introduced_by_an_everyday_phrase(text, secret
 @pytest.mark.parametrize(
     ("text", "secret"),
     [
+        ("Hasło administratora: Zima2025!Lod", "Zima2025!Lod"),
+        ("hasło użytkownika admin: Zima2025!Lod", "Zima2025!Lod"),
+        ("Hasło do panelu klienta: Zima2025!Lod", "Zima2025!Lod"),
+        ("PIN karty firmowej: 4321", "4321"),
+    ],
+)
+def test_a_password_named_by_one_or_two_words_before_the_colon_is_masked(text, secret):
+    """Only "do", "dla" or "od" and one word could stand there, so the value went out in clear."""
+    assert masked(text) == [secret]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Hasło administratora zostało zmienione.",
+        "Hasło administratora wygasa w piątek, szczegóły: w mailu",
+        "Hasło administratora: zmienione wczoraj przez dział IT.",
+        "Hasło ważne do: 2026-05-31",
+        "Hasło zmieniono o: 14:30",
+        "Hasło użytkownika\nadmin: Zima2025!Lod",
+    ],
+)
+def test_words_after_a_named_password_stay_when_they_are_not_a_password(text):
+    """With words before the colon the label is less certain, so the value must look like one."""
+    assert masked(text) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
         ("password = 'correct horse battery 7'", "correct horse battery 7"),
         ('DB_PASSWORD="Ala ma kota 2026"', "Ala ma kota 2026"),
         ('hasło: "Zima 2026!"', "Zima 2026!"),

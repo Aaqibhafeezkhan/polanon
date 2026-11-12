@@ -19,6 +19,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   command that could not work. An installed model still wins over a file or folder of the same
   name in the working directory. Contributed by Sonike in
   [#27](https://github.com/boromat/polanon/pull/27).
+- **A password named by a word or two before its colon**, "Hasło administratora: Zima2025!Lod",
+  "hasło użytkownika admin:", "Hasło do panelu klienta:", is masked: only "do", "dla" or "od" and
+  one word could stand there, so the value went out in clear. With words in between, the value
+  must look like a password, so "Hasło administratora zostało zmienione." and a date after "Hasło
+  ważne do:" stay as they are.
 
 ## [0.3.2] - 2026-11-12
 

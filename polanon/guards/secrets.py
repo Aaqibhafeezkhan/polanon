@@ -94,6 +94,16 @@ _LABELLED = re.compile(
     + _VALUE.format(stop=",;:", shortest=6)
 )
 
+#: A credential named by one or two words of the same line before its colon: "Hasło
+#: administratora:", "hasło użytkownika admin:", "Hasło do panelu klienta:". Those words could
+#: also be a sentence that reaches a colon later, so the value must look like a password, and not
+#: like the date or time such a sentence ends in, "Hasło ważne do: 2026-05-31"; the line break
+#: and the word count keep the label from running into prose.
+_NAMED_ASSIGNMENT = re.compile(
+    rf"(?i)(?<![A-Za-z0-9])(?:{_CREDENTIAL_LABELS})(?:[ \t]+(?:do|dla|od))?"
+    r"(?:[ \t]+[^\W\d_][\w-]{0,19}){1,2}[ \t]*:[ \t]*" + _VALUE.format(stop="", shortest=4)
+)
+
 #: A PIN is four to eight digits, shorter than any other labelled secret, so it gets its own rule:
 #: "PIN 4321", "PIN do karty: 4321", "kod PIN to 4321".
 _PIN = re.compile(
@@ -110,6 +120,15 @@ def _looks_like_a_secret(value: str) -> bool:
     almost without exception; a word in a sentence does not.
     """
     return any(character.isdigit() or not character.isalnum() for character in value)
+
+
+#: A date or a time of day, written with dashes, dots, slashes or colons.
+_DATE_OR_TIME = re.compile(r"\d{1,4}(?:[-./:]\d{1,4}){1,2}")
+
+
+def _looks_like_a_named_secret(value: str) -> bool:
+    """Return whether the value after "Hasło administratora:" is the password, not a date."""
+    return _looks_like_a_secret(value) and _DATE_OR_TIME.fullmatch(value) is None
 
 
 def _looks_like_a_token(value: str) -> bool:
@@ -132,6 +151,7 @@ _VALUE_RULES: tuple[tuple[re.Pattern[str], float, Callable[[str], bool] | None],
     (_BEARER, 1.0, _looks_like_a_token),
     (_BASIC_AUTH, 1.0, None),
     (_ASSIGNMENT, 0.9, None),
+    (_NAMED_ASSIGNMENT, 0.9, _looks_like_a_named_secret),
     (_PIN, 0.9, None),
     (_LABELLED, 0.88, _looks_like_a_secret),
 )
