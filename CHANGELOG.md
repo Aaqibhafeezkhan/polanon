@@ -36,6 +36,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   Japczaka 17", "zam. Długa 5", "mieszka przy Długiej 5", and after "z", "na", "przy" or "do"
   with a town right after the number, "z Długiej 17 w Białymstoku". Both went out in clear.
   "Windows 11 w Polsce", "na Windows 11 w firmie" and "Excel 365 w biurze" stay as they are.
+- **ZUS, Płatnik and the institutions staff name every day** are on `WELL_KNOWN_NAMES`: with the
+  allowlist, "Jak to rozliczyć w ZUS?" and "zna program Płatnik" went out as `<FIRMA_1>`, since
+  the language model reads them as organisations. Added: ZUS, PUE ZUS, eZUS, Płatnik, KRUS, NFZ,
+  GUS, KSeF, ePUAP, CEIDG and PFRON. The list releases names only, so no identifier is unmasked,
+  and "pani Płatnik" stays a person.
 
 ## [0.3.2] - 2026-11-12
 

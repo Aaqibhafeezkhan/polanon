@@ -580,8 +580,9 @@ from polanon import WELL_KNOWN_NAMES, Allowlist, Anonymizer, default_guards
 anonymizer = Anonymizer(default_guards(), allowlist=Allowlist(WELL_KNOWN_NAMES))
 ```
 
-Jednowyrazowa nazwa pasuje też do swoich polskich form fleksyjnych („Facebooku”, „Canvie”).
-Odrzucane są tylko wykrycia nazw i tylko wtedy, gdy każde ich słowo jest na liście; identyfikatory,
+`WELL_KNOWN_NAMES` zawiera platformy i narzędzia biurowe, a także urzędy i programy do rozliczeń,
+takie jak ZUS, Płatnik, NFZ czy KSeF. Jednowyrazowa nazwa pasuje też do swoich polskich form
+fleksyjnych („Facebooku”, „Canvie”, „ZUS-ie”). Odrzucane są tylko wykrycia nazw i tylko wtedy, gdy każde ich słowo jest na liście; identyfikatory,
 wpisy z denylisty i wartości zamaskowane już wcześniej w rozmowie pozostają zamaskowane.
 
 ## Z czego się składa

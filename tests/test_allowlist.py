@@ -218,6 +218,53 @@ async def test_the_polish_model_leaves_a_marketing_teams_tools_alone():
     assert (await anonymizer.anonymize(text)).anonymized == text
 
 
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        "ZUS",
+        "ZUS-ie",
+        "ZUS-u",
+        "PUE ZUS",
+        "Płatnik",
+        "Płatniku",
+        "Płatnika",
+        "KRUS",
+        "NFZ",
+        "GUS",
+        "KSeF",
+        "KSeF-ie",
+        "ePUAP",
+        "CEIDG",
+        "PFRON",
+    ],
+)
+def test_an_institution_or_a_program_people_file_through_is_allowed(fragment):
+    """ "Jak to rozliczyć w ZUS?" went out as "<FIRMA_1>", and so did the ZUS program Płatnik."""
+    assert PLATFORMS.allows(fragment)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _model_available(), reason="pl_core_news_md is not installed")
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Jak to rozliczyć w ZUS?",
+        "Księgowa zna program Płatnik.",
+        "Wyślij to przez PUE ZUS, a kopię zgłoś do NFZ i KRUS.",
+        "Fakturę wystaw w KSeF, dane sprawdź w CEIDG.",
+    ],
+)
+async def test_the_polish_model_leaves_institutions_and_their_programs_alone(text):
+    anonymizer = Anonymizer(default_guards(), allowlist=PLATFORMS)
+    assert (await anonymizer.anonymize(text)).anonymized == text
+
+
+async def test_a_person_named_like_an_allowed_program_stays_masked():
+    anonymizer = Anonymizer(default_guards(with_ner=False), allowlist=PLATFORMS)
+    result = await anonymizer.anonymize("Dzwoniła pani Płatnik w sprawie faktury.")
+    assert result.anonymized == "Dzwoniła pani <OSOBA_1> w sprawie faktury."
+
+
 @pytest.mark.parametrize("fragment", ["Wixie", "Wixem", "OLXie"])
 def test_three_letter_platform_is_allowed_in_its_case_forms(fragment):
     """ "strona na Wixie", "ogłoszenie na OLXie": a short brand declines like a long one."""

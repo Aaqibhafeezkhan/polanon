@@ -552,8 +552,9 @@ from polanon import WELL_KNOWN_NAMES, Allowlist, Anonymizer, default_guards
 anonymizer = Anonymizer(default_guards(), allowlist=Allowlist(WELL_KNOWN_NAMES))
 ```
 
-A one-word name also matches its Polish case forms ("Facebooku", "Canvie"). Only detections of
-names are dropped, and only when every word in them is on the list; identifiers, the denylist and
+`WELL_KNOWN_NAMES` holds platforms and office tools, and public institutions and filing programs
+such as ZUS, Płatnik, NFZ and KSeF. A one-word name also matches its Polish case forms
+("Facebooku", "Canvie", "ZUS-ie"). Only detections of names are dropped, and only when every word in them is on the list; identifiers, the denylist and
 values a conversation has already masked stay masked.
 
 ## The pieces

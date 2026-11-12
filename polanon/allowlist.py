@@ -40,8 +40,11 @@ PROTECTED_SOURCES = frozenset({"denylist", "mapping_store"})
 #: brand a statistical model mistakes for a person is still released.
 _PERSON_EVIDENCE_SOURCES = frozenset({"names_pl"})
 
-#: Platforms and tools an office or marketing team in Poland names every day. Nothing here is also
-#: a first name ("Claude", "Miro") or an ordinary word ("Word", "Teams", "Make").
+#: Platforms and tools an office or marketing team in Poland names every day, and the public
+#: institutions and filing programs its staff name as often. Nothing here is also a first name
+#: ("Claude", "Miro") or an ordinary word ("Word", "Teams", "Make"), but for "Płatnik", the
+#: program ZUS contributions are filed with: a person of that name the name guard finds, "pani
+#: Płatnik", stays masked whatever the list holds.
 WELL_KNOWN_NAMES: tuple[str, ...] = (
     "Facebook",
     "Instagram",
@@ -141,6 +144,17 @@ WELL_KNOWN_NAMES: tuple[str, ...] = (
     "DALL-E",
     "Stable Diffusion",
     "DeepL",
+    "ZUS",
+    "PUE ZUS",
+    "eZUS",
+    "Płatnik",
+    "KRUS",
+    "NFZ",
+    "GUS",
+    "KSeF",
+    "ePUAP",
+    "CEIDG",
+    "PFRON",
 )
 
 #: Words that may join two allowed names inside one detection: "Facebooku i Instagramie".
