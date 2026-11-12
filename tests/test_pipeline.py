@@ -430,7 +430,9 @@ def test_a_known_short_number_in_a_long_line_of_numbers_is_masked_in_linear_time
     assert len(text) > 50_000
     started = time.perf_counter()
     result = Anonymizer([]).anonymize_sync(text, {"<SEKRET_1>": "2025"})
-    assert time.perf_counter() - started < 1.0
+    # A fifth of a second on a laptop and about a second on a CI runner measuring coverage; the
+    # quadratic version took 36 seconds on the same laptop.
+    assert time.perf_counter() - started < 5.0
     assert result.anonymized == "Lata: " + ",".join(["<SEKRET_1>"] * 10_000)
 
 
