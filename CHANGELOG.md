@@ -34,9 +34,10 @@ All notable changes to this project are recorded here. The format follows
   language model read `OSOBA_8` as a place, a PIN label took the token after it for the PIN, and a
   known company called "Firma" was found inside `<FIRMA_1>`; each corrupted the token so restore no
   longer gave the value back. A placeholder that stands for itself still shelters nothing.
-- **A title stays out of a foreign name after a label.** "z. Hd. Frau Wiśniewska" made "Frau" the
+- **Titles stay out of a foreign name after a label.** "z. Hd. Frau Wiśniewska" made "Frau" the
   first name, so every later "Frau" in the letter was masked as her, and "Attn: Mr Oliver Bennett"
-  got a token apart from the "Oliver Bennett" of its sign-off.
+  got a token apart from the "Oliver Bennett" of its sign-off. With two titles, as in "Frau Prof.
+  Anna Schmidt", the second one was masked as the person wherever it stood.
 
 ## [0.3.1] - 2026-11-11
 
