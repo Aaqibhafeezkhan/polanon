@@ -75,6 +75,10 @@ jobs:
           pytest tests/test_haystack.py tests/test_layering.py
           --cov --cov-config=tests/haystack.coveragerc --cov-report=term-missing
 
+      # The extra allows haystack-ai 3.0, so the oldest release it allows is tested as well.
+      - name: Test against the oldest Haystack allowed
+        run: pip install "haystack-ai==3.0.0" && pytest tests/test_haystack.py -p no:cacheprovider
+
   versions:
     name: The built wheel on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
