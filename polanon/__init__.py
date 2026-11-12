@@ -43,6 +43,7 @@ from polanon.judge.mock import MockJudge
 from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
 from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, token_for
+from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import StreamRestorer
 from polanon.turn import MaskedTurn, UnknownBlocks, token_instructions
 from polanon.types import (
@@ -75,6 +76,8 @@ __all__ = [
     "MockJudge",
     "NerModelUnavailableError",
     "PersonNameGuard",
+    "PseudonymCollisionError",
+    "Pseudonyms",
     "RegexGuard",
     "SecretsGuard",
     "Span",
@@ -185,6 +188,7 @@ class Anonymizer:
         enabled: Iterable[str] | None = None,
         judge_fallback: JudgeFallback | str = JudgeFallback.SEND_STAGE1,
         allowlist: Allowlist | None = None,
+        pseudonyms: Pseudonyms | None = None,
     ) -> None:
         """Configure the guards, the optional judge and the policy this facade applies.
 
@@ -197,6 +201,9 @@ class Anonymizer:
                 value as text ("send_stage1", "block").
             allowlist: public names left unmasked, such as :data:`WELL_KNOWN_NAMES`. Nothing is
                 exempt when omitted.
+            pseudonyms: computes every new token from a secret key, so a value has the same
+                token in every document, process and question, as a search index needs. Without
+                it, tokens are numbered per conversation: ``<OSOBA_1>``, ``<OSOBA_2>``.
 
         Raises:
             ValueError: for an entity type that is neither built in nor declared in a guard's
@@ -222,6 +229,7 @@ class Anonymizer:
             )
         self.judge_fallback = JudgeFallback(judge_fallback)
         self.allowlist = allowlist
+        self.pseudonyms = pseudonyms
 
     async def anonymize(
         self, text: str, mapping: dict[str, str] | None = None
@@ -239,6 +247,7 @@ class Anonymizer:
             existing_mapping=dict(mapping or {}),
             judge_fallback=self.judge_fallback,
             allowlist=self.allowlist,
+            pseudonyms=self.pseudonyms,
         )
 
     def anonymize_sync(
@@ -276,6 +285,7 @@ class Anonymizer:
             guards=self.guards,
             existing_mapping=dict(mapping or {}),
             allowlist=self.allowlist,
+            pseudonyms=self.pseudonyms,
         )
 
     @staticmethod

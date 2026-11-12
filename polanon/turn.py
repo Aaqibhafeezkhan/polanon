@@ -375,6 +375,7 @@ def _with_known_values(anonymizer: Anonymizer, terms: list[str]) -> Anonymizer:
         [*anonymizer.guards, denylist],
         enabled=anonymizer.enabled | {"ORG"},
         allowlist=anonymizer.allowlist,
+        pseudonyms=anonymizer.pseudonyms,
     )
 
 

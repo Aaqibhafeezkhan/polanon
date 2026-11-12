@@ -34,6 +34,7 @@ from polanon.guards.base import Guard
 from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.parsing import MIN_FINDING_CHARS
 from polanon.policy import ENTITY_TYPES, token_for
+from polanon.pseudonyms import Pseudonyms, owner_lookup
 from polanon.types import AnonymizationResult, JudgeFallback, Span, _trim, merge_spans
 
 
@@ -50,12 +51,25 @@ class _TokenAllocator:
     "<PESEL_1>" cannot collide with a real PESEL and turn into it on restore. Such a token joins the
     mapping as standing for itself, which carries the reservation into the next turn with the
     mapping the caller already passes along.
+
+    With `pseudonyms`, a new value's token is computed rather than counted, so it is the same in
+    every document and process. One that another value of the mapping, or a placeholder, already
+    holds is lengthened past it.
     """
 
-    def __init__(self, existing_mapping: dict[str, str], reserved: Iterable[str] = ()) -> None:
+    def __init__(
+        self,
+        existing_mapping: dict[str, str],
+        reserved: Iterable[str] = (),
+        pseudonyms: Pseudonyms | None = None,
+    ) -> None:
         self._mapping: dict[str, str] = dict(existing_mapping)
         self._by_value: dict[tuple[str, str], str] = {}
         self._counters: dict[str, int] = {}
+        self._pseudonyms = pseudonyms
+        self._taken = (
+            None if pseudonyms is None else owner_lookup(pseudonyms, self._mapping, type_of)
+        )
         for token, value in existing_mapping.items():
             entity_type = type_of(token)
             if entity_type is None:
@@ -86,13 +100,17 @@ class _TokenAllocator:
             known = self._by_value.get(key)
             if known is not None:
                 return known
-        label = ENTITY_TYPES.get(entity_type, entity_type)
-        number = self._counters.get(label, 0) + 1
-        self._counters[label] = number
-        token = token_for(entity_type, number)
+        if self._pseudonyms is not None and self._taken is not None:
+            token = self._pseudonyms.allocate(value, entity_type, self._taken)
+        else:
+            label = ENTITY_TYPES.get(entity_type, entity_type)
+            number = self._counters.get(label, 0) + 1
+            self._counters[label] = number
+            token = token_for(entity_type, number)
         for key in keys:
             self._by_value.setdefault(key, token)
-        self._mapping[token] = value
+        # Another spelling of the value may hold the token already: the first one written stays.
+        self._mapping.setdefault(token, value)
         return token
 
     @property
@@ -318,6 +336,7 @@ def _mask_stage1(
     existing_mapping: dict[str, str],
     allowlist: Allowlist | None,
     haystack: Haystack,
+    pseudonyms: Pseudonyms | None = None,
 ) -> _Masking:
     """Resolve the guards' detections, hand out stable tokens and substitute them.
 
@@ -371,7 +390,7 @@ def _mask_stage1(
     )
 
     reserved = (match.group(0) for match in TOKEN_RE.finditer(text))
-    return _substitute(text, spans, _TokenAllocator(existing_mapping, reserved))
+    return _substitute(text, spans, _TokenAllocator(existing_mapping, reserved, pseudonyms))
 
 
 def _run_stage1(
@@ -380,11 +399,13 @@ def _run_stage1(
     guards: list[Guard],
     existing_mapping: dict[str, str],
     allowlist: Allowlist | None,
+    pseudonyms: Pseudonyms | None = None,
 ) -> _Masking:
     """Detect, merge, find every known value and substitute: all of stage 1, in one thread."""
     view = detection_view(text)
     detected = detect(text, view, enabled, guards)
-    return _mask_stage1(text, detected, existing_mapping, allowlist, Haystack.of(text, view))
+    haystack = Haystack.of(text, view)
+    return _mask_stage1(text, detected, existing_mapping, allowlist, haystack, pseudonyms)
 
 
 def _apply_findings(
@@ -445,6 +466,7 @@ async def anonymize(
     existing_mapping: dict[str, str],
     judge_fallback: JudgeFallback = JudgeFallback.SEND_STAGE1,
     allowlist: Allowlist | None = None,
+    pseudonyms: Pseudonyms | None = None,
 ) -> AnonymizationResult:
     """Mask sensitive data in `text` and return the masked text plus the token mapping.
 
@@ -456,6 +478,8 @@ async def anonymize(
         existing_mapping: token -> value already allocated in this conversation.
         judge_fallback: what to do when the judge fails.
         allowlist: public names left unmasked when a guard or the judge flags them as a name.
+        pseudonyms: computes stable tokens, the same in every call; tokens are numbered per
+            conversation without it.
 
     Returns:
         An `AnonymizationResult` whose `mapping` contains both inherited and newly allocated tokens.
@@ -468,7 +492,7 @@ async def anonymize(
     # caller's event loop for as long as it takes, which on a shared server means every other
     # request waits behind one long document.
     masking = await asyncio.to_thread(
-        _run_stage1, text, enabled, guards, existing_mapping, allowlist
+        _run_stage1, text, enabled, guards, existing_mapping, allowlist, pseudonyms
     )
     if judge is None:
         return masking.result()
@@ -494,10 +518,11 @@ def _anonymize_stage1(
     guards: list[Guard],
     existing_mapping: dict[str, str],
     allowlist: Allowlist | None = None,
+    pseudonyms: Pseudonyms | None = None,
 ) -> AnonymizationResult:
     """Run stage 1 in the calling thread with no event loop, for ``Anonymizer.anonymize_sync``.
 
     It never touches asyncio, so it works whether or not a loop is running in this thread, which is
     the case in a notebook or an async web handler that calls synchronous code.
     """
-    return _run_stage1(text, enabled, guards, existing_mapping, allowlist).result()
+    return _run_stage1(text, enabled, guards, existing_mapping, allowlist, pseudonyms).result()
