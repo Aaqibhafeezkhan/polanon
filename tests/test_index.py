@@ -516,3 +516,60 @@ def test_a_token_another_process_stored_meanwhile_is_settled_on_the_next_pass():
     assert store.collisions
     for token in tokens_in(*masked.texts):
         assert store.get([token])[token].value != "someone else"
+
+
+class ReadsInsideTokens(Guard):
+    """A language model that takes the label of a token for a place, as spaCy did."""
+
+    name = "reads_inside"
+
+    def detect(self, text, enabled):
+        return [
+            Span(m.start(), m.end(), "LOCATION", 0.85, self.name)
+            for m in re.finditer(r"OSOBA_\d+", text)
+        ]
+
+
+def test_masked_text_indexed_again_keeps_its_tokens():
+    """Re-indexing passages taken from the document store turned "<OSOBA_1...>" into a place."""
+    store = InMemoryMappingStore()
+    pseudonyms = Pseudonyms(KEY, collisions=store.collisions)
+    anonymizer = Anonymizer(
+        [*default_guards(with_ner=False), ReadsInsideTokens()], pseudonyms=pseudonyms
+    )
+    first = anonymizer.index_chunks(["Umowę podpisał Jan Kowalski."], store)
+    size = len(store)
+    again = anonymizer.index_chunks(first.texts, store)
+    assert again.texts == first.texts
+    assert len(store) == size
+    asked = anonymizer.mask_query(f"Co znaczy: {first.texts[0]}", store)
+    assert first.texts[0] in asked.anonymized
+    assert Pseudonyms(KEY).token("Jan Kowalski", "PERSON") in asked.mapping
+
+
+class Leaky(InMemoryMappingStore):
+    """A store whose driver quotes the values it was given, as SQL drivers do."""
+
+    def get(self, tokens):
+        raise RuntimeError("insert failed [parameters: ('Jan Kowalski', '50810112354')]")
+
+
+def test_a_failing_store_is_named_without_the_values_its_error_quotes():
+    with pytest.raises(MaskingUnavailableError) as raised:
+        stable().index_chunks(["Umowę podpisał Jan Kowalski, PESEL 50810112354."], Leaky())
+    assert "Kowalski" not in str(raised.value)
+    assert "50810112354" not in str(raised.value)
+    assert "RuntimeError" in str(raised.value)
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    with pytest.raises(MaskingUnavailableError):
+        stored_mapping(Leaky(), "<OSOBA_123456789012>")
+
+
+class Unwritable(InMemoryMappingStore):
+    def add(self, entries):
+        raise OSError("disk full")
+
+
+def test_a_store_that_cannot_write_refuses_the_document():
+    with pytest.raises(MaskingUnavailableError, match="OSError"):
+        stable().index_chunks(["Umowę podpisał Jan Kowalski."], Unwritable())

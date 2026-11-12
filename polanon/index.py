@@ -139,7 +139,7 @@ def stored_mapping(store: MappingStore, *texts: str) -> dict[str, str]:
     Add the mapping of the question on the left, so a value only the question named restores too:
     ``question.mapping | stored_mapping(store, question.anonymized, *passages)``.
     """
-    return {token: entry.value for token, entry in store.get(tokens_in(*texts)).items()}
+    return {token: entry.value for token, entry in _get(store, tokens_in(*texts)).items()}
 
 
 def mask_chunks(
@@ -178,15 +178,17 @@ def index_chunks(
     for _ in range(_ATTEMPTS):
         joined = [_joined(texts)]
         masker = _with_store_hits(anonymizer, pseudonyms, joined, store) if lookup else anonymizer
-        masked = mask_chunks(masker, texts)
+        # Tokens the passages hold already, as when masked text is indexed again, are known
+        # values: left whole, and restored as the store has them.
+        masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
         entries = _entries(pseudonyms, masked.mapping)
         entries = _surnames(pseudonyms, masked.mapping) | entries
         # Asked first, so a pass that meets a collision writes nothing: written and then masked
         # again, a value moved to a longer token left its personal data under one nothing uses.
-        if _record_collisions(pseudonyms, entries, store.get(list(entries))):
+        if _record_collisions(pseudonyms, entries, _get(store, list(entries))):
             continue
         # Another process may have stored one of these tokens since; that pass is done again.
-        if not _record_collisions(pseudonyms, entries, store.add(entries)):
+        if not _record_collisions(pseudonyms, entries, _add(store, entries)):
             _record_local_collisions(pseudonyms, masked.mapping)
             return masked
     raise PseudonymCollisionError(_TOO_MANY)
@@ -206,18 +208,42 @@ def mask_query(
         raise TypeError(f"mask_query takes a str, not {type(text).__name__}")
     for _ in range(_ATTEMPTS):
         masker = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else anonymizer
-        result = _mask(masker, text, dict(mapping or {}))
+        before = stored_mapping(store, text) | dict(mapping or {})
+        result = _mask(masker, text, before)
         # Tokens the conversation held before keep their values, collision or not: masking the
         # question again cannot change them, and refusing every later turn would help nobody.
-        new = {t: v for t, v in result.mapping.items() if t not in (mapping or {})}
+        new = {t: v for t, v in result.mapping.items() if t not in before}
         entries = _entries(pseudonyms, new)
-        held = store.get(list(entries))
+        held = _get(store, list(entries))
         if not _record_collisions(pseudonyms, entries, held):
             return result
     raise PseudonymCollisionError(_TOO_MANY)
 
 
 _TOO_MANY = "the store kept reporting collisions; check that every process uses the same key"
+
+
+def _get(store: MappingStore, tokens: Collection[str]) -> Mapping[str, StoredValue]:
+    """Ask the store, naming a failure by its type only: a driver's message may quote values."""
+    try:
+        return store.get(tokens)
+    except Exception as exc:
+        raise MaskingUnavailableError(_store_failure(exc)) from exc
+
+
+def _add(store: MappingStore, entries: Mapping[str, StoredValue]) -> Mapping[str, StoredValue]:
+    """Write to the store, naming a failure by its type only."""
+    try:
+        return store.add(entries)
+    except Exception as exc:
+        raise MaskingUnavailableError(_store_failure(exc)) from exc
+
+
+def _store_failure(exc: Exception) -> str:
+    return (
+        f"the mapping store failed with {type(exc).__name__}, so nothing may be indexed, sent or "
+        "shown from it; the error is chained as the cause"
+    )
 
 
 def _chunks(chunks: str | Sequence[str]) -> list[str]:
@@ -397,7 +423,7 @@ def _with_store_hits(
             for entity_type in _LOOKED_UP:
                 token = pseudonyms.token(seen[start:end], entity_type)
                 wanted.setdefault(token, []).append((seen, start, end, entity_type))
-    held = store.get(list(wanted))
+    held = _get(store, list(wanted))
     hits: dict[str, list[Span]] = {}
     for token, entry in held.items():
         for seen, start, end, entity_type in wanted.get(token, ()):
