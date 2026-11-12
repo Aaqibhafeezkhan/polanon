@@ -34,7 +34,7 @@ from polanon.guards.base import Guard
 from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.parsing import MIN_FINDING_CHARS
 from polanon.policy import ENTITY_TYPES, token_for
-from polanon.types import AnonymizationResult, JudgeFallback, Span, merge_spans
+from polanon.types import AnonymizationResult, JudgeFallback, Span, _trim, merge_spans
 
 
 class _TokenAllocator:
@@ -145,6 +145,41 @@ def mask_known_values(text: str, mapping: dict[str, str]) -> str:
 
 def _token_ranges(text: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in TOKEN_RE.finditer(text)]
+
+
+def _masked_already(text: str, mapping: dict[str, str]) -> list[tuple[int, int]]:
+    """Return where `text` holds a token the mapping keeps for a value: text masked before.
+
+    History sent again or a passage from a search index carries such tokens, and what a detector
+    reads inside one is the token, not data. "<OSOBA_50810112354>" holds no PESEL, and a language
+    model that took "OSOBA_8" for a place sent "<<MIEJSCE_1>>", which restores to nobody. A
+    placeholder the caller typed stands for itself and shelters nothing, and neither does
+    token-shaped text the mapping hides as a value, such as a password written "<ADMIN_2024>".
+    """
+    hidden = {value.strip() for token, value in mapping.items() if value != token}
+    return [
+        match.span()
+        for match in TOKEN_RE.finditer(text)
+        if mapping.get(match[0], match[0]) != match[0] and match[0] not in hidden
+    ]
+
+
+def _outside(spans: list[Span], ranges: list[tuple[int, int]], text: str) -> list[Span]:
+    """Cut `ranges` out of every span, keeping the pieces that still hold a letter or a digit."""
+    holes = Ranges(ranges)
+    kept: list[Span] = []
+    for span in spans:
+        touching = holes.touching(span.start, span.end)
+        if not touching:
+            kept.append(span)
+            continue
+        cursor = span.start
+        for first, last in [*touching, (span.end, span.end)]:
+            start, end = _trim(text, cursor, first)
+            if start < end:
+                kept.append(Span(start, end, span.entity_type, span.score, span.source))
+            cursor = max(cursor, last)
+    return kept
 
 
 def _whole_ranges(merged: list[Span], detected: list[Span]) -> set[tuple[int, int]]:
@@ -298,7 +333,12 @@ def _mask_stage1(
 
     The parts of a value that point to the same thing on their own are known values too: the
     surname of a person, the handle in a link to a profile. See :mod:`polanon._known_parts`.
+
+    A token the mapping already holds is left whole: neither a detection nor a known value cuts
+    into it, and a detection that runs past it keeps what lies outside.
     """
+    tokens = _masked_already(text, existing_mapping)
+    detected = _outside(detected, tokens, text)
     if allowlist is not None:
         detected = allowlist.drop_allowed(detected, text)
     merged = merge_spans(detected, text)
@@ -314,13 +354,17 @@ def _mask_stage1(
         if (span.start, span.end) in whole:
             value = text[span.start : span.end]
             _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
-    occupied = [(span.start, span.end) for span in merged]
+    occupied = [(span.start, span.end) for span in merged] + tokens
     placement = place_known_values(
         text, haystack, known.values(), occupied, absorb=True, cross_occupied=True
     )
-    covered = Ranges((start, end) for start, end, _ in placement.matches)
+    held = Ranges(tokens)
+    matches = [found for found in placement.matches if not held.overlaps(found[0], found[1])]
+    covered = Ranges((start, end) for start, end, _ in matches)
     kept = [span for span in merged if not covered.overlaps(span.start, span.end)]
-    occurrences = placement.matches + placement.crossing
+    occurrences = matches + [
+        found for found in placement.crossing if not held.overlaps(found[0], found[1])
+    ]
     spans = merge_spans(
         kept + [Span(start, end, kind, 0.9, "known_value") for start, end, kind in occurrences],
         text,

@@ -182,6 +182,74 @@ async def test_a_token_written_in_an_earlier_turn_is_never_handed_out_later():
     )
 
 
+@pytest.mark.parametrize(
+    "token",
+    [
+        "<OSOBA_50810112354>",  # a valid PESEL
+        "<OSOBA_5260000005>",  # a valid NIP
+        "<FIRMA_600100200>",  # nine digits, read as a phone number
+        "<KARTA_4111111111111111>",  # a payment card that passes Luhn
+    ],
+)
+async def test_digits_inside_a_token_the_mapping_holds_are_left_alone(token):
+    """Masked text sent again, such as a passage from an index, keeps its tokens whole."""
+    text = f"Klient {token} dzwonił w sprawie {token}."
+    result = await mask(text, [RegexGuard()], mapping={token: "Jan Nowak"})
+    assert result.anonymized == text
+    assert Anonymizer.restore(result.anonymized, result.mapping) == (
+        "Klient Jan Nowak dzwonił w sprawie Jan Nowak."
+    )
+
+
+async def test_a_detection_inside_a_token_is_dropped_and_one_across_it_keeps_the_rest():
+    """A language model read "OSOBA_8" as a place; the token then restored to nobody."""
+    text = "Umowę podpisał Kowalski <OSOBA_8> wczoraj."
+    guard = FixedGuard(Span(25, 32, "LOCATION", 0.85), Span(15, 33, "PERSON", 0.85))
+    result = await mask(text, [guard], mapping={"<OSOBA_8>": "Jan Nowak"})
+    assert result.anonymized == "Umowę podpisał <OSOBA_9> <OSOBA_8> wczoraj."
+    assert Anonymizer.restore(result.anonymized, result.mapping) == (
+        "Umowę podpisał Kowalski Jan Nowak wczoraj."
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "mapping", "expected"),
+    [
+        (
+            "Umowa z <FIRMA_1> i z Firma Kot.",
+            {"<FIRMA_1>": "Firma"},
+            "Umowa z <FIRMA_1> i z <FIRMA_1> Kot.",
+        ),
+        (
+            "Notatka <OSOBA_2025>, PIN 2025.",
+            {"<OSOBA_2025>": "Jan Nowak", "<SEKRET_1>": "2025"},
+            "Notatka <OSOBA_2025>, PIN <SEKRET_1>.",
+        ),
+    ],
+)
+async def test_a_known_value_is_not_found_inside_a_token(text, mapping, expected):
+    """A company called "Firma" turned "<FIRMA_1>" into "<<FIRMA_1>_1>"."""
+    result = await mask(text, [], mapping=mapping)
+    assert result.anonymized == expected
+
+
+async def test_a_label_in_front_of_a_token_does_not_take_the_token_for_its_value():
+    """A PIN label read the token after it as the PIN, and restore gave back the token."""
+    text = "PIN <SEKRET_1> do karty."
+    result = await mask(text, [SecretsGuard()], mapping={"<SEKRET_1>": "4821"})
+    assert result.anonymized == text
+
+
+async def test_a_placeholder_that_stands_for_itself_still_shelters_nothing():
+    """Token-shaped text the mapping does not hold for a value may be a value somebody typed."""
+    text = "Klient <OSOBA_50810112354> dzwonił."
+    placeholder = {"<OSOBA_50810112354>": "<OSOBA_50810112354>"}
+    for mapping in ({}, placeholder):
+        result = await mask(text, [RegexGuard()], mapping=mapping)
+        assert "50810112354" not in result.anonymized
+        assert is_lossless(result)
+
+
 async def test_one_value_read_as_two_types_gets_one_token_of_the_surer_type():
     text = "Samochód WA 12345 stoi. Nr rej. WA 12345 zgłoszony."
     guard = FixedGuard(Span(9, 17, "POSTAL_CODE", 0.8), Span(32, 40, "PLATE", 1.0))
