@@ -32,6 +32,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   was masked, "Bielskiej" and "Bielską" went out in clear, in the same text and in the next turn,
   since no case of a surname in -ska, -cka or -dzka but the nominative begins with it. In
   lowercase, "w bielskiej firmie" stays an adjective.
+- **A street without "ul." and without a postcode** is masked after an address label, "Adres:
+  Japczaka 17", "zam. Długa 5", "mieszka przy Długiej 5", and after "z", "na", "przy" or "do"
+  with a town right after the number, "z Długiej 17 w Białymstoku". Both went out in clear.
+  "Windows 11 w Polsce", "na Windows 11 w firmie" and "Excel 365 w biurze" stay as they are.
 
 ## [0.3.2] - 2026-11-12
 

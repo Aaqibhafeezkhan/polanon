@@ -194,11 +194,43 @@ ADDRESS_PATTERN = re.compile(
 #: Warszawa". The postcode right after it is what makes it an address; without one, a capitalised
 #: word and a number are a product and its version ("Windows 11") far more often than a street. The
 #: numbers are short, so "NIP 1234567890, 00-950" is not read as a street.
-ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
-    rf"(?<![\w.]){_NAME_PART}(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*[ \t]+"
+#: A short house number of a street written without its prefix, with a flat number if any.
+_SHORT_HOUSE = (
     r"\d{1,4}[A-Za-z]?(?:[ \t]*/[ \t]*\d{1,4}[A-Za-z]?)?"
     r"(?:[ \t]*(?:m|lok(?:al)?)\.?[ \t]*\d{1,4}[A-Za-z]?)?(?!\d)"
-    r"(?=[ \t]*,?[ \t]*\d{2}-\d{3}\b)"
+)
+
+ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
+    rf"(?<![\w.]){_NAME_PART}(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.))*[ \t]+"
+    rf"{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
+)
+
+#: A street without its prefix that a sentence names: "Adres: Japczaka 17", "zam. Długa 5",
+#: "mieszka przy Długiej 5", or after a preposition with the town right after the number, "z
+#: Długiej 17 w Białymstoku". Either the label or the town is what makes it an address, as the
+#: postcode does above; "Windows 11 w Polsce" has neither. The number must not run on into a
+#: dotted number, so "Adres IP 10.0.0.1" is no street. See :func:`_locate_address`.
+_STREET_WITHOUT_PREFIX = (
+    rf"(?:{_TITLE}[ \t]+)*{_NAME_PART}(?:[ \t]+(?:{_NAME_PART}|{_TITLE}))*?"
+    rf"[ \t]+(?P<house>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
+)
+ADDRESS_AFTER_LABEL_PATTERN = re.compile(
+    r"(?<![\w.])(?i:adres|zam\.|zamieszka[łl][aey]|mieszka(?:[ \t]+(?:przy|na))?)(?!\w)"
+    rf"[ \t]*:?[ \t]*(?P<value>{_STREET_WITHOUT_PREFIX})"
+)
+ADDRESS_BEFORE_TOWN_PATTERN = re.compile(
+    rf"(?<![\w.])(?i:z|ze|na|przy|do)[ \t]+(?P<value>{_STREET_WITHOUT_PREFIX})"
+    r"(?=[ \t]+w[ \t]+(?P<town>[A-ZŁŚŻŹĆÓĄĘŃ][\w-]*))"
+)
+#: The endings of a street after "z", "na", "przy" or "do": "Długiej", "Mickiewicza",
+#: "Piłsudskiego", "Kościuszki", "Rynku", "Kwiatów". A product's name has none: "Windows".
+_STREET_IN_AN_OBLIQUE_CASE = re.compile(r"(?:ej|a|ego|i|y|u|ów)$")
+#: The endings of a town after "w": "Krakowie", "Gdańsku", "Łodzi", "Katowicach", "Zielonej Górze",
+#: "Nowym Sączu". "Polsce" and "Teams" have none; countries in -ii or -ji are left out as well.
+_TOWN_IN_THE_LOCATIVE = re.compile(r"(?:ie|u|i|y|ach|ej|ym|im)$")
+_NOT_A_TOWN = frozenset(
+    {"europie", "litwie", "łotwie", "ukrainie", "kanadzie", "chinach", "indiach", "czechach"}
+    | {"stanach", "emiratach", "niemczech", "włoszech", "węgrzech"}
 )
 
 _POLISH_LETTERS = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
@@ -457,6 +489,8 @@ PATTERNS: list[Rule] = [
     ),
     ("ADDRESS", ADDRESS_PATTERN, None),
     ("ADDRESS", ADDRESS_BEFORE_POSTCODE_PATTERN, None),
+    ("ADDRESS", ADDRESS_AFTER_LABEL_PATTERN, None),
+    ("ADDRESS", ADDRESS_BEFORE_TOWN_PATTERN, None),
     ("VIN", re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"), is_valid_vin),
     # A lowercase VIN only after its label: seventeen lowercase letters and digits are a request
     # id, a session key or a hash far more often, and a European VIN carries no check digit.
@@ -672,8 +706,27 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     """Return an address once: a street the rule with "ul." reads is left to that rule.
 
     "ul. gen. Andersa 15, 00-159" is also "Andersa 15" before a postcode, and two spans for one
-    address made it two values.
+    address made it two values. A street without its prefix after an address label is the part
+    after the label, and one before a town counts only when the street and the town are in the
+    cases a sentence puts them in, "z Długiej 17 w Białymstoku", unlike "na Windows 11 w Polsce".
     """
+    if match.re in (ADDRESS_AFTER_LABEL_PATTERN, ADDRESS_BEFORE_TOWN_PATTERN):
+        before_postcode = ADDRESS_BEFORE_POSTCODE_PATTERN.match(text, match.start("value"))
+        if before_postcode is not None and before_postcode.end() == match.end("value"):
+            return []  # the street before a postcode is that rule's
+    if match.re is ADDRESS_AFTER_LABEL_PATTERN:
+        return [match.span("value")]
+    if match.re is ADDRESS_BEFORE_TOWN_PATTERN:
+        street = text[match.start("value") : match.start("house")].split()[-1].lower()
+        town = match.group("town").lower()
+        if (
+            _STREET_IN_AN_OBLIQUE_CASE.search(street) is None
+            or _TOWN_IN_THE_LOCATIVE.search(town) is None
+            or town.endswith(("ii", "ji"))
+            or town in _NOT_A_TOWN
+        ):
+            return []
+        return [match.span("value")]
     if match.re is not ADDRESS_BEFORE_POSTCODE_PATTERN:
         return [match.span()]
     window = max(0, match.start() - 2 * _LABEL_REACH)

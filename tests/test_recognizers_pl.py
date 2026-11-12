@@ -990,6 +990,45 @@ def test_a_word_and_a_number_with_no_postcode_after_them_are_no_address(text):
 
 
 @pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Adres: Japczaka 17.", "Japczaka 17"),
+        ("adres Długa 5 m. 4, piętro drugie", "Długa 5 m. 4"),
+        ("Klient zam. Kwiatowa 12/4.", "Kwiatowa 12/4"),
+        ("Zamieszkała: Jana Pawła II 17", "Jana Pawła II 17"),
+        ("Pan Nowak mieszka przy Długiej 5.", "Długiej 5"),
+        ("Kurier odbierze paczkę z Długiej 17 w Białymstoku.", "Długiej 17"),
+        ("Paczka trafi do Mickiewicza 3 w Nowym Sączu.", "Mickiewicza 3"),
+        ("Spotkanie przy Rynku 5 w Gdańsku.", "Rynku 5"),
+        ("Odbiór ze Słonecznej 14A w Łodzi.", "Słonecznej 14A"),
+    ],
+)
+def test_a_street_without_its_prefix_or_postcode_is_masked_after_a_label_or_before_a_town(
+    text, address
+):
+    """With neither "ul." nor a postcode the street and its number went out in clear."""
+    assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Działa na Windows 11 w Polsce.",
+        "Zainstaluj na Windows 11 w firmie.",
+        "Mamy Excel 365 w biurze.",
+        "Sprzedaje iPhone 15 w Polsce.",
+        "Działa na Windows 11 w Polsce i w Niemczech.",
+        "Przejdź na Office 365 w Teams.",
+        "Kupiłem do Excela 365 w Polsce dodatek.",
+        "Adres IP 10.0.0.1 jest zajęty.",
+        "Kwiatowa 12 w Krakowie",
+    ],
+)
+def test_a_product_and_its_version_before_a_place_are_no_address(text):
+    assert _found(text, "ADDRESS") == []
+
+
+@pytest.mark.parametrize(
     ("text", "date"),
     [
         ("Date of birth: 15 March 1985", "15 March 1985"),
