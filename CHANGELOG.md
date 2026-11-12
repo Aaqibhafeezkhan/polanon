@@ -5,6 +5,16 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Fixed
+
+- **A token-shaped number longer than six digits** in the input, such as `<OSOBA_50810112354>`,
+  no longer sets the number of every later token, and one of thousands of digits no longer stops
+  masking with a `ValueError`. A new token still skips every token the mapping holds, so
+  `<OSOBA_999999>` followed by a new person never hands out one token twice. Contributed by Sonike
+  in [#24](https://github.com/boromat/polanon/pull/24).
+
 ## [0.3.2] - 2026-11-12
 
 New features and fixes, and nothing that worked before stops working: a patch release, as
@@ -148,8 +158,6 @@ alone.
 
 ### Fixed
 
-- Token-shaped input with more than six digits no longer seeds later token numbers or crashes
-  masking when the number exceeds Python's integer conversion limit (#10).
 - **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
   as a name and half an address, and an address on an internationalised domain not at all.
   Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).
