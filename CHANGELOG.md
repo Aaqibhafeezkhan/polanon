@@ -5,7 +5,10 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
-## [Unreleased]
+## [0.3.2] - 2026-11-12
+
+New features and fixes, and nothing that worked before stops working: a patch release, as
+CONTRIBUTING.md describes. Without a key, tokens are numbered as before.
 
 ### Added
 
