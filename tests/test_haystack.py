@@ -5,8 +5,11 @@ network: the embedders and the generator are Haystack's own stand-ins.
 """
 
 import asyncio
+import importlib.util
 import json
+import sys
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -405,3 +408,54 @@ def test_other_shapes_of_meta_and_reasoning_are_kept_and_restored(mappings):
     reply = ChatMessage.from_assistant("Gotowe.", reasoning=f"Pytano o {person}.")
     (restored,) = PolanonRestorer(store=mappings).run(replies=[reply])["replies"]
     assert restored.reasoning.reasoning_text == "Pytano o Jan Kowalski."
+
+
+# --- the order in a pipeline, and the examples ---
+
+
+def test_masking_before_the_splitter_keeps_a_company_whole(mappings, documents):
+    """Cut at full stops first, "Firmą Kot Sp. z o.o." fell apart and went out unmasked."""
+    pipeline = Pipeline()
+    pipeline.add_component("mask", PolanonDocumentMasker(store=mappings))
+    pipeline.add_component("split", DocumentSplitter(split_by="period", split_length=1))
+    pipeline.add_component("write", DocumentWriter(documents))
+    pipeline.connect("mask", "split")
+    pipeline.connect("split", "write")
+    pipeline.run({"mask": {"documents": [Document(content="Umowa z Firmą Kot Sp. z o.o. trwa.")]}})
+    stored = " ".join(document.content for document in documents.filter_documents())
+    assert "Kot" not in stored
+    assert "Sp." not in stored
+
+
+EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+def load_example(name):
+    spec = importlib.util.spec_from_file_location(name, EXAMPLES / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(EXAMPLES))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(EXAMPLES))
+    return module
+
+
+def test_the_offline_example_sends_tokens_only_and_restores_the_answer(capsys):
+    outcome = load_example("haystack_rag").main()
+    for document in outcome["stored"]:
+        assert leaks(json.dumps(document.to_dict(), ensure_ascii=False)) == []
+        assert "Kot" not in document.content
+    assert leaks(outcome["prompt"]) == []
+    assert outcome["answer"] == "Pełnomocnikiem jest Anna Nowak."
+    assert "Pełnomocnikiem jest Anna Nowak." in capsys.readouterr().out
+    assert any("Jan Kowalski" in document.content for document in outcome["passages"])
+
+
+def test_the_paid_example_builds_its_pipelines_without_calling_anyone(monkeypatch):
+    """It is not run: that would cost money. Building it needs neither a key nor the network."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    example = load_example("haystack_openai")
+    indexing, asking = example.build(InMemoryDocumentStore(index="paid"), InMemoryMappingStore())
+    assert list(indexing.graph.nodes) == ["split", "mask", "embed", "write"]
+    assert "restore" in asking.graph.nodes
