@@ -50,6 +50,31 @@ jobs:
       - name: Detection scores
         run: python benchmarks/run.py --ner --markdown
 
+  haystack:
+    name: The Haystack components
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The extra alone, without spaCy or the provider SDKs: the components must not need them.
+      - name: Install
+        run: pip install -e ".[dev,haystack]"
+
+      # The main job reads Haystack as untyped, since it is not installed there.
+      - name: Type-check with Haystack installed
+        run: mypy polanon
+
+      # The offline example runs here too; the paid one is only built, never run.
+      - name: Test the components and the examples
+        run: >-
+          pytest tests/test_haystack.py tests/test_layering.py
+          --cov --cov-config=tests/haystack.coveragerc --cov-report=term-missing
+
   versions:
     name: The built wheel on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
