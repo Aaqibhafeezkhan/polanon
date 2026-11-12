@@ -90,6 +90,7 @@ modelu, gdy imiona i nazwiska w nim zawarte oraz przywrócona odpowiedź liczą 
 | Identyfikatory, dane kontaktowe, sekrety, polskie imiona i nazwiska, nazwy firm rozpoznawane po formie prawnej | `pip install polanon` |
 | Dodatkowo miejsca oraz imiona, nazwiska i organizacje, których nie wychwyci żadna reguła | `pip install "polanon[ner]"`, a potem `python -m spacy download pl_core_news_md` |
 | Sędziowie etapu 2 (lokalny model w Ollamie albo zdalny) | `pip install "polanon[judge]"` |
+| Komponenty do potoków [Haystacka 3](#z-haystackiem) | `pip install "polanon[haystack]"` |
 
 Następnie użyj `default_guards()` z modelem albo `default_guards(with_ner=False)` bez niego.
 Inny model spaCy to kwestia jednego argumentu: `default_guards(spacy_model="pl_core_news_lg")`.
@@ -329,6 +330,85 @@ literą nigdy nie jest sprawdzane w magazynie. A jeden token wszędzie to cel i 
 wiele zamaskowanych fragmentów, widzi, które dotyczą tej samej osoby. Co to oznacza, opisuje
 [model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#stable-pseudonyms-for-search-indexes).
 
+## Z Haystackiem
+
+`pip install "polanon[haystack]"` dodaje komponenty, które wpinają maskowanie w potok
+[Haystacka 3](https://haystack.deepset.ai/). Klucz jest czytany ze zmiennej `POLANON_KEY`: 32
+losowe bajty zapisane szesnastkowo:
+
+```python
+from haystack import Pipeline
+from haystack.components.preprocessors import DocumentSplitter
+from haystack.components.writers import DocumentWriter
+from polanon import InMemoryMappingStore
+from polanon.integrations.haystack import (
+    PolanonDocumentMasker,
+    PolanonQueryMasker,
+    PolanonRestorer,
+    PolanonStreamRestorer,
+)
+
+mappings = InMemoryMappingStore()  # w produkcji twoja zaszyfrowana tabela
+
+indexing = Pipeline()
+indexing.add_component("mask", PolanonDocumentMasker(store=mappings))
+indexing.add_component("split", DocumentSplitter(split_by="period"))
+indexing.add_component("embed", document_embedder)  # dowolny embedder: dostaje zamaskowany tekst
+indexing.add_component("write", DocumentWriter(document_store))
+indexing.connect("mask", "split")
+indexing.connect("split", "embed")
+indexing.connect("embed", "write")
+
+asking = Pipeline()  # z twoim embedderem, retrieverem, budowniczym promptu i generatorem
+asking.add_component("mask", PolanonQueryMasker(store=mappings))  # pierwszy
+asking.add_component("restore", PolanonRestorer(store=mappings))  # po generatorze
+asking.connect("mask.query", "embed.text")
+asking.connect("mask.query", "prompt.query")
+asking.connect("retrieve.documents", "restore.documents")
+asking.connect("llm.replies", "restore.replies")
+asking.connect("mask.mapping", "restore.mapping")
+
+stream = PolanonStreamRestorer(mappings, on_text=lambda text: print(text, end=""))
+asking.run({"mask": {"query": question, "stream": stream}, "llm": {"streaming_callback": stream}})
+```
+
+[`examples/haystack_rag.py`](https://github.com/boromat/polanon/blob/main/examples/haystack_rag.py)
+to całość, offline, z zastępczym embedderem i generatorem Haystacka; testy go uruchamiają.
+[`examples/haystack_openai.py`](https://github.com/boromat/polanon/blob/main/examples/haystack_openai.py)
+to samo z embedderem i modelem OpenAI: jest płatny, więc testy tylko go budują.
+
+**Najpierw maskowanie.** Maskownik dokumentów stoi przed splitterem, więc czyta cały dokument i
+maskuje firmę czy adres tam, gdzie stoją: pocięta najpierw na kropkach „Firmą Kot Sp. z o.o.”
+rozpadła się i poszła niezamaskowana. Fragmenty, które przychodzą już pocięte, są maskowane razem,
+gdy mają wspólne `source_id`.
+
+**Nic w magazynie dokumentów nie nazywa wartości.** Zamaskowane dokumenty są nowe: tokeny w treści
+i w każdym tekście `meta`, a `id` liczone z zamaskowanego tekstu. `id` dokumentu to zwykły SHA-256
+jego tekstu, więc identyfikatory, które splitter zapisuje w `meta`, też są zastępowane. To, co
+oznaczają tokeny, trafia wyłącznie do magazynu mapowań, nigdy do `meta`. Dokument z `blob` albo z
+embeddingiem jest odrzucany, bo oba powstały z oryginału. Testy sprawdzają każdy dokument w
+magazynie i zapisany przez niego plik pod kątem każdej oryginalnej wartości.
+
+**Odpowiedź dla czytelnika.** `PolanonQueryMasker` wysyła zamaskowane pytanie do embeddera i do
+budowniczego promptu, a swoje `mapping` do `PolanonRestorer`, który przywraca odpowiedzi i
+znalezione dokumenty. Jego dokumenty służą tylko do wyświetlenia: nigdy nie zapisuj ich do magazynu
+i nie wysyłaj do modelu. `PolanonStreamRestorer` przywraca odpowiedź w strumieniu jako
+`streaming_callback` generatora; przy `Pipeline.stream()` podawaj mu fragmenty sam:
+`stream.feed(chunk.content)`. Wartości, o których wiesz, że są wrażliwe, na przykład nazwy klientów,
+podajesz w czasie uruchomienia, `{"mask": {"known": clients}}`, więc nigdy nie trafiają do zapisanego
+potoku.
+
+**Zapisywanie potoku.** Klucz to `Secret` Haystacka, a zapisany potok zawiera tylko nazwę jego
+zmiennej. Magazyn mapowań zapisuje się przez własne `to_dict`, które powinno mówić, dokąd się łączy,
+a nigdy, co przechowuje; `InMemoryMappingStore` go nie ma, więc potok z nim budujesz w kodzie.
+Haystack 3 wczytuje klasy tylko z własnych modułów:
+`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"])`.
+
+**Content tracing zostaw wyłączony.** Przy `HAYSTACK_CONTENT_TRACING_ENABLED` Haystack zapisuje
+to, co dostaje każdy komponent, a maskownik dostaje oryginały. Nieudane uruchomienie zachowuje swoje
+wejścia w snapshocie błędu, zapisywanym na dysk przy `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Oba
+są domyślnie wyłączone.
+
 ## Co wykrywa
 
 Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód osobisty, IBAN, karty
@@ -507,6 +587,7 @@ wpisy z denylisty i wartości zamaskowane już wcześniej w rozmowie pozostają 
 | `turn.py` | maskuje jednym mapowaniem wszystko, co wysyła jedno wywołanie modelu, i przywraca to, co wraca |
 | `pseudonyms.py` | oblicza stałe tokeny z tajnego klucza, takie same w każdym dokumencie i procesie |
 | `index.py` | maskuje dokumenty i pytania dla indeksu wyszukiwania, z magazynem tego, co kryją tokeny |
+| `integrations/haystack.py` | komponenty Haystacka, które maskują dokumenty i pytania i przywracają odpowiedzi |
 | `output_sweep.py` | oznacza wymyślone tokeny i dane osobowe, które wprowadziła odpowiedź |
 
 ## Dodawanie detektora

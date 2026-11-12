@@ -84,6 +84,7 @@ and the restored answer matter as much as the numbers.
 | Identifiers, contacts, secrets, Polish names, companies by legal form | `pip install polanon` |
 | Also places, and names and organisations no rule can see | `pip install "polanon[ner]"` then `python -m spacy download pl_core_news_md` |
 | The stage-2 judges (a local Ollama model, or a remote one) | `pip install "polanon[judge]"` |
+| Components for [Haystack 3](#with-haystack) pipelines | `pip install "polanon[haystack]"` |
 
 Then use `default_guards()` with the model, or `default_guards(with_ner=False)` without it.
 Another spaCy model is one argument away: `default_guards(spacy_model="pl_core_news_lg")`.
@@ -315,6 +316,84 @@ which of them are about the same person. The
 [threat model](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#stable-pseudonyms-for-search-indexes)
 says what that means.
 
+## With Haystack
+
+`pip install "polanon[haystack]"` adds components that put the masking into a
+[Haystack 3](https://haystack.deepset.ai/) pipeline. The key is read from `POLANON_KEY`, 32
+random bytes in hexadecimal:
+
+```python
+from haystack import Pipeline
+from haystack.components.preprocessors import DocumentSplitter
+from haystack.components.writers import DocumentWriter
+from polanon import InMemoryMappingStore
+from polanon.integrations.haystack import (
+    PolanonDocumentMasker,
+    PolanonQueryMasker,
+    PolanonRestorer,
+    PolanonStreamRestorer,
+)
+
+mappings = InMemoryMappingStore()  # in production, an encrypted table of yours
+
+indexing = Pipeline()
+indexing.add_component("mask", PolanonDocumentMasker(store=mappings))
+indexing.add_component("split", DocumentSplitter(split_by="period"))
+indexing.add_component("embed", document_embedder)  # any embedder: it gets masked text
+indexing.add_component("write", DocumentWriter(document_store))
+indexing.connect("mask", "split")
+indexing.connect("split", "embed")
+indexing.connect("embed", "write")
+
+asking = Pipeline()  # with an embedder, a retriever, a prompt builder and a generator of yours
+asking.add_component("mask", PolanonQueryMasker(store=mappings))  # first
+asking.add_component("restore", PolanonRestorer(store=mappings))  # after the generator
+asking.connect("mask.query", "embed.text")
+asking.connect("mask.query", "prompt.query")
+asking.connect("retrieve.documents", "restore.documents")
+asking.connect("llm.replies", "restore.replies")
+asking.connect("mask.mapping", "restore.mapping")
+
+stream = PolanonStreamRestorer(mappings, on_text=lambda text: print(text, end=""))
+asking.run({"mask": {"query": question, "stream": stream}, "llm": {"streaming_callback": stream}})
+```
+
+[`examples/haystack_rag.py`](https://github.com/boromat/polanon/blob/main/examples/haystack_rag.py)
+is the whole of it, offline, with Haystack's stand-in embedder and generator, and the tests run it.
+[`examples/haystack_openai.py`](https://github.com/boromat/polanon/blob/main/examples/haystack_openai.py)
+is the same with OpenAI's embedder and model: it is paid, so the tests only build it.
+
+**Mask first.** The document masker comes before the splitter, so a whole document is read and a
+company or an address is masked where it stands: cut at full stops first, "Firmą Kot Sp. z o.o."
+fell apart and went out unmasked. Passages that come split already are masked together when they
+share a `source_id`.
+
+**Nothing in the document store names a value.** The masked documents are new ones: tokens in the
+content and in every string of `meta`, and an `id` computed from the masked text. A document's
+`id` is a plain SHA-256 of its text, so the identifiers a splitter writes into `meta` are replaced
+too. What the tokens stand for goes to the mapping store only, never into `meta`. A document with
+a `blob` or an embedding is refused, since both were made from the original. The tests check every
+document in the store, and the file it saves, for each original value.
+
+**The answer, for the reader.** `PolanonQueryMasker` sends the masked question to the embedder and
+the prompt builder, and its `mapping` to `PolanonRestorer`, which restores the replies and the
+documents found. Its documents are for display only: never write them to a store or send them to a
+model. `PolanonStreamRestorer` restores a streamed answer as the generator's `streaming_callback`;
+with `Pipeline.stream()`, feed it the chunks instead: `stream.feed(chunk.content)`. Values you know
+are sensitive, such as client names, go in at run time, `{"mask": {"known": clients}}`, so they
+never end up in a saved pipeline.
+
+**Saving a pipeline.** The key is a Haystack `Secret`, and a saved pipeline holds the name of its
+variable only. A mapping store is saved through its own `to_dict`, which should say where it
+connects and never what it holds; `InMemoryMappingStore` has none, so a pipeline with it is built
+in code. Haystack 3 loads classes from its own modules only:
+`Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"])`.
+
+**Keep content tracing off.** With `HAYSTACK_CONTENT_TRACING_ENABLED`, Haystack records what every
+component receives, and the masker receives the originals. A run that fails keeps its inputs in
+the error's snapshot, written to disk with `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Both are off
+by default.
+
 ## What it detects
 
 Checksum-validated Polish identifiers (PESEL, NIP, REGON, ID card, IBAN, payment cards), KRS numbers
@@ -480,6 +559,7 @@ values a conversation has already masked stay masked.
 | `turn.py` | masks everything one call to a model sends, with one mapping, and restores what it gets back |
 | `pseudonyms.py` | computes stable tokens from a secret key, the same in every document and process |
 | `index.py` | masks documents and questions for a search index, with the store of what tokens hide |
+| `integrations/haystack.py` | Haystack components that mask documents and questions and restore answers |
 | `output_sweep.py` | flags invented tokens and personal data the answer introduced |
 
 ## Adding a detector

@@ -11,8 +11,10 @@ python -m spacy download pl_core_news_md
 pre-commit install
 ```
 
-Add `pip install anthropic openai` if you touch `examples/`: their tests run against the real SDKs,
-offline, and are skipped without them.
+Add `pip install -e ".[haystack]"` if you touch `polanon/integrations/haystack.py` or the Haystack
+examples: `tests/test_haystack.py` runs where the extra is installed, and a CI job of its own
+checks it with mypy and measures its coverage. Add `pip install anthropic openai` if you touch
+`examples/`: their tests run against the real SDKs, offline, and are skipped without them.
 
 ## Quality bar
 
