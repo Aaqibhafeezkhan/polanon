@@ -181,8 +181,12 @@ def index_chunks(
         masked = mask_chunks(masker, texts)
         entries = _entries(pseudonyms, masked.mapping)
         entries = _surnames(pseudonyms, masked.mapping) | entries
-        held = store.add(entries)
-        if not _record_collisions(pseudonyms, entries, held):
+        # Asked first, so a pass that meets a collision writes nothing: written and then masked
+        # again, a value moved to a longer token left its personal data under one nothing uses.
+        if _record_collisions(pseudonyms, entries, store.get(list(entries))):
+            continue
+        # Another process may have stored one of these tokens since; that pass is done again.
+        if not _record_collisions(pseudonyms, entries, store.add(entries)):
             _record_local_collisions(pseudonyms, masked.mapping)
             return masked
     raise PseudonymCollisionError(_TOO_MANY)
@@ -419,6 +423,8 @@ def _candidates(text: str) -> list[tuple[int, int]]:
     ]
     runs: list[tuple[int, int]] = []
     for first, word in enumerate(words):
+        if _canonical._is_title(word.group(0)):
+            continue  # "Pani Nowak" is looked up as "Nowak", so the title stays in the text
         for last in range(first, min(first + _LONGEST, len(words))):
             gap = text[words[last - 1].end() : words[last].start()]
             if last > first and _GAP.fullmatch(gap) is None:

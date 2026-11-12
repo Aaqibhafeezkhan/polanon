@@ -228,6 +228,16 @@ def test_a_later_turn_of_a_conversation_that_holds_a_colliding_token_is_not_refu
     assert Anonymizer.restore(again.anonymized, again.mapping) == f"A {first}?"
 
 
+def test_a_pass_that_meets_a_collision_leaves_nothing_in_the_store():
+    """A value moved to a longer token on the next pass left its data under the first one."""
+    store = InMemoryMappingStore()
+    anonymizer, _ = short_tokens(store)
+    first, second, _ = colliding_pair(Pseudonyms(KEY, digits=6))
+    one = anonymizer.index_chunks([f"Numer {first}."], store)
+    two = anonymizer.index_chunks([f"Numery {second} i {first}."], store)
+    assert set(store._entries) == tokens_in(*one.texts, *two.texts)
+
+
 def test_a_collision_inside_one_document_is_recorded_for_the_texts_after_it():
     store = InMemoryMappingStore()
     anonymizer, pseudonyms = short_tokens(store)
@@ -402,6 +412,13 @@ def test_the_store_is_not_asked_about_words_that_are_no_names_of_its_values(ques
     assert anonymizer.mask_query(question, store).anonymized == question
 
 
+def test_a_title_in_front_of_a_stored_name_stays_in_the_text():
+    anonymizer, store, _ = indexed()
+    surname = Pseudonyms(KEY).token("Kowalczyk", "PERSON")
+    masked = anonymizer.index_chunks(["Pani Kowalczyk podpisała aneks."], store)
+    assert masked.texts == [f"Pani {surname} podpisała aneks."]
+
+
 def test_a_first_name_alone_is_not_looked_up():
     """Every Anna would share one token with the one Anna somebody wrote alone once."""
     store = InMemoryMappingStore()
@@ -476,3 +493,26 @@ def test_passages_are_cut_apart_where_they_were_joined():
     assert masked.texts[4] == "Zwykły tekst."
     for text, mapping, original in zip(masked.texts, masked.mappings, passages, strict=True):
         assert Anonymizer.restore(text, mapping) == original
+
+
+class RacingStore(InMemoryMappingStore):
+    """Another process stores the first token asked about between this one's get and add."""
+
+    def __init__(self):
+        super().__init__()
+        self.raced = False
+
+    def add(self, entries):
+        if not self.raced:
+            self.raced = True
+            token = sorted(entries)[0]
+            super().add({token: StoredValue("someone else", "another process")})
+        return super().add(entries)
+
+
+def test_a_token_another_process_stored_meanwhile_is_settled_on_the_next_pass():
+    store = RacingStore()
+    masked = stable(store).index_chunks(["PESEL 50810112354, NIP 526-000-00-05."], store)
+    assert store.collisions
+    for token in tokens_in(*masked.texts):
+        assert store.get([token])[token].value != "someone else"
