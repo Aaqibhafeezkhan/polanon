@@ -4,6 +4,40 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Stable pseudonyms** for search indexes and RAG: `Anonymizer(guards, pseudonyms=Pseudonyms(key))`
+  computes every new token with HMAC-SHA256 under a secret key of at least 32 bytes, such as
+  `<OSOBA_482193047556>`, instead of numbering it per conversation. The same value gets the same
+  token in every document, process and question, with no shared state. A person's name is read in
+  the nominative where its first name and surname agree, so "Jan Kowalski", "Jana Kowalskiego" and
+  "z Janem Kowalskim" share a token, and an identifier is one value with or without its separators
+  and country prefix. Tokens keep the `<LABEL_number>` shape, with 12 digits by default. The key is
+  never shown, pickled or copied; `key_id` and `settings` say what an index was built with, and
+  `scope=` keeps two indexes under one key apart. A collision gets four digits more and is recorded
+  in `Pseudonyms(collisions=...)`.
+- **Masking for an index**: `anonymizer.index_chunks(passages, store)` masks the passages of a
+  document with one mapping and puts what each token hides into a `MappingStore`, a two-method
+  protocol over the application's own encrypted table (`InMemoryMappingStore` for tests and
+  examples), with a person's name in the nominative and a fingerprint to tell a collision.
+  `anonymizer.mask_query(question, store)` gives a question the documents' tokens, also for a
+  surname written alone, which the store knows and no rule reads. `mask_chunks`, `stored_mapping`
+  and `tokens_in` mask without a store and restore found passages and answers, also while they
+  stream; each passage also comes with its mapping as written, to restore it exactly.
+
+### Fixed
+
+- **A token the mapping holds is left whole** when masked text is masked again, such as a passage
+  from an index or history sent back. The digits of `<OSOBA_50810112354>` read as a PESEL, a
+  language model read `OSOBA_8` as a place, a PIN label took the token after it for the PIN, and a
+  known company called "Firma" was found inside `<FIRMA_1>`; each corrupted the token so restore no
+  longer gave the value back. A placeholder that stands for itself still shelters nothing.
+- **A title stays out of a foreign name after a label.** "z. Hd. Frau Wiśniewska" made "Frau" the
+  first name, so every later "Frau" in the letter was masked as her, and "Attn: Mr Oliver Bennett"
+  got a token apart from the "Oliver Bennett" of its sign-off.
+
 ## [0.3.1] - 2026-11-11
 
 ### Fixed
