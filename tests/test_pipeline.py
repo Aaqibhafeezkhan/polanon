@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from polanon import Anonymizer, DenylistGuard, MockJudge, RegexGuard, SecretsGuard
+from polanon import Anonymizer, DenylistGuard, MockJudge, RegexGuard, SecretsGuard, default_guards
 from polanon.guards.base import Guard
 from polanon.judge.base import JudgeError
 from polanon.pipeline import anonymize, mask_known_values
@@ -73,6 +73,67 @@ async def test_existing_tokens_in_the_input_are_left_alone():
     result = await run("Klient <OSOBA_1> prosi o kontakt")
     assert result.anonymized == "Klient <OSOBA_1> prosi o kontakt"
     assert result.mapping == {"<OSOBA_1>": "<OSOBA_1>"}  # stands for itself, see the invariants
+
+
+def test_a_token_number_containing_an_identifier_does_not_seed_new_numbers():
+    text = "Pole <OSOBA_50810112354> wypełnia Jan Kowalski."
+    result = Anonymizer(default_guards(with_ner=False)).anonymize_sync(text)
+
+    assert result.anonymized == "Pole <OSOBA_<PESEL_1>> wypełnia <OSOBA_1>."
+    assert result.mapping["<OSOBA_1>"] == "Jan Kowalski"
+    assert result.mapping["<PESEL_1>"] == "50810112354"
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
+
+
+def test_a_token_number_beyond_the_integer_conversion_limit_does_not_crash():
+    token = "<X_" + "1" * 5000 + ">"
+    text = f"Jan Kowalski, ref {token}"
+    result = Anonymizer(default_guards(with_ner=False)).anonymize_sync(text)
+
+    assert result.anonymized == f"<OSOBA_1>, ref {token}"
+    assert result.mapping["<OSOBA_1>"] == "Jan Kowalski"
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
+
+
+@pytest.mark.parametrize(
+    ("number", "next_number"),
+    [("123456", 123457), ("1000000", 1), ("0000012", 1)],
+)
+async def test_token_reservations_are_limited_by_digit_count(number, next_number):
+    token = f"<EMAIL_{number}>"
+    text = f"{token} a@b.example"
+    result = await run(text, enabled={"EMAIL"})
+
+    assert result.anonymized == f"{token} <EMAIL_{next_number}>"
+    assert result.mapping[f"<EMAIL_{next_number}>"] == "a@b.example"
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
+
+
+async def test_allocation_skips_literal_tokens_beyond_six_digits():
+    text = "<EMAIL_999999> i <EMAIL_1000000> oraz a@b.example"
+    result = await run(text, enabled={"EMAIL"})
+
+    assert result.anonymized == "<EMAIL_999999> i <EMAIL_1000000> oraz <EMAIL_1000001>"
+    assert result.mapping["<EMAIL_1000000>"] == "<EMAIL_1000000>"
+    assert result.mapping["<EMAIL_1000001>"] == "a@b.example"
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
+
+
+def test_allocation_keeps_seven_digit_tokens_stable_across_turns():
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    first_text = "Pole <OSOBA_999999> wypełnia Jan Kowalski."
+    second_text = "Umowę podpisała Anna Nowak."
+    first = anonymizer.anonymize_sync(first_text)
+    second = anonymizer.anonymize_sync(second_text, mapping=first.mapping)
+
+    assert first.anonymized == "Pole <OSOBA_999999> wypełnia <OSOBA_1000000>."
+    assert second.anonymized == "Umowę podpisała <OSOBA_1000001>."
+    assert second.mapping["<OSOBA_1000000>"] == "Jan Kowalski"
+    assert second.mapping["<OSOBA_1000001>"] == "Anna Nowak"
+    assert Anonymizer.restore(first.anonymized, second.mapping) == first_text
+    assert Anonymizer.restore(second.anonymized, second.mapping) == second_text
+    # Known values stay masked even when no guard detects them in a later turn.
+    assert mask_known_values("Jan Kowalski", second.mapping) == "<OSOBA_1000000>"
 
 
 async def test_disabled_entity_types_are_not_masked():

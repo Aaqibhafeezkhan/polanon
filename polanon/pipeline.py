@@ -50,7 +50,8 @@ class _TokenAllocator:
     Token-shaped text the caller wrote is never handed out again, so a template's literal
     "<PESEL_1>" cannot collide with a real PESEL and turn into it on restore. Such a token joins the
     mapping as standing for itself, which carries the reservation into the next turn with the
-    mapping the caller already passes along.
+    mapping the caller already passes along. With numbered tokens, numbers longer than six digits
+    do not advance the counter, but allocation still skips every token already in the mapping.
 
     With `pseudonyms`, a new value's token is computed rather than counted, so it is the same in
     every document and process. One that another value of the mapping already holds is lengthened
@@ -84,9 +85,14 @@ class _TokenAllocator:
             self._mapping.setdefault(token, token)
 
     def _reserve(self, token: str) -> None:
-        """Keep new tokens from reusing the number of `token`."""
+        """Advance the counter for token numbers of at most six digits.
+
+        Longer numbers are not reserved in the counter; numbered allocation still never reuses
+        a token already present in the mapping.
+        """
         match = TOKEN_RE.fullmatch(token)
-        if match is not None:
+        # Long input numbers may be identifiers, and int() rejects very long digit strings.
+        if match is not None and len(match.group("n")) <= 6:
             label, number = match.group("label"), int(match.group("n"))
             self._counters[label] = max(self._counters.get(label, 0), number)
 
@@ -106,8 +112,11 @@ class _TokenAllocator:
         else:
             label = ENTITY_TYPES.get(entity_type, entity_type)
             number = self._counters.get(label, 0) + 1
-            self._counters[label] = number
             token = token_for(entity_type, number)
+            while token in self._mapping:
+                number += 1
+                token = token_for(entity_type, number)
+            self._counters[label] = number
         for key in keys:
             self._by_value.setdefault(key, token)
         if self._mapping.get(token) == token:
