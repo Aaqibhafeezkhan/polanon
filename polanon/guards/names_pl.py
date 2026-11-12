@@ -294,6 +294,10 @@ _WORDLIKE_ABBREVIATIONS = frozenset({"lek", "red"})
 #: "lek. dent.", "dr n. med.".
 _ABBREVIATED_ROLES = frozenset(_words("dent farm med n wet"))
 
+#: Forms of address on foreign documents, folded. In front of a name they are no part of it, and
+#: alone they point to nobody.
+FOREIGN_TITLES = frozenset(_words("dame frau herr madame miss mlle mme monsieur mr mrs ms mx sir"))
+
 
 def _honorifics() -> dict[str, frozenset[Tag]]:
     """Forms of address after which the next word is read as a name."""
@@ -480,6 +484,8 @@ def person_name_parts(name: str, *, needs_first_name: bool = False) -> list[str]
         if len(bare) < 3 or not _WORD.fullmatch(bare) or not _name_shaped(bare):
             continue
         if key in HONORIFICS or key in _ABBREVIATIONS or key in _NOT_NAMES or key in _ROLES:
+            continue
+        if key in FOREIGN_TITLES:
             continue
         if is_common_adjective(bare):
             continue

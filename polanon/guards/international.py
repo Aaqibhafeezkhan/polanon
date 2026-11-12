@@ -298,10 +298,17 @@ _PARTICLE = (
     r"(?:[ \t]+(?:der|den|de|la|las|los|le))?[ \t]+"
 )
 
+_HONORIFIC = r"\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame|Herr|Frau|Mme|Mlle|Monsieur|Madame)\.?"
+
+#: A form of address in front of a name after a label, kept out of the name: "z. Hd. Frau
+#: Wiśniewska" read whole made "Frau" the first name, so every "Frau" further down was masked as
+#: that person, and "Attn: Mr Oliver Bennett" got a token apart from "Oliver Bennett".
+_TITLE_BEFORE = rf"(?:{_HONORIFIC}[ \t]+)?(?!{_HONORIFIC}(?![^\W\d_]))"
+
 #: A personal name: first and last name, or initials and a surname ("F.Coggle", "J. R. Smith").
 #: Names in capitals count only with at least two words, as "OLIVER BENNETT" under a sign-off.
 _PERSON_NAME = (
-    rf"(?P<value>(?:{_INITIAL})+{_NAME_WORD}"
+    rf"{_TITLE_BEFORE}(?P<value>(?:{_INITIAL})+{_NAME_WORD}"
     rf"|{_NAME_WORD}(?:[ \t]+(?:{_INITIAL})?(?:{_PARTICLE})?{_NAME_WORD}){{1,3}})"
 )
 
@@ -311,8 +318,6 @@ _ADDRESSED_NAME = (
     rf"(?P<value>(?:{_INITIAL})*(?:{_PARTICLE})?{_ADDRESSED_WORD}"
     rf"(?:[ \t]+(?:{_PARTICLE})?{_ADDRESSED_WORD}){{0,2}})"
 )
-
-_HONORIFIC = r"\b(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame|Herr|Frau|Mme|Mlle|Monsieur|Madame)\.?"
 
 _PERSON_LABEL = (
     r"(?i:\b(?:Attn|Attention|Contact(?:[ \t]+person)?|Kontaktperson|Ansprechpartner(?:in)?"

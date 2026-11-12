@@ -35,6 +35,24 @@ def test_a_surname_alone_is_masked_after_the_full_name():
     assert Anonymizer.restore(result.anonymized, result.mapping) == text
 
 
+def test_a_title_is_not_masked_on_its_own_after_a_name_on_a_foreign_letter():
+    """After "z. Hd. Frau Wiśniewska" the receptionist, "die Frau am Empfang", was masked too."""
+    text = "z. Hd. Frau Wiśniewska\nDie Frau am Empfang hat angerufen."
+    assert mask(text).anonymized == "z. Hd. Frau <OSOBA_1>\nDie Frau am Empfang hat angerufen."
+
+
+def test_a_name_after_a_title_and_without_it_is_one_person():
+    text = "Attn: Mr Oliver Bennett\n\nKind regards,\nOliver Bennett"
+    assert mask(text).anonymized == "Attn: Mr <OSOBA_1>\n\nKind regards,\n<OSOBA_1>"
+
+
+def test_a_foreign_title_is_no_part_of_a_name():
+    from polanon._known_parts import known_parts
+
+    assert known_parts("Frau Wiśniewska", "PERSON", trusted=True) == ["Wiśniewska"]
+    assert known_parts("Mrs Emily Carter", "PERSON", trusted=True) == ["Emily", "Carter"]
+
+
 def test_each_part_of_a_double_surname_is_masked():
     result = mask("Anna Nowak-Kępa prowadzi zajęcia. Pani Kępa je zaplanowała.")
     assert "Kępa" not in result.anonymized
