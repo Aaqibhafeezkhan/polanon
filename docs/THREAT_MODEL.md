@@ -18,6 +18,8 @@ tokens reach the provider, and puts the originals back into the answer, also whi
 | The LLM provider | masked text only | **no**, this is the boundary the library exists for |
 | A stage-2 judge on Ollama | masked text, on your own machine | yes |
 | `RemoteJudge` | masked text, sent to an API | **no**, a testing aid only |
+| The key of `Pseudonyms` | what turns a guessed value into its stable token | yes, and as sensitive as the mapping |
+| A search index with stable tokens | masked passages and their embeddings | **no** more than the provider: it is masked text |
 
 ## What is protected
 
@@ -91,7 +93,62 @@ tokens reach the provider, and puts the originals back into the answer, also whi
 - **The provider's side.** Masked text and its context are still processed and probably logged by
   the provider, and message sizes and timing are visible to it.
 - **The law.** Masking is pseudonymisation, not anonymisation in the GDPR sense: whoever holds the
-  mapping holds personal data.
+  mapping holds personal data. So does whoever holds stable tokens and the key that made them.
+
+## Stable pseudonyms for search indexes
+
+With `Anonymizer(pseudonyms=Pseudonyms(key))` a token is no longer numbered per conversation: it is
+computed from the value with HMAC-SHA256 under a key, so the same person has the same token in
+every document of an index, in every question and in every conversation that uses the key. That
+is what lets a masked question find the masked passages, and it changes the risks.
+
+- **Linking.** Whoever reads masked text can tell which passages, questions and conversations are
+  about the same person, without knowing who it is. The provider sees it across every call, and so
+  does anyone with the index. Tokens numbered per conversation hid that between conversations.
+  Use stable tokens only where the linking is the purpose, as for an index, and leave ordinary
+  chats numbered per conversation. Give each company its own key, and an index that must not be
+  linked to another its own `scope=`: the same value then gets unrelated tokens.
+- **Frequency.** The most frequent token of a sales index is probably the biggest client, and a
+  token that turns up with a known date, amount or place can be matched to a person by someone who
+  knows those. Masking hides names, not the shape of the data around them.
+- **The key.** With the key, anyone holding the index can compute the token of a guess and look
+  for it. Identifiers fall first: all PESEL numbers of people born from 1900 to 2025 are about
+  4.6×10⁸ guesses, which one CPU core computes in a quarter of an hour and a graphics card in well
+  under a second. Common first names with common surnames follow. A leaked key is close to a leaked
+  mapping for everything that can be enumerated: keep it in a secret manager or a KMS, apart from
+  the index and the mapping store, out of the code and the logs. The library never writes it to a
+  message, a representation or a pickle.
+- **Why not a plain hash.** A hash with no key is the same computation without the secret: anyone
+  holding the index can hash every PESEL, phone number or name from a list and read the tokens
+  back. HMAC needs the key for each guess. A slow password hash on top of the key would delay
+  enumeration after a leak, but every question and every passage computes hundreds of tokens, and
+  the key is the protection that has to hold anyway.
+- **A masking service is an oracle.** Whatever masks chosen text with the key confirms guesses:
+  type a candidate PESEL into a question, read its token in the masked preview, look for it in the
+  index. Restrict who can call it, rate-limit it and log it, as one would for the key itself.
+- **Erasure.** Deleting a person's entry from the mapping store does not unlink them. The token is
+  still in the index, and the key turns a guessed value back into it. To erase a person, delete or
+  mask again every passage that holds `pseudonyms.token(value, type)`; retention that only deletes
+  the mapping leaves the index linkable.
+- **A new key.** Changing the key, the scope or the number of digits changes every token, so an
+  index built before no longer matches the questions: build it again from the sources, or map the
+  tokens one to one through the store. `pseudonyms.settings`, stored with the index, tells the
+  two apart, and `key_id` names a key without revealing it.
+- **Collisions.** Two values of one type can share a twelve-digit token, with a chance of about 1
+  in 20,000 at 10,000 values and 1 in 200 at 100,000. Where they meet, in the store or in one text,
+  the second gets four digits more and the collision is recorded; a question that collides with an
+  indexed value finds nothing instead of the other person's passages. Two processes that index the
+  two values at once are kept apart by the store's unique key on the token.
+- **What the index holds.** The masked passages and their embeddings: an embedding can be inverted
+  into an approximation of its text, so treat it as the masked text itself. A value no detector
+  found is in both in the clear, as it would be in a prompt. The mapping store holds the originals
+  and must be encrypted and kept apart from the index; a mapping copied into a passage's metadata
+  is stored and searched with it.
+- **Names the store already holds.** A question or a passage is looked up in the store for every
+  run of up to four words that could be a name. That masks a surname written alone wherever the
+  store holds it, which no rule would, and it never releases one: the allowlist does not apply to a
+  value the store holds. A word that names no stored value, and a lone word in lowercase, are not
+  masked this way.
 
 ## Residual risk to accept consciously
 
