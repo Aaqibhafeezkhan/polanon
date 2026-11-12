@@ -295,6 +295,10 @@ def test_a_name_is_found_after_a_label_or_sign_off_in_its_common_variants(text, 
         ("Contact: Herr Lukas Meier", "Lukas Meier"),
         ("Kind regards,\nDr. Anna Smith", "Anna Smith"),
         ("Bill to: Mrs. Emily Carter", "Emily Carter"),
+        ("Attn: Frau Prof. Anna Schmidt", "Anna Schmidt"),
+        ("Kontaktperson: Herr Dr. Lukas Meier", "Lukas Meier"),
+        ("Attn: Mr Dr. Smith", "Smith"),
+        ("Sehr geehrter Herr Dr. Müller,", "Müller"),
     ],
 )
 def test_a_title_after_a_label_stays_out_of_the_name(text, name):

@@ -41,6 +41,13 @@ def test_a_title_is_not_masked_on_its_own_after_a_name_on_a_foreign_letter():
     assert mask(text).anonymized == "z. Hd. Frau <OSOBA_1>\nDie Frau am Empfang hat angerufen."
 
 
+def test_a_second_title_is_not_masked_as_the_person_either():
+    text = "Attn: Frau Prof. Anna Schmidt\nProf. Lis und Prof Nowak."
+    masked = mask(text).anonymized
+    assert masked.count("Prof") == 3
+    assert "Frau Prof." in masked
+
+
 def test_a_name_after_a_title_and_without_it_is_one_person():
     text = "Attn: Mr Oliver Bennett\n\nKind regards,\nOliver Bennett"
     assert mask(text).anonymized == "Attn: Mr <OSOBA_1>\n\nKind regards,\n<OSOBA_1>"
