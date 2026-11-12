@@ -289,17 +289,19 @@ The store keeps the nominative, because the model writes the token in a sentence
 with its own mapping keeps the case it was written in.
 
 **Names the store already holds.** A surname on its own, as in "Co podpisał Kowalczyk?", is a name
-no rule reads. `mask_query` and `index_chunks` look up every run of up to four words in the store
-and mask the ones it holds a token for, so a question gets the passages' token and a surname masked
-in one document stays masked in the next. Pass `lookup=False` for a store too slow for that.
+no rule reads. `index_chunks` stores the surname of every person whose first name the rules know,
+next to the full name, and `mask_query` and `index_chunks` look up every run of up to four words in
+the store and mask the ones it holds a token for. A question then gets the surname's token, and a
+surname masked in one document stays masked in the next. Pass `lookup=False` for a store too slow
+for that.
 
 **The key.** At least 32 random bytes, one key per company and a `scope=` per index that must not be
 linked to another. Keep it in a secret manager, out of the index, the code and the logs;
 `Pseudonyms` never shows, pickles or copies it. A new key, scope or number of digits changes every
 token, so the index has to be built again: store `pseudonyms.settings` with the index and compare
-them at startup. To erase a person, delete the passages holding `pseudonyms.token(name, "PERSON")`.
-Deleting the store's entry alone does not unlink them, since the key turns a guess back into the
-token.
+them at startup. To erase a person, delete the passages holding `pseudonyms.token(name, "PERSON")`,
+and those holding the surname's token where nobody else with that surname is indexed. Deleting the
+store's entries alone does not unlink them, since the key turns a guess back into the token.
 
 **Collisions.** Twelve digits make two values of one type share a token with a chance of about 1 in
 20,000 at 10,000 values, and 1 in 200 at 100,000. Wherever two such values meet, in the store or in

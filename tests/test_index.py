@@ -353,6 +353,35 @@ def test_a_surname_alone_in_a_question_gets_the_token_the_store_holds(question, 
     assert anonymizer.mask_query(question, store, lookup=False).anonymized == question
 
 
+@pytest.mark.parametrize(
+    "question", ["Co podpisał Kowalczyk?", "Faktura dla Kowalczyka.", "Kowalczykowi wysłano"]
+)
+def test_a_surname_alone_is_found_once_the_full_name_was_indexed(question):
+    """The store held only "Jan Kowalczyk", so the surname alone went out and found nothing."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Jan Kowalczyk."], store)
+    surname = Pseudonyms(KEY).token("Kowalczyk", "PERSON")
+    assert surname in anonymizer.mask_query(question, store).anonymized
+    assert store.get([surname])[surname].value == "Kowalczyk"
+
+
+def test_a_name_a_language_model_guessed_gives_no_surname_to_the_store():
+    """Without a first name the rules know, the other word may be anything, such as "Ads"."""
+
+    class Guess(Guard):
+        name = "guess"
+
+        def detect(self, text, enabled):
+            start = text.find("Google Ads")
+            return [Span(start, start + 10, "PERSON", 0.85, self.name)] if start >= 0 else []
+
+    store = InMemoryMappingStore()
+    anonymizer = Anonymizer([Guess()], pseudonyms=Pseudonyms(KEY))
+    anonymizer.index_chunks(["Kampania w Google Ads ruszyła."], store)
+    assert len(store) == 1
+
+
 def test_a_surname_alone_in_another_document_is_masked_through_the_store():
     anonymizer, store, surname = indexed()
     later = anonymizer.index_chunks(["Kowalczyk dzwonił w sprawie terminu."], store)

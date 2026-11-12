@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from polanon import _canonical
 from polanon._canonical import base_form
+from polanon._known_parts import known_parts
 from polanon._matching import Ranges, type_of
 from polanon._view import detection_view
 from polanon.guards.base import Guard
@@ -182,6 +183,7 @@ def index_chunks(
         masker = _with_store_hits(anonymizer, pseudonyms, texts, store) if lookup else anonymizer
         masked = mask_chunks(masker, texts)
         entries = _entries(pseudonyms, masked.mapping)
+        entries = _surnames(pseudonyms, masked.mapping) | entries
         held = store.add(entries)
         if not _record_collisions(pseudonyms, entries, held):
             _record_local_collisions(pseudonyms, masked.mapping)
@@ -282,6 +284,26 @@ def _entries(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, St
         entries[token] = StoredValue(
             base_form(value, entity_type), pseudonyms.fingerprint(value, entity_type)
         )
+    return entries
+
+
+def _surnames(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, StoredValue]:
+    """Return a store entry for the surname of every person in a mapping, written alone or not.
+
+    A question names a person by the surname alone more often than a document does: "Co podpisał
+    Kowalczyk?" after "Umowę podpisał Jan Kowalczyk." found nothing and sent the surname, since the
+    store held only the full name. Only a surname next to a first name the rules know counts, as a
+    guess of a language model is no evidence that the other word is a surname.
+    """
+    entries: dict[str, StoredValue] = {}
+    for token, value in mapping.items():
+        if type_of(token) != "PERSON" or value == token:
+            continue
+        for part in known_parts(value, "PERSON", trusted=False):
+            entries.setdefault(
+                pseudonyms.token(part, "PERSON"),
+                StoredValue(base_form(part, "PERSON"), pseudonyms.fingerprint(part, "PERSON")),
+            )
     return entries
 
 

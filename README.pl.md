@@ -303,17 +303,19 @@ Kowalskiego” byłoby błędem bez względu na to, który dokument trafił do i
 przywrócony własnym mapowaniem zachowuje przypadek, w którym go napisano.
 
 **Nazwiska, które magazyn już zna.** Samo nazwisko, jak w „Co podpisał Kowalczyk?”, to nazwa,
-której nie odczyta żadna reguła. `mask_query` i `index_chunks` sprawdzają w magazynie każdy ciąg
-do czterech słów i maskują te, dla których ma token, więc pytanie dostaje token fragmentów, a
-nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym. Przy magazynie, który
-jest na to za wolny, przekaż `lookup=False`.
+której nie odczyta żadna reguła. `index_chunks` zapisuje w magazynie nazwisko każdej osoby, której
+imię znają reguły, obok pełnego imienia i nazwiska, a `mask_query` i `index_chunks` sprawdzają w
+magazynie każdy ciąg do czterech słów i maskują te, dla których ma token. Pytanie dostaje wtedy
+token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym. Przy
+magazynie, który jest na to za wolny, przekaż `lookup=False`.
 
 **Klucz.** Co najmniej 32 losowe bajty, jeden klucz na firmę i osobny `scope=` dla indeksu, którego
 nie wolno powiązać z innym. Trzymaj go w menedżerze sekretów, poza indeksem, kodem i logami;
 `Pseudonyms` nigdy go nie pokazuje, nie serializuje ani nie kopiuje. Nowy klucz, zakres albo liczba
 cyfr zmienia każdy token, więc indeks trzeba zbudować od nowa: zapisz `pseudonyms.settings` razem z
 indeksem i porównuj je przy starcie. Żeby usunąć dane osoby, usuń fragmenty zawierające
-`pseudonyms.token(name, "PERSON")`. Samo usunięcie wpisu z magazynu nie zrywa powiązania, bo klucz
+`pseudonyms.token(name, "PERSON")`, a także te z tokenem jej nazwiska, jeśli w indeksie nie ma
+nikogo innego o tym nazwisku. Samo usunięcie wpisów z magazynu nie zrywa powiązania, bo klucz
 zamienia odgadniętą wartość z powrotem w token.
 
 **Kolizje.** Przy dwunastu cyfrach dwie wartości jednego typu dzielą token z szansą około 1 do

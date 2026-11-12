@@ -23,7 +23,7 @@ All notable changes to this project are recorded here. The format follows
   protocol over the application's own encrypted table (`InMemoryMappingStore` for tests and
   examples), with a person's name in the nominative and a fingerprint to tell a collision.
   `anonymizer.mask_query(question, store)` gives a question the documents' tokens, also for a
-  surname written alone, which the store knows and no rule reads. `mask_chunks`, `stored_mapping`
+  surname written alone, which no rule reads and the store keeps for every indexed person. `mask_chunks`, `stored_mapping`
   and `tokens_in` mask without a store and restore found passages and answers, also while they
   stream; each passage also comes with its mapping as written, to restore it exactly.
 

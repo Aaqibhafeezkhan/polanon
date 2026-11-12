@@ -128,8 +128,9 @@ is what lets a masked question find the masked passages, and it changes the risk
   index. Restrict who can call it, rate-limit it and log it, as one would for the key itself.
 - **Erasure.** Deleting a person's entry from the mapping store does not unlink them. The token is
   still in the index, and the key turns a guessed value back into it. To erase a person, delete or
-  mask again every passage that holds `pseudonyms.token(value, type)`; retention that only deletes
-  the mapping leaves the index linkable.
+  mask again every passage that holds `pseudonyms.token(value, type)`, and the surname's token
+  where nobody else with that surname is indexed; retention that only deletes the mapping leaves
+  the index linkable.
 - **A new key.** Changing the key, the scope or the number of digits changes every token, so an
   index built before no longer matches the questions: build it again from the sources, or map the
   tokens one to one through the store. `pseudonyms.settings`, stored with the index, tells the
@@ -144,11 +145,12 @@ is what lets a masked question find the masked passages, and it changes the risk
   found is in both in the clear, as it would be in a prompt. The mapping store holds the originals
   and must be encrypted and kept apart from the index; a mapping copied into a passage's metadata
   is stored and searched with it.
-- **Names the store already holds.** A question or a passage is looked up in the store for every
-  run of up to four words that could be a name. That masks a surname written alone wherever the
-  store holds it, which no rule would, and it never releases one: the allowlist does not apply to a
-  value the store holds. A word that names no stored value, and a lone word in lowercase, are not
-  masked this way.
+- **Names the store already holds.** The store keeps the surname of every indexed person whose
+  first name the rules know, and a question or a passage is looked up in it for every run of up to
+  four words that could be a name. That masks a surname written alone, which no rule would, and it
+  never releases one: the allowlist does not apply to a value the store holds. One surname is one
+  token, so two people who share it are linked by it, as they are by the surname itself. A word
+  that names no stored value, and a lone word in lowercase, are not masked this way.
 
 ## Residual risk to accept consciously
 
