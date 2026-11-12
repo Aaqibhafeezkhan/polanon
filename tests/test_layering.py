@@ -27,11 +27,13 @@ def test_the_library_is_where_these_tests_look():
 FORBIDDEN = ("polgate", "fastapi", "sqlmodel", "sqlalchemy", "starlette", "jinja2")
 
 #: Modules allowed to import a third-party package at module level, and what they may import.
-#: The judges that talk to a server need an HTTP client; nothing else does, and `polanon/__init__`
-#: never imports them, so `import polanon` stays dependency-free.
+#: The judges that talk to a server need an HTTP client, and the Haystack components need
+#: Haystack; nothing else does, and `polanon/__init__` never imports them, so `import polanon`
+#: stays dependency-free.
 ALLOWED_EXTERNAL = {
     ("judge/ollama.py", "httpx"),
     ("judge/remote.py", "httpx"),
+    ("integrations/haystack.py", "haystack"),
 }
 
 
@@ -96,6 +98,19 @@ def test_the_public_facade_does_not_reach_the_optional_judges():
     assert "polanon.judge.ollama" not in imported
     assert "polanon.judge.remote" not in imported
     assert "polanon.guards.ner" not in imported
+
+
+def test_no_part_of_the_core_imports_an_integration():
+    """An integration needs its framework; `import polanon` must not reach it, at any depth."""
+    offenders = []
+    for path in sorted(LIBRARY.rglob("*.py")):
+        relative = path.relative_to(LIBRARY).as_posix()
+        if relative.startswith("integrations/"):
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "polanon.integrations" in line and line.strip().startswith(("import ", "from ")):
+                offenders.append(f"{relative}: {line.strip()}")
+    assert not offenders, "\n".join(offenders)
 
 
 def test_the_heavy_guard_is_loaded_only_when_it_is_asked_for():

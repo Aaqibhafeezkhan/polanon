@@ -46,6 +46,8 @@ classifiers = [
 ner = ["spacy>=3.7"]
 # The Ollama and remote stage-2 judges.
 judge = ["httpx>=0.27"]
+# Components for Haystack 3 pipelines: polanon.integrations.haystack.
+haystack = ["haystack-ai>=3.0,<4"]
 # Tests, lint and types. The recipes in examples/ are tested against the real provider SDKs when
 # those are installed (pip install anthropic openai), and skipped when they are not.
 dev = [
@@ -110,9 +112,18 @@ warn_unreachable = true
 ignore_missing_imports = true   # spaCy ships partial stubs
 exclude = ["build/", ".venv/"]
 
+[[tool.mypy.overrides]]
+# Haystack is an extra: where it is not installed, its decorators and helpers read as untyped.
+# The haystack job in CI checks this module with Haystack installed, under every strict rule.
+module = ["polanon.integrations.haystack"]
+disallow_untyped_decorators = false
+warn_return_any = false
+
 [tool.coverage.run]
 source = ["polanon"]
 branch = true
+# Measured in the haystack job, where Haystack is installed: tests/haystack.coveragerc.
+omit = ["polanon/integrations/haystack.py"]
 
 [tool.coverage.report]
 # A floor, not a target: the suite sits well above it, and this is what stops it sliding back.

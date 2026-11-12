@@ -1,0 +1,9 @@
+# Coverage of the Haystack components, measured in the CI job that installs the haystack extra.
+# The main job leaves the module out (see pyproject.toml), since there it cannot be imported.
+[run]
+source = polanon.integrations
+branch = true
+
+[report]
+fail_under = 95
+show_missing = true
