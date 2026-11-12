@@ -74,7 +74,7 @@ def test_iban_and_luhn():
 def test_regex_guard_finds_valid_and_skips_invalid():
     text = (
         "Jan, PESEL 50810112354, NIP 526-000-00-05, tel. 600 100 200, "
-        "mail jan@example.com, zły PESEL 50810112350."
+        "mail jan@example.com, numer sprawy 50810112350."
     )
     spans = RegexGuard().detect(text, ALL)
     found = {(s.entity_type, text[s.start : s.end]) for s in spans}
@@ -82,7 +82,7 @@ def test_regex_guard_finds_valid_and_skips_invalid():
     assert ("NIP", "526-000-00-05") in found
     assert ("EMAIL", "jan@example.com") in found
     assert ("PHONE", "600 100 200") in found
-    assert ("PESEL", "50810112350") not in found
+    assert ("PESEL", "50810112350") not in found  # no label, and the checksum fails
 
 
 def test_regex_guard_respects_enabled_set():
@@ -735,6 +735,31 @@ def test_longest_valid_card_is_taken_when_a_prefix_also_passes_luhn():
     """Taking the 16-digit prefix sends the last three digits of the card in the clear."""
     text = "Karta 4000 1234 1234 1234 008 ważna."
     assert masked(text, {"CREDIT_CARD"}) == "Karta <KARTA_1> ważna."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "PESEL: 15501416181",  # the check digit is wrong
+        "pesel 78059938421",  # day 99
+        "Numer PESEL: 508101 12355",  # in parts, the check digit is wrong
+    ],
+)
+def test_a_pesel_with_a_typo_right_after_its_label_is_masked(text):
+    """Eleven digits right after "PESEL" are someone's number even when one of them is wrong."""
+    assert masked(text, {"PESEL"}).endswith("<PESEL_1>")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("nr zamówienia 15501416181", "nr zamówienia 15501416181"),
+        ("Zamówienie 78059938421 wysłane.", "Zamówienie 78059938421 wysłane."),
+        ("Klient 50810112354 dzwonił.", "Klient <PESEL_1> dzwonił."),
+    ],
+)
+def test_eleven_digits_without_a_pesel_label_are_a_pesel_only_with_its_checksum(text, expected):
+    assert masked(text, {"PESEL"}) == expected
 
 
 def test_split_number_with_a_pesel_checksum_but_no_label_is_not_a_pesel():

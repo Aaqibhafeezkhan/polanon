@@ -638,11 +638,15 @@ def _locate_passport(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
 
 
 def _locate_pesel(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
-    """Return a PESEL written in parts only when a PESEL label stands right before it."""
-    if not is_valid_pesel(match.group()):
-        return []
-    written_whole = match.group().isdigit()
-    return [match.span()] if written_whole or _follows(_PESEL_LABEL, text, match) else []
+    """Return a PESEL: right after a PESEL label always, elsewhere only whole and checksum-valid.
+
+    Eleven digits right after "PESEL" are someone's number even with a typo in them, a wrong check
+    digit or day 99, and such a number went out in clear. Without the label the checksum decides,
+    and a PESEL in parts needs the label, since a date-prefixed order number has that shape.
+    """
+    if _follows(_PESEL_LABEL, text, match):
+        return [match.span()]
+    return [match.span()] if match.group().isdigit() and is_valid_pesel(match.group()) else []
 
 
 def _follows(label: re.Pattern[str], text: str, match: re.Match[str]) -> bool:

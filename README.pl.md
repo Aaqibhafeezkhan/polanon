@@ -48,7 +48,8 @@ rzeczy, których te narzędzia nie zapewniają od razu po instalacji:
   jest walidowany, a nie tylko dopasowywany do wzorca: suma kontrolna odrzuca większość przypadkowych
   ciągów cyfr — w przypadku PESEL-u, razem z datą urodzenia, około 98% z nich — a prawidłowy numer
   jest zawsze akceptowany. Numery KRS, które nie mają publicznej sumy kontrolnej, oraz paszporty też
-  są rozpoznawane, gdy występują obok swojej etykiety.
+  są rozpoznawane, gdy występują obok swojej etykiety. Jedenaście cyfr tuż po słowie PESEL jest
+  maskowanych nawet z literówką.
 - **Siedem przypadków gramatycznych.** „Jan Kowalski”, „Jana Kowalskiego” i „z Janem Kowalskim” to
   ta sama osoba. Polskie imiona są rozpoznawane w każdym z nich, także pisane małymi literami i bez
   polskich znaków, razem z nazwiskiem, które się z nimi zgadza — bez żadnego modelu językowego.

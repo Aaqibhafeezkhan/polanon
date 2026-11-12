@@ -45,7 +45,8 @@ of the box:
 - **Checksums.** A PESEL, NIP, REGON, ID card number, IBAN or payment card is validated, not just
   pattern-matched: the checksum rejects most random digit strings — for a PESEL, together with the
   birth date, about 98% of them — while a valid number always passes. KRS numbers, which have no
-  public checksum, and passports are recognised next to their label as well.
+  public checksum, and passports are recognised next to their label as well. Eleven digits right
+  after the word PESEL are masked even with a typo in them.
 - **Seven grammatical cases.** "Jan Kowalski", "Jana Kowalskiego" and "z Janem Kowalskim" are the
   same person. Polish first names are recognised in every case, in lowercase and typed without
   Polish letters, together with the surname that agrees with them, without any language model.

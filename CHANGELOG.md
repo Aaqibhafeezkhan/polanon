@@ -24,6 +24,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   one word could stand there, so the value went out in clear. With words in between, the value
   must look like a password, so "Hasło administratora zostało zmienione." and a date after "Hasło
   ważne do:" stay as they are.
+- **A PESEL with a typo right after its label** is masked: "PESEL: 15501416181", with a wrong
+  check digit, and "pesel 78059938421", with day 99, went out in clear, since the checksum was
+  checked before the label. Without the label the checksum still decides, so an order number of
+  eleven digits stays as it is.
 
 ## [0.3.2] - 2026-11-12
 
