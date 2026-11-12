@@ -27,7 +27,7 @@ identifiers.
 
 import importlib.util
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from polanon._detection import custom_type_problem
 from polanon.allowlist import WELL_KNOWN_NAMES, Allowlist
@@ -38,6 +38,17 @@ from polanon.guards.international import InternationalGuard
 from polanon.guards.names_pl import PersonNameGuard
 from polanon.guards.recognizers_pl import RegexGuard
 from polanon.guards.secrets import SecretsGuard
+from polanon.index import (
+    InMemoryMappingStore,
+    MappingStore,
+    MaskedChunks,
+    StoredValue,
+    index_chunks,
+    mask_chunks,
+    mask_query,
+    stored_mapping,
+    tokens_in,
+)
 from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.mock import MockJudge
 from polanon.output_sweep import SweepReport, sweep
@@ -66,11 +77,14 @@ __all__ = [
     "CompanyGuard",
     "DenylistGuard",
     "Guard",
+    "InMemoryMappingStore",
     "InternationalGuard",
     "Judge",
     "JudgeError",
     "JudgeFallback",
     "JudgeFinding",
+    "MappingStore",
+    "MaskedChunks",
     "MaskedTurn",
     "MaskingUnavailableError",
     "MockJudge",
@@ -81,15 +95,18 @@ __all__ = [
     "RegexGuard",
     "SecretsGuard",
     "Span",
+    "StoredValue",
     "StreamRestorer",
     "SweepReport",
     "default_guards",
     "mask_known_values",
     "merge_spans",
     "ner_available",
+    "stored_mapping",
     "sweep",
     "token_for",
     "token_instructions",
+    "tokens_in",
 ]
 
 __version__ = "0.3.1"
@@ -301,6 +318,71 @@ class Anonymizer:
     def sweep(self, restored_text: str, mapping: dict[str, str]) -> SweepReport:
         """Check a restored answer for invented tokens and unexpected personal data."""
         return sweep(restored_text, mapping, self.guards, self.enabled, self.allowlist)
+
+    def mask_chunks(
+        self, chunks: str | Sequence[str], mapping: dict[str, str] | None = None
+    ) -> MaskedChunks:
+        """Mask the passages of one document with one mapping.
+
+        A value recognised in one passage is masked in every other, including the ones before it,
+        so a surname that stands alone in the first passage is masked once the full name turns up
+        in the third.
+
+        Args:
+            chunks: the passages, in order, or a whole document as one str.
+            mapping: token -> original value from earlier, as in :meth:`anonymize_sync`.
+
+        Returns:
+            The masked passages, the mapping of each as written there, and the whole mapping.
+
+        Raises:
+            MaskingUnavailableError: when masking fails; nothing of the document may be indexed.
+            ValueError: when this anonymizer has a stage-2 judge.
+        """
+        return mask_chunks(self, chunks, mapping)
+
+    def index_chunks(self, chunks: str | Sequence[str], store: MappingStore) -> MaskedChunks:
+        """Mask a document for a search index, and put what its tokens hide into `store`.
+
+        It needs stable tokens (``pseudonyms=``), so a question masked later finds the same ones.
+        The store gets each token's value, a name in the nominative, with its fingerprint; a
+        token it already holds for another value is a collision, which is recorded, and the
+        document is masked again so that value gets a longer token.
+
+        Args:
+            chunks: the passages of the document, in order, or the document as one str.
+            store: the application's store of what tokens hide, kept apart from the index.
+
+        Returns:
+            The masked passages for the embedder and the index, and the mapping of each as written
+            there, to restore a passage exactly. Neither holds anything the index may keep.
+
+        Raises:
+            MaskingUnavailableError: when masking fails; nothing of the document may be indexed.
+            ValueError: without pseudonyms, or with a stage-2 judge.
+            PseudonymCollisionError: when collisions keep coming back, which a working key and a
+                store shared by every process do not cause.
+        """
+        return index_chunks(self, chunks, store)
+
+    def mask_query(
+        self, text: str, store: MappingStore, mapping: dict[str, str] | None = None
+    ) -> AnonymizationResult:
+        """Mask a question to a search index with the tokens the documents got.
+
+        A token the store holds for another value is a collision: it is recorded, and the
+        question is masked again, so it finds nothing rather than another person's passages.
+
+        Args:
+            text: the question.
+            store: the store the documents were indexed into.
+            mapping: token -> original value from earlier turns of the conversation.
+
+        Raises:
+            MaskingUnavailableError: when masking fails; nothing of the question may be sent.
+            ValueError: without pseudonyms, or with a stage-2 judge.
+        """
+        return mask_query(self, text, store, mapping)
 
     def turn(
         self,
