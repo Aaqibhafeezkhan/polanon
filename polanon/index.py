@@ -145,28 +145,24 @@ def stored_mapping(store: MappingStore, *texts: str) -> dict[str, str]:
 def mask_chunks(
     anonymizer: Anonymizer, chunks: str | Sequence[str], mapping: Mapping[str, str] | None = None
 ) -> MaskedChunks:
-    """Mask the passages of one document with one mapping; see :meth:`Anonymizer.mask_chunks`."""
+    """Mask the passages of one document with one mapping; see :meth:`Anonymizer.mask_chunks`.
+
+    The passages are masked as one text, joined by blank lines, and cut apart again: masking each
+    against the mapping of all the others took time that grew with the square of their number, and
+    a value first recognised in a later passage is masked in the earlier ones all the same. A value
+    that runs across two passages is masked in both, each piece under the value's token.
+    """
     texts = _chunks(chunks)
     _no_judge(anonymizer, "mask_chunks")
-    running = dict(mapping or {})
-    results: list[AnonymizationResult] = []
-    sizes: list[int] = []
+    result = _mask(anonymizer, _joined(texts), dict(mapping or {}))
+    masked, mappings = [], []
+    start = 0
     for text in texts:
-        result = _mask(anonymizer, text, running)
-        running = dict(result.mapping)
-        results.append(result)
-        sizes.append(len(running))
-    final = len(running)
-    for index, text in enumerate(texts):
-        if sizes[index] < final:
-            # A value first recognised in a later passage is masked here too, as in a turn.
-            results[index] = _mask(anonymizer, text, running)
-            running = dict(results[index].mapping)
-    return MaskedChunks(
-        texts=[result.anonymized for result in results],
-        mappings=[_as_written(result, running) for result in results],
-        mapping=running,
-    )
+        piece, written = _cut(result, start, start + len(text))
+        masked.append(piece)
+        mappings.append(written)
+        start += len(text) + len(_PASSAGE_BREAK)
+    return MaskedChunks(texts=masked, mappings=mappings, mapping=dict(result.mapping))
 
 
 def index_chunks(
@@ -180,7 +176,8 @@ def index_chunks(
     pseudonyms = _pseudonyms(anonymizer, "index_chunks")
     texts = _chunks(chunks)
     for _ in range(_ATTEMPTS):
-        masker = _with_store_hits(anonymizer, pseudonyms, texts, store) if lookup else anonymizer
+        joined = [_joined(texts)]
+        masker = _with_store_hits(anonymizer, pseudonyms, joined, store) if lookup else anonymizer
         masked = mask_chunks(masker, texts)
         entries = _entries(pseudonyms, masked.mapping)
         entries = _surnames(pseudonyms, masked.mapping) | entries
@@ -257,21 +254,48 @@ def _mask(anonymizer: Anonymizer, text: str, mapping: dict[str, str]) -> Anonymi
         raise MaskingUnavailableError(_failure(exc)) from exc
 
 
-def _as_written(result: AnonymizationResult, mapping: Mapping[str, str]) -> dict[str, str]:
-    """Return token -> the value as this text wrote it, for every token in its masked text."""
-    written: dict[str, str] = {}
+#: What the passages of a document are joined by to be masked as one text.
+_PASSAGE_BREAK = "\n\n"
+
+
+def _joined(texts: Sequence[str]) -> str:
+    return _PASSAGE_BREAK.join(texts)
+
+
+def _replaced(result: AnonymizationResult) -> list[tuple[int, int, str]]:
+    """Return every masked range of the original text with the token that replaced it."""
+    replaced: list[tuple[int, int, str]] = []
     shift = 0
     for span in result.spans:
         match = _TOKEN_RE.match(result.anonymized, span.start + shift)
         if match is None:  # pragma: no cover - every span was replaced by a token
             raise AssertionError("a masked span is not where its token is")
-        written.setdefault(match.group(0), result.original[span.start : span.end])
+        replaced.append((span.start, span.end, match.group(0)))
         shift += len(match.group(0)) - (span.end - span.start)
-    for token in tokens_in(result.anonymized):
-        held = mapping.get(token)
+    return replaced
+
+
+def _cut(result: AnonymizationResult, start: int, end: int) -> tuple[str, dict[str, str]]:
+    """Return one passage of a masked document, and token -> the value as the passage wrote it."""
+    original = result.original
+    pieces: list[str] = []
+    written: dict[str, str] = {}
+    cursor = start
+    for first, last, token in _replaced(result):
+        first, last = max(first, start), min(last, end)
+        if first >= last or not original[first:last].strip():
+            continue  # outside the passage, or only the blank line between two
+        pieces.append(original[cursor:first])
+        pieces.append(token)
+        written.setdefault(token, original[first:last])
+        cursor = last
+    pieces.append(original[cursor:end])
+    passage = "".join(pieces)
+    for token in tokens_in(passage):
+        held = result.mapping.get(token)
         if token not in written and held is not None:
-            written[token] = held  # a token the text held already, or a placeholder
-    return written
+            written[token] = held  # a token the passage held already, or a placeholder
+    return passage, written
 
 
 def _entries(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, StoredValue]:

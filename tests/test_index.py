@@ -449,3 +449,30 @@ def test_a_run_of_words_broken_by_punctuation_is_not_looked_up_as_one_value():
     plain = Anonymizer([RegexGuard()], pseudonyms=pseudonyms)
     assert plain.mask_query("Firma Kot Nowak", store).anonymized == f"Firma {token}"
     assert plain.mask_query("Kot. Nowak", store).anonymized == "Kot. Nowak"
+
+
+def test_a_long_document_in_many_passages_is_masked_in_linear_time():
+    """Each passage masked against the mapping of all the others took 27 s for 800 of them."""
+    import time
+
+    passages = [
+        f"Pismo nr {n}: Jan Kowalski{n} i Anna Nowak{n}, tel. 600 100 {n % 1000:03d}."
+        for n in range(800)
+    ]
+    began = time.perf_counter()
+    masked = stable().mask_chunks(passages)
+    assert time.perf_counter() - began < 5.0
+    assert len(masked.texts) == 800
+    assert all("600 100" not in text for text in masked.texts)
+    for text, mapping, original in zip(masked.texts, masked.mappings, passages, strict=True):
+        assert Anonymizer.restore(text, mapping) == original
+
+
+def test_passages_are_cut_apart_where_they_were_joined():
+    passages = ["", "Jan Kowalski", "", "PESEL 50810112354", "Zwykły tekst."]
+    masked = stable().mask_chunks(passages)
+    assert masked.texts[0] == ""
+    assert masked.texts[2] == ""
+    assert masked.texts[4] == "Zwykły tekst."
+    for text, mapping, original in zip(masked.texts, masked.mappings, passages, strict=True):
+        assert Anonymizer.restore(text, mapping) == original
