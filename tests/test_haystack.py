@@ -5,6 +5,8 @@ network: the embedders and the generator are Haystack's own stand-ins.
 """
 
 import asyncio
+import copy
+import dataclasses
 import importlib.util
 import json
 import sys
@@ -390,6 +392,9 @@ def test_the_question_s_own_values_restore_in_the_stream_and_nothing_else_is_sho
     stream(StreamingChunk(content="Nie znam <OSOBA_1234"))  # no on_text: nothing to show it with
     assert stream.feed("56789012>.") == "Piotr Zieliński."
     lookup = stream._lookup
+    assert copy.copy(stream) is stream  # one object through every copy Haystack makes
+    assert copy.deepcopy(stream) is stream
+    assert copy.deepcopy(lookup) is lookup
     assert len(lookup) == 1
     assert list(lookup) == ["<OSOBA_123456789012>"]
     assert lookup["<OSOBA_123456789012>"] == "Piotr Zieliński"
@@ -459,3 +464,156 @@ def test_the_paid_example_builds_its_pipelines_without_calling_anyone(monkeypatc
     indexing, asking = example.build(InMemoryDocumentStore(index="paid"), InMemoryMappingStore())
     assert list(indexing.graph.nodes) == ["split", "mask", "embed", "write"]
     assert "restore" in asking.graph.nodes
+
+
+# --- what the review of the integration found ---
+
+
+@pytest.mark.parametrize("splitter", ["recursive", "hierarchical"])
+def test_no_splitter_leaves_a_plain_hash_of_the_original_in_meta(mappings, documents, splitter):
+    """parent_id, __parent_id and __children_ids held the SHA-256 of the original text."""
+    from haystack.components.preprocessors import (
+        HierarchicalDocumentSplitter,
+        RecursiveDocumentSplitter,
+    )
+
+    source = Document(content=CONTRACT, meta={"title": "Umowa"})
+    cutter = (
+        RecursiveDocumentSplitter(split_length=60, split_unit="char", separators=[". "])
+        if splitter == "recursive"
+        else HierarchicalDocumentSplitter(block_sizes={20, 6}, split_overlap=0, split_by="word")
+    )
+    passages = cutter.run(documents=[source])["documents"]
+    originals = {document.id for document in [source, *passages]}
+    index(mappings, documents, docs=passages)
+    stored = documents.filter_documents()
+    dumped = json.dumps([document.to_dict() for document in stored])
+    assert not [identifier for identifier in originals if identifier in dumped]
+    ids = {document.id for document in stored}
+    for document in stored:
+        for field in ("parent_id", "__parent_id"):
+            pointer = document.meta.get(field)
+            if pointer is not None:  # the root of a hierarchy has no parent
+                assert pointer in ids or pointer.startswith("polanon:")
+        for child in document.meta.get("__children_ids", []):
+            assert child in ids
+
+
+def test_an_id_the_caller_chose_is_kept_masked_so_upserts_still_work(mappings, documents):
+    from haystack.document_stores.types import DuplicatePolicy
+
+    masker = PolanonDocumentMasker(store=mappings)
+    first = masker.run(documents=[Document(id="umowa-17", content="Wersja 1, Jan Kowalski.")])
+    second = masker.run(documents=[Document(id="umowa-17", content="Wersja 2, Jan Kowalski.")])
+    documents.write_documents(first["documents"])
+    documents.write_documents(second["documents"], policy=DuplicatePolicy.OVERWRITE)
+    (stored,) = documents.filter_documents()
+    assert stored.id == "umowa-17"
+    assert stored.content.startswith("Wersja 2")
+    named = masker.run(documents=[Document(id="Umowa Jana Kowalskiego", content="Tekst.")])
+    assert "Kowalskiego" not in named["documents"][0].id
+
+
+def test_documents_the_masker_wrote_come_out_the_same_when_indexed_again(mappings):
+    splitter = DocumentSplitter(split_by="word", split_length=12, split_overlap=3)
+    passages = splitter.run(documents=[Document(content=CONTRACT, meta=META)])["documents"]
+    masker = PolanonDocumentMasker(store=mappings)
+    once = masker.run(documents=passages)["documents"]
+    twice = masker.run(documents=once)["documents"]
+    assert [document.to_dict() for document in twice] == [document.to_dict() for document in once]
+
+
+@pytest.mark.parametrize("masker", [PolanonDocumentMasker, PolanonQueryMasker])
+def test_known_values_given_as_one_string_are_refused(mappings, masker):
+    """Read letter by letter, "Klub Orlik" masked nothing and said nothing."""
+    component = masker(store=mappings)
+    given = (
+        {"documents": [Document(content="Klub Orlik.")]}
+        if masker is PolanonDocumentMasker
+        else {"query": "Klub Orlik?"}
+    )
+    with pytest.raises(TypeError, match="list"):
+        component.run(**given, known="Klub Orlik")
+
+
+def test_keys_of_nested_meta_and_members_of_sets_are_masked_and_restored(mappings):
+    masker = PolanonDocumentMasker(store=mappings)
+    meta = {"signatories": {"Jan Kowalski": "klient"}, "people": {"PESEL 50810112354"}}
+    (masked,) = masker.run(documents=[Document(content="Umowa.", meta=meta)])["documents"]
+    assert leaks(repr(masked.meta)) == []
+    assert list(masked.meta) == ["signatories", "people"]
+    (restored,) = PolanonRestorer(store=mappings).run(documents=[masked])["documents"]
+    assert restored.meta == meta
+
+
+class PlainStore:
+    """A store without a lock, which Haystack can deep-copy as it copies every input."""
+
+    def __init__(self):
+        self.entries = {}
+
+    def get(self, tokens):
+        return {token: self.entries[token] for token in tokens if token in self.entries}
+
+    def add(self, entries):
+        held = {token: self.entries[token] for token in entries if token in self.entries}
+        self.entries.update({t: e for t, e in entries.items() if t not in held})
+        return held
+
+
+def unknown_person(messages):
+    """A stand-in model that repeats the token of the person the question asks about."""
+    question = messages[-1].text.split("Fragmenty:", 1)[0]
+    person = next(token for token in tokens_in(question) if token.startswith("<OSOBA_"))
+    return ChatMessage.from_assistant(f"Nie wiem nic o {person}.")
+
+
+def test_the_question_s_values_reach_the_stream_through_haystack_s_copies(documents):
+    """Haystack deep-copies the inputs, so the masker and the callback held two restorers."""
+    store = PlainStore()
+    index(store, documents)
+    shown = []
+    stream = PolanonStreamRestorer(store, on_text=shown.append)
+    generator = MockChatGenerator(response_fn=unknown_person)
+    asking(store, documents, generator).run(
+        {
+            "mask": {"query": "Czy Piotr Zieliński podpisał?", "stream": stream},
+            "llm": {"streaming_callback": stream},
+        }
+    )
+    assert "".join(shown) == "Nie wiem nic o Piotr Zieliński."
+
+
+def test_the_stream_shows_a_name_as_the_restorer_does(mappings, documents):
+    """The stream wrote the question's genitive where the restorer wrote the nominative."""
+    index(mappings, documents)
+    shown = []
+    stream = PolanonStreamRestorer(mappings, on_text=shown.append)
+    question = PolanonQueryMasker(store=mappings).run(query=QUESTION, stream=stream)
+    person = Pseudonyms(KEY).token("Jan Kowalski", "PERSON")
+    stream(StreamingChunk(content=f"{person} podpisał.", finish_reason="stop"))
+    restored = PolanonRestorer(store=mappings).run(
+        replies=[ChatMessage.from_assistant(f"{person} podpisał.")], mapping=question["mapping"]
+    )
+    assert "".join(shown) == restored["replies"][0].text == "Jan Kowalski podpisał."
+
+
+def test_every_part_of_a_reply_is_kept_in_its_order(mappings, documents):
+    from haystack.dataclasses import ImageContent, TextContent, ToolCall
+
+    index(mappings, documents)
+    person = Pseudonyms(KEY).token("Jan Kowalski", "PERSON")
+    image = ImageContent(base64_image="iVBORw0KGgo=", mime_type="image/png")
+    call = ToolCall(tool_name="find", arguments={"who": person})
+    parts = [TextContent(f"Pierwsza: {person}."), image, call, TextContent("Druga.")]
+    reply = dataclasses.replace(ChatMessage.from_assistant("x"), _content=parts)
+    (restored,) = PolanonRestorer(store=mappings).run(replies=[reply])["replies"]
+    assert restored.texts == ["Pierwsza: Jan Kowalski.", "Druga."]
+    assert restored.images == [image]
+    assert restored.tool_calls[0].arguments == {"who": "Jan Kowalski"}
+    assert [type(part).__name__ for part in restored._content] == [
+        "TextContent",
+        "ImageContent",
+        "ToolCall",
+        "TextContent",
+    ]

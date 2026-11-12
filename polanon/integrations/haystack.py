@@ -12,13 +12,21 @@ module: ``Pipeline.loads(text, allowed_modules=["polanon.integrations.haystack"]
 """
 
 import dataclasses
+import re
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 try:
     from haystack import Document, component, default_from_dict, default_to_dict
     from haystack.core.errors import SerializationError
-    from haystack.dataclasses import ChatMessage, ChatRole, StreamingChunk
+    from haystack.dataclasses import (
+        ChatMessage,
+        ChatRole,
+        ReasoningContent,
+        StreamingChunk,
+        TextContent,
+        ToolCall,
+    )
     from haystack.utils import Secret
 except ModuleNotFoundError as missing:  # pragma: no cover - the haystack job has it installed
     if missing.name is None or missing.name.split(".")[0] != "haystack":
@@ -44,8 +52,14 @@ KEY_VARIABLE = "POLANON_KEY"
 #: The type the identifiers of documents are fingerprinted under, so none is an unkeyed hash.
 _DOCUMENT_ID = "DOCUMENT_ID"
 
-#: Fields of ``meta`` that hold identifiers of documents, which are replaced rather than masked.
-_ID_FIELDS = frozenset({"source_id", "_split_overlap"})
+#: A document's identifier as Haystack computes it: SHA-256 in hexadecimal, of the text and meta.
+_HASH = re.compile(r"[0-9a-f]{64}")
+
+#: What a keyed fingerprint of an identifier starts with, so that it never reads as a hash again.
+_KEYED = "polanon:"
+
+#: Fields of ``meta`` that name the document a passage was cut from, in Haystack's splitters.
+_SOURCE_FIELDS = ("source_id", "parent_id", "__parent_id")
 
 #: The longest token held back in a stream: twelve digits lengthened twice, behind a long label.
 _LONGEST_TOKEN = 64
@@ -122,6 +136,9 @@ class _Masker:
     def _masking(self, known: list[str] | None) -> Anonymizer:
         self.warm_up()
         assert self._anonymizer is not None  # set by warm_up
+        if isinstance(known, str):
+            # The value itself stays out of the message: it is what the caller wants kept hidden.
+            raise TypeError("known takes a list of values, not a single string")
         terms = [term for term in known or () if term.strip()]
         return _with_known_values(self._anonymizer, terms) if terms else self._anonymizer
 
@@ -147,12 +164,21 @@ class _Masker:
 class PolanonDocumentMasker(_Masker):
     """Masks documents before they are embedded and written, and stores what their tokens hide.
 
-    Place it before the document embedder of an indexing pipeline. The passages of one document,
-    told by the ``source_id`` a splitter gives them, are masked with one mapping, and every value
-    goes to the mapping store with the surname of each person. The documents that come out are new
-    ones: masked content, masked strings in ``meta``, an ``id`` computed from the masked content.
-    Identifiers of other documents in ``meta`` are replaced the same way, since an unmasked
-    document's ``id`` is a plain hash of its text.
+    Place it before the splitter and the embedder of an indexing pipeline, where it reads whole
+    documents: a splitter can cut a value in two, and a piece is not always recognised. Passages
+    that come split already are masked together when they name one source in ``source_id``,
+    ``parent_id`` or ``__parent_id``. Every value goes to the mapping store, with the surname of
+    each person.
+
+    The documents that come out are new ones: tokens in the content and in every string of
+    ``meta``, nested keys and the members of sets included; the field names of ``meta`` stay. A
+    string shaped like a SHA-256 is taken for the identifier of a document, since Haystack computes
+    each ``id`` as a plain hash of the original text: it is pointed to the masked twin of that
+    document when the twin is in the same batch, and replaced by a keyed fingerprint otherwise. An
+    ``id`` Haystack computed is computed again from the masked document, and one the caller chose is
+    masked like text, so writing with ``DuplicatePolicy.OVERWRITE`` and deleting by ``id`` keep
+    working. Indexing documents this masker wrote changes nothing, when all the passages of a
+    document are in one batch.
 
     A document with a ``blob`` or an embedding is refused: both were made from the original.
 
@@ -184,19 +210,23 @@ class PolanonDocumentMasker(_Masker):
         pseudonyms = anonymizer.pseudonyms
         assert pseudonyms is not None  # every masker is built with them
         contents: list[str | None] = [None] * len(documents)
-        metas: list[dict[str, Any]] = [{} for _ in documents]
+        meta_texts: list[list[str]] = [[] for _ in documents]
+        chosen: list[str | None] = [None] * len(documents)
         for group in _by_source(documents):
             texts = [documents[index].content or "" for index in group]
-            meta_texts = [_meta_strings(documents[index].meta) for index in group]
-            flat = [text for strings in meta_texts for text in strings]
+            pieces = [_masked_pieces(documents[index]) for index in group]
+            flat = [text for strings in pieces for text in strings]
             result = anonymizer.index_chunks([*texts, *flat], self.store)
             rest = iter(result.texts[len(texts) :])
             masked = result.texts[: len(texts)]
-            for index, content, strings in zip(group, masked, meta_texts, strict=True):
+            for index, content, strings in zip(group, masked, pieces, strict=True):
                 original = documents[index]
                 contents[index] = None if original.content is None else content
-                metas[index] = _meta_replaced(original.meta, [next(rest) for _ in strings])
-        return {"documents": _with_keyed_ids(documents, contents, metas, pseudonyms)}
+                done = [next(rest) for _ in strings]
+                if _chosen_id(original):
+                    chosen[index] = done.pop()
+                meta_texts[index] = done
+        return {"documents": _with_keyed_ids(documents, contents, meta_texts, chosen, pseudonyms)}
 
 
 class PolanonStreamRestorer:
@@ -226,6 +256,14 @@ class PolanonStreamRestorer:
         """Learn what the tokens of the question stand for."""
         self._lookup.known.update(mapping)
 
+    def __copy__(self) -> "PolanonStreamRestorer":
+        """Stay one object: Haystack copies what each component gets, and this one is shared."""
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "PolanonStreamRestorer":
+        """Stay one object, so the question's mapping reaches the generator's callback."""
+        return self
+
     def feed(self, text: str) -> str:
         """Take one piece of the answer and return what can be shown now, restored."""
         return self._restorer.feed(text)
@@ -244,7 +282,11 @@ class PolanonStreamRestorer:
 
 
 class _LazyMapping(Mapping[str, str]):
-    """The question's mapping, and the store asked for each token the first time it appears."""
+    """The store, asked for each token the first time it appears, and the question's mapping.
+
+    The store comes first, with a person's name in the nominative, as :class:`PolanonRestorer`
+    gives it; the question's mapping holds what only the question named.
+    """
 
     def __init__(self, store: MappingStore) -> None:
         self.store = store
@@ -252,13 +294,12 @@ class _LazyMapping(Mapping[str, str]):
         self._asked: dict[str, str | None] = {}
 
     def get(self, token: str, default: Any = None) -> Any:
-        if token in self.known:
-            return self.known[token]
         if token not in self._asked:
-            held = self.store.get([token]).get(token)
-            self._asked[token] = None if held is None else held.value
+            self._asked[token] = stored_mapping(self.store, token).get(token)
         found = self._asked[token]
-        return default if found is None else found
+        if found is not None:
+            return found
+        return self.known.get(token, default)
 
     def __getitem__(self, token: str) -> str:
         found = self.get(token)
@@ -269,6 +310,9 @@ class _LazyMapping(Mapping[str, str]):
 
     def __iter__(self) -> Iterator[str]:
         return iter(self.known)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "_LazyMapping":
+        return self
 
     def __len__(self) -> int:
         return len(self.known)
@@ -349,7 +393,7 @@ class PolanonRestorer:
         texts = [text for reply in replies for text in _message_texts(reply)]
         for document in documents:
             texts.append(document.content or "")
-            texts.extend(_meta_strings(document.meta))
+            texts.extend(_texts(document.meta, top=True))
         values = (mapping or {}) | stored_mapping(self.store, *texts)
 
         def restore(text: str) -> str:
@@ -361,8 +405,11 @@ class PolanonRestorer:
                 dataclasses.replace(
                     document,
                     content=None if document.content is None else restore(document.content),
-                    meta=_meta_replaced(
-                        document.meta, [restore(text) for text in _meta_strings(document.meta)]
+                    meta=_rebuilt(
+                        document.meta,
+                        iter([restore(text) for text in _texts(document.meta, top=True)]),
+                        _unchanged,
+                        top=True,
                     ),
                 )
                 for document in documents
@@ -402,137 +449,169 @@ def _by_source(documents: list[Document]) -> list[list[int]]:
     """Group the positions of documents that are passages of one source, in order."""
     groups: dict[object, list[int]] = {}
     for index, document in enumerate(documents):
-        source = document.meta.get("source_id")
-        key: object = ("source", source) if isinstance(source, str) and source else ("alone", index)
+        source = next(
+            (
+                document.meta[field]
+                for field in _SOURCE_FIELDS
+                if isinstance(document.meta.get(field), str) and document.meta[field]
+            ),
+            None,
+        )
+        key: object = ("source", source) if source is not None else ("alone", index)
         groups.setdefault(key, []).append(index)
     return list(groups.values())
 
 
-def _strings(value: Any) -> Iterator[str]:
-    """Every string inside a JSON-like value, in order; keys and other values are left alone."""
+def _is_identifier(value: str) -> bool:
+    """Whether a string is the identifier of a document: a SHA-256, or a keyed fingerprint."""
+    return _HASH.fullmatch(value.removeprefix(_KEYED)) is not None
+
+
+def _texts(value: Any, *, top: bool = False) -> Iterator[str]:
+    """Every string of a JSON-like value that is text to mask or restore, in order.
+
+    Identifiers of documents are left to :func:`_rebuilt`. The keys of a nested mapping are text,
+    and so are the members of a set; the keys of ``meta`` itself are the names of its fields.
+    """
     if isinstance(value, str):
-        yield value
+        if not _is_identifier(value):
+            yield value
     elif isinstance(value, Mapping):
-        for item in value.values():
-            yield from _strings(item)
-    elif isinstance(value, list | tuple):
+        for key, item in value.items():
+            if not top and isinstance(key, str) and not _is_identifier(key):
+                yield key
+            yield from _texts(item)
+    elif isinstance(value, list | tuple | set | frozenset):
         for item in value:
-            yield from _strings(item)
+            yield from _texts(item)
 
 
-def _replaced(value: Any, strings: list[str]) -> Any:
-    """Return `value` with its strings, in the order :func:`_strings` gives them, replaced."""
-    pending = iter(strings)
+def _rebuilt(
+    value: Any, texts: Iterator[str], identifier: Callable[[str], str], *, top: bool = False
+) -> Any:
+    """Return `value` with its texts, in the order :func:`_texts` gives them, taken from `texts`.
 
-    def walk(item: Any) -> Any:
-        if isinstance(item, str):
-            return next(pending)
-        if isinstance(item, Mapping):
-            return {key: walk(inner) for key, inner in item.items()}
-        if isinstance(item, list):
-            return [walk(inner) for inner in item]
-        if isinstance(item, tuple):
-            return tuple(walk(inner) for inner in item)
-        return item
+    Identifiers of documents go through `identifier` instead.
+    """
+    if isinstance(value, str):
+        return identifier(value) if _is_identifier(value) else next(texts)
+    if isinstance(value, Mapping):
+        rebuilt: dict[Any, Any] = {}
+        for key, item in value.items():
+            if not top and isinstance(key, str):
+                key = identifier(key) if _is_identifier(key) else next(texts)
+            rebuilt[key] = _rebuilt(item, texts, identifier)
+        return rebuilt
+    if isinstance(value, list):
+        return [_rebuilt(item, texts, identifier) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_rebuilt(item, texts, identifier) for item in value)
+    if isinstance(value, set | frozenset):
+        return type(value)(_rebuilt(item, texts, identifier) for item in value)
+    return value
 
-    return walk(value)
+
+def _unchanged(identifier: str) -> str:
+    return identifier
 
 
-def _meta_strings(meta: Mapping[str, Any]) -> list[str]:
-    """The strings of a document's ``meta`` that are masked: all but the identifiers."""
-    return [
-        text for key, value in meta.items() if key not in _ID_FIELDS for text in _strings(value)
-    ]
+def _chosen_id(document: Document) -> bool:
+    """Whether the caller chose a document's ``id``: Haystack's own is always a SHA-256."""
+    return not _is_identifier(document.id)
 
 
-def _meta_replaced(meta: Mapping[str, Any], strings: list[str]) -> dict[str, Any]:
-    """Return `meta` with the strings :func:`_meta_strings` gives replaced, in that order."""
-    fields = {key: value for key, value in meta.items() if key not in _ID_FIELDS}
-    replaced: dict[str, Any] = _replaced(fields, strings)
-    return {key: replaced.get(key, value) for key, value in meta.items()}
+def _masked_pieces(document: Document) -> list[str]:
+    """The texts of a document's ``meta`` to mask, and last its ``id`` if the caller chose it."""
+    pieces = list(_texts(document.meta, top=True))
+    if _chosen_id(document):
+        pieces.append(document.id)
+    return pieces
 
 
 def _with_keyed_ids(
     originals: list[Document],
     contents: list[str | None],
-    metas: list[dict[str, Any]],
+    meta_texts: list[list[str]],
+    chosen: list[str | None],
     pseudonyms: Pseudonyms,
 ) -> list[Document]:
     """Build the masked documents, with no identifier in them that is a plain hash of a text.
 
-    A splitter writes the ``id`` of the document it split into ``source_id``, and the ``id`` of
-    the neighbouring passages into ``_split_overlap``: each a plain SHA-256 of the original text,
-    which a short document can be found from by hashing guesses. A passage masked here is pointed
-    to by the ``id`` of its masked twin, any other document by a keyed fingerprint. As the splitter
-    does, each ``id`` is computed before the overlaps are written in, so they can point both ways.
+    A splitter writes the ``id`` of the document it split, and of the neighbouring passages, into
+    ``meta``: each a plain SHA-256 of an original text, which a short document can be found from
+    by hashing guesses. An identifier of a document in the batch points to its masked twin, and any
+    other one becomes a keyed fingerprint. As Haystack's splitters do, each ``id`` is computed
+    before the identifiers of other documents in the batch are written in, so that they can point
+    both ways, and so that indexing the masked documents again gives the same ones.
     """
+    inside = {original.id for original in originals}
 
-    def keyed(identifier: object) -> object:
-        if not isinstance(identifier, str):
+    def keyed(identifier: str) -> str:
+        if identifier.startswith(_KEYED):
             return identifier
-        return pseudonyms.fingerprint(identifier, _DOCUMENT_ID)
+        return _KEYED + pseudonyms.fingerprint(identifier, _DOCUMENT_ID)
 
-    firsts: list[dict[str, Any]] = []
-    for meta in metas:
-        first = {key: value for key, value in meta.items() if key != "_split_overlap"}
-        if "source_id" in first:
-            first["source_id"] = keyed(first["source_id"])
-        firsts.append(first)
+    def before(identifier: str) -> str:
+        return "" if identifier in inside else keyed(identifier)
+
     ids = [
-        Document(content=content, meta=first).id
-        for content, first in zip(contents, firsts, strict=True)
+        given
+        if given is not None
+        else Document(
+            content=content, meta=_rebuilt(original.meta, iter(texts), before, top=True)
+        ).id
+        for original, content, texts, given in zip(
+            originals, contents, meta_texts, chosen, strict=True
+        )
     ]
     twins = {original.id: new for original, new in zip(originals, ids, strict=True)}
-    documents = []
-    for original, content, meta, first, new in zip(
-        originals, contents, metas, firsts, ids, strict=True
-    ):
-        overlap = meta.get("_split_overlap")
-        if isinstance(overlap, list):
-            first = {
-                **first,
-                "_split_overlap": [
-                    {**item, "doc_id": twins.get(item["doc_id"]) or keyed(item["doc_id"])}
-                    if isinstance(item, Mapping) and "doc_id" in item
-                    else item
-                    for item in overlap
-                ],
-            }
-        documents.append(Document(id=new, content=content, meta=first, score=original.score))
-    return documents
+
+    def after(identifier: str) -> str:
+        return twins.get(identifier) or keyed(identifier)
+
+    return [
+        Document(
+            id=new,
+            content=content,
+            meta=_rebuilt(original.meta, iter(texts), after, top=True),
+            score=original.score,
+        )
+        for original, content, texts, new in zip(originals, contents, meta_texts, ids, strict=True)
+    ]
 
 
 def _message_texts(message: ChatMessage) -> list[str]:
-    texts = list(message.texts)
-    for call in message.tool_calls:
-        texts.extend(_strings(call.arguments))
-    reasoning = message.reasoning
-    if reasoning is not None:
-        texts.append(reasoning.reasoning_text)
+    texts: list[str] = []
+    for part in message._content:
+        if isinstance(part, TextContent):
+            texts.append(part.text)
+        elif isinstance(part, ToolCall):
+            texts.extend(_texts(part.arguments, top=True))
+        elif isinstance(part, ReasoningContent):
+            texts.append(part.reasoning_text)
     return texts
 
 
 def _restored_message(message: ChatMessage, restore: Callable[[str], str]) -> ChatMessage:
-    """Return an assistant's message with its text, tool arguments and reasoning restored."""
+    """Return an assistant's message with every text, tool argument and reasoning restored.
+
+    Every part is kept, in its order: a reply of several texts, or with an image, keeps them all.
+    """
     if not message.is_from(ChatRole.ASSISTANT):
         return message
-    calls = [
-        dataclasses.replace(
-            call,
-            arguments=_replaced(call.arguments, [restore(t) for t in _strings(call.arguments)]),
-        )
-        for call in message.tool_calls
-    ]
-    reasoning = message.reasoning
-    return ChatMessage.from_assistant(
-        text=None if message.text is None else restore(message.text),
-        meta=dict(message.meta),
-        name=message.name,
-        tool_calls=calls or None,
-        reasoning=None
-        if reasoning is None
-        else dataclasses.replace(reasoning, reasoning_text=restore(reasoning.reasoning_text)),
-    )
+
+    def part_restored(part: Any) -> Any:
+        if isinstance(part, TextContent):
+            return TextContent(restore(part.text))
+        if isinstance(part, ToolCall):
+            restored = [restore(text) for text in _texts(part.arguments, top=True)]
+            arguments = _rebuilt(part.arguments, iter(restored), _unchanged, top=True)
+            return dataclasses.replace(part, arguments=arguments)
+        if isinstance(part, ReasoningContent):
+            return dataclasses.replace(part, reasoning_text=restore(part.reasoning_text))
+        return part
+
+    return dataclasses.replace(message, _content=[part_restored(p) for p in message._content])
 
 
 __all__ = [
