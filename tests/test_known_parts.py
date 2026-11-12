@@ -3,6 +3,8 @@
 Such parts stand alone in a profile written as JSON, a pasted CV or a list of repositories.
 """
 
+import pytest
+
 from polanon import Anonymizer, Guard, Span, default_guards
 
 
@@ -56,7 +58,11 @@ def test_a_name_after_a_title_and_without_it_is_one_person():
 def test_a_foreign_title_is_no_part_of_a_name():
     from polanon._known_parts import known_parts
 
-    assert known_parts("Frau Wiśniewska", "PERSON", trusted=True) == ["Wiśniewska"]
+    assert known_parts("Frau Wiśniewska", "PERSON", trusted=True) == [
+        "Wiśniewska",
+        "Wiśniewskiej",
+        "Wiśniewską",
+    ]
     assert known_parts("Mrs Emily Carter", "PERSON", trusted=True) == ["Emily", "Carter"]
 
 
@@ -76,6 +82,47 @@ def test_a_surname_known_from_an_earlier_turn_is_masked_on_its_own():
     second = mask("Kowalski dzwonił.", first.mapping)
     assert second.anonymized == "<OSOBA_2> dzwonił."
     assert second.mapping["<OSOBA_2>"] == "Kowalski"
+
+
+def test_a_feminine_surname_in_another_case_is_masked_in_the_next_turn():
+    """The dative "Bielskiej" does not begin with "Bielska", so it went out after the full name."""
+    first = mask("Pracownica Natalia Bielska prosi o korektę.")
+    text = "Dopisz, że Bielskiej potrzebne jest zaświadczenie."
+    second = mask(text, first.mapping)
+    assert second.anonymized == "Dopisz, że <OSOBA_2> potrzebne jest zaświadczenie."
+    assert Anonymizer.restore(second.anonymized, second.mapping) == text
+
+
+@pytest.mark.parametrize(
+    ("name", "later"),
+    [
+        ("Natalia Bielska", "Dopisz, że Bielskiej potrzebne jest zaświadczenie."),
+        ("Natalia Bielska", "Rozmawiałem z Bielską wczoraj."),
+        ("Ewa Nowacka", "Przekaż Nowackiej dokumenty."),
+        ("Ewa Nowacka", "Spotkanie z Nowacką w piątek."),
+        ("Maria Zawadzka", "Zadzwoń do Zawadzkiej."),
+        ("Maria Zawadzka", "Umówiłem się z Zawadzką."),
+        ("Anna Nowak-Bielska", "Zadzwoń do Nowak-Bielskiej."),
+    ],
+)
+def test_a_feminine_surname_in_another_case_is_masked_in_the_same_text(name, later):
+    text = f"Pracownica {name} prosi o korektę. {later}"
+    result = mask(text)
+    surname = name.split()[-1]
+    assert surname[:-1] not in result.anonymized
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
+
+
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("Anna Polska", "Pracuje w polskiej firmie."),
+        ("Natalia Bielska", "Pracuje w bielskiej firmie."),
+    ],
+)
+def test_a_lowercase_adjective_spelled_like_a_known_surname_stays(name, text):
+    mapping = {"<OSOBA_1>": name}
+    assert mask(text, mapping).anonymized == text
 
 
 def test_a_name_a_language_model_guessed_gives_no_surname_without_a_known_first_name():

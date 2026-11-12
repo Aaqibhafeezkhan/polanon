@@ -28,6 +28,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   check digit, and "pesel 78059938421", with day 99, went out in clear, since the checksum was
   checked before the label. Without the label the checksum still decides, so an order number of
   eleven digits stays as it is.
+- **A feminine surname in another case** is masked after the full name: once "Natalia Bielska"
+  was masked, "Bielskiej" and "Bielską" went out in clear, in the same text and in the next turn,
+  since no case of a surname in -ska, -cka or -dzka but the nominative begins with it. In
+  lowercase, "w bielskiej firmie" stays an adjective.
 
 ## [0.3.2] - 2026-11-12
 

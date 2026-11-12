@@ -457,13 +457,30 @@ def is_common_adjective(word: str) -> bool:
     return match is not None and folded[: match.start("ending")] in _COMMON_ADJECTIVES
 
 
+#: A feminine surname that declines as an adjective: "Bielska", "Nowacka", "Zawadzka".
+_FEMININE_ADJECTIVAL_SURNAME = re.compile(r"(?:s|c|dz)ka$")
+
+
+def _feminine_oblique_forms(surname: str) -> list[str]:
+    """Return "Bielskiej" and "Bielską" for "Bielska", and nothing for a surname of another kind.
+
+    The masculine "Kowalskiego" begins with "Kowalski", so an occurrence of the surname inside it
+    takes the whole word; no case of "Bielska" but the nominative begins with it.
+    """
+    if _FEMININE_ADJECTIVAL_SURNAME.search(fold(surname)) is None or is_common_adjective(surname):
+        return []
+    endings = ("IEJ", "Ą") if surname.isupper() else ("iej", "ą")
+    return [surname[:-1] + ending for ending in endings]
+
+
 def person_name_parts(name: str, *, needs_first_name: bool = False) -> list[str]:
     """Return the words of a person's name that point to the person on their own: the surname.
 
     "Jan Kowalski" gives "Kowalski", "Anna Nowak-Kępa" gives "Nowak-Kępa", "Nowak" and "Kępa".
-    A first name this guard knows is left out, and so are titles, initials and common adjectives:
-    "Jan" or "Krakowska" alone point to nobody. A first name the guard does not know is kept, since
-    nothing tells it from the surname.
+    "Natalia Bielska" gives "Bielska" with "Bielskiej" and "Bielską", the cases that do not begin
+    with it. A first name this guard knows is left out, and so are titles, initials and common
+    adjectives: "Jan" or "Krakowska" alone point to nobody. A first name the guard does not know is
+    kept, since nothing tells it from the surname.
 
     Args:
         name: a detected name of two to four words.
@@ -490,10 +507,12 @@ def person_name_parts(name: str, *, needs_first_name: bool = False) -> list[str]
         if is_common_adjective(bare):
             continue
         parts.append(bare)
+        parts.extend(_feminine_oblique_forms(bare))
         if "-" in bare:
-            parts.extend(
-                part for part in bare.split("-") if len(part) >= 3 and fold(part) not in NAME_FORMS
-            )
+            for part in bare.split("-"):
+                if len(part) >= 3 and fold(part) not in NAME_FORMS:
+                    parts.append(part)
+                    parts.extend(_feminine_oblique_forms(part))
     if needs_first_name and not has_first_name:
         return []
     return parts
