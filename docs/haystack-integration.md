@@ -1,9 +1,10 @@
-# Draft entry for the Haystack integrations catalog
+# Entry in the Haystack integrations catalog
 
-The text below is meant to become `integrations/polanon.md` in a pull request to
-[deepset-ai/haystack-integrations](https://github.com/deepset-ai/haystack-integrations), following
-its `draft-integration.md` template. It has not been submitted. The optional logo is left out; a
-square PNG would go to `logos/polanon.png` in the same pull request.
+The text below is `integrations/polanon.md`, submitted to
+[deepset-ai/haystack-integrations](https://github.com/deepset-ai/haystack-integrations) in
+[pull request 730](https://github.com/deepset-ai/haystack-integrations/pull/730), following its
+`draft-integration.md` template. When the entry changes, change it here and in the catalog alike.
+The optional logo is left out; a square PNG would go to `logos/polanon.png`.
 
 ````markdown
 ---
