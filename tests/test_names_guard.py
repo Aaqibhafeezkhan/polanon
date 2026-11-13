@@ -198,6 +198,38 @@ def test_a_word_that_is_also_a_name_needs_a_surname_or_a_form_of_address():
     assert _found("Nowa marka Marek Zając") == ["Marek Zając"]
 
 
+@pytest.mark.parametrize(
+    ("text", "score"),
+    [
+        ("Wakacje na Kubie były super.", 0.8),
+        ("Lecę na Kubę w maju.", 0.8),
+        ("Kuba Nowak przyjdzie.", 0.9),
+        ("Rozmawiałem z panem Kubą.", 0.9),
+        ("Podpisał J. Nowak.", 0.9),
+        ("Anna Maria przyjdzie.", 0.9),
+    ],
+)
+def test_a_first_name_alone_scores_below_the_language_model(text, score):
+    """Alone, "Kubie" is as likely Cuba as a man, so a model's place outranks it; with a surname,
+    an initial or a form of address it is a person and outranks the model."""
+    (span,) = PersonNameGuard().detect(text, PERSON)
+    assert span.score == score
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Our offices in Asia and Europe.", []),
+        ("Asia przyjdzie jutro.", []),
+        ("Asia Kowalska przyjdzie jutro.", ["Asia Kowalska"]),
+        ("Dzwoniła pani Asia.", ["Asia"]),
+        ("Napisz do Asi.", ["Asi"]),
+    ],
+)
+def test_asia_alone_is_the_continent(text, expected):
+    assert _found(text) == expected
+
+
 def test_a_capitalised_word_after_a_first_name_is_taken_as_the_surname():
     assert _found("Pisała do niej Anna Curie") == ["Anna Curie"]
     assert _found("dzwoniła pani Zenobia") == ["Zenobia"]

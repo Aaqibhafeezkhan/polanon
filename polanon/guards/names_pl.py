@@ -36,6 +36,10 @@ ANY_TAG: frozenset[Tag] = frozenset((gender, case) for gender in "mf" for case i
 #: Confidence: above the NER guard (0.85), so a name read together with its surname labels the
 #: overlap, and below validated identifiers and companies anchored on a legal form.
 NAME_SCORE = 0.9
+#: A first name alone, with no surname, initial or form of address next to it, scores below the
+#: NER guard: "Wakacje na Kubie" is Cuba as likely as a man, and where the model reads a place or a
+#: company its label wins. Without the model the word is still masked, as a person.
+LONE_NAME_SCORE = 0.8
 
 
 def _words(block: str) -> list[str]:
@@ -267,8 +271,8 @@ NAME_FORMS: dict[str, frozenset[Tag]] = _index(
 AMBIGUOUS_FORMS = frozenset(
     _words(
         """
-        age ago ani antonim asie august basie czeska czesku franka frankiem franku jagoda jagode
-        jagody jagodzie kaja kalina kaline kalinie kaliny kasce kasie kaska kaske kaski kasko
+        age ago ani antonim asia asie august basie czeska czesku franka frankiem franku jagoda
+        jagode jagody jagodzie kaja kalina kaline kalinie kaliny kasce kasie kaska kaske kaski kasko
         konstanty laury laurze maja majce majka majke majki maks maksa maksem maksie marek marka
         marzenie mikolaj mikolaja nine oliwce oliwie oliwka oliwke oliwki pola pole polo roza roze
         rozy ryska rysku ula ule ulu wiktoria witka
@@ -612,8 +616,9 @@ class PersonNameGuard(Guard):
             if found is None:
                 index += 1
                 continue
-            first, last, cell = found
-            spans.append(Span(words[first].start, words[last].end, "PERSON", NAME_SCORE, self.name))
+            first, last, cell, alone = found
+            score = LONE_NAME_SCORE if alone else NAME_SCORE
+            spans.append(Span(words[first].start, words[last].end, "PERSON", score, self.name))
             if cell is not None:
                 # A surname in the next cell is masked on its own, so the row keeps its columns.
                 spans.append(
@@ -818,10 +823,11 @@ def _initials_and_surname(text: str, words: list[_Word], index: int) -> tuple[in
 
 def _person_at(
     text: str, words: list[_Word], index: int, taken: int
-) -> tuple[int, int, int | None] | None:
+) -> tuple[int, int, int | None, bool] | None:
     """Return the first and last word index of a person found at `index`, or None.
 
-    The third index is a surname in the next cell of a table or a CSV line, masked apart.
+    The third index is a surname in the next cell of a table or a CSV line, masked apart, and the
+    flag says whether the person is a first name alone; see :data:`LONE_NAME_SCORE`.
 
     Args:
         text: the whole text.
@@ -834,7 +840,7 @@ def _person_at(
     found: tuple[int, int] | None
     if _is_initial(text, word):
         found = _initials_and_surname(text, words, index)
-        return None if found is None else (*found, None)
+        return None if found is None else (*found, None, False)
     address = _address_before(text, words, index)
     readings = NAME_FORMS.get(word.key) if "-" not in word.key else None
     if readings is not None:
@@ -844,7 +850,7 @@ def _person_at(
     if address is None or _is_title(word):
         return None
     found = _addressed_surname(text, words, index, address)
-    return None if found is None else (*found, None)
+    return None if found is None else (*found, None, False)
 
 
 def _around_first_name(
@@ -853,11 +859,12 @@ def _around_first_name(
     position: tuple[int, int],
     readings: frozenset[Tag],
     address: frozenset[Tag] | None,
-) -> tuple[int, int, int | None] | None:
+) -> tuple[int, int, int | None, bool] | None:
     """Extend a first name to a second first name and a surname that agree with it.
 
     The surname may also stand on the next line, or in the next cell of a table or a CSV line,
-    returned as the third index; see :func:`_surname_across`.
+    returned as the third index; see :func:`_surname_across`. The flag is set for a first name
+    with nothing next to it: no second first name, surname or form of address.
     """
     index = position[0]
     ambiguous = words[index].key in AMBIGUOUS_FORMS
@@ -907,7 +914,8 @@ def _around_first_name(
 
     if not trusted and not strong:
         return None
-    return first, last, cell
+    alone = first == last == index and cell is None and address is None
+    return first, last, cell, alone
 
 
 def _surname_across(

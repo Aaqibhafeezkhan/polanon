@@ -629,12 +629,13 @@ anonymizer = Anonymizer([*default_guards(with_ner=False), EmployeeIdGuard()])
 anonymizer.anonymize_sync("Wniosek EMP-11111").anonymized  # "Wniosek <EMPLOYEE_ID_1>"
 ```
 
-Gdy wykrycia się nakładają, o tym, które wygrywa, decyduje wynik (score): 1.0 dla wartości, za
-którą ręczy suma kontrolna, etykieta albo oficjalny format, 0.85 dla statystycznego przypuszczenia;
-znaleziska sędziego mają wynik 0.5. Sekret jest maskowany w całości, razem ze wszystkim, co wykryto
-w jego wnętrzu. Fragment wychodzący poza tekst, typ zapisany w jakikolwiek inny sposób albo
-zapisany tak jak etykieta wbudowanego tokenu (`OSOBA`, `DATA`) powoduje wyjątek `ValueError`
-z nazwą twojego detektora.
+Gdy wykrycia się nakładają, o tym, które wygrywa, decyduje wynik (score): 1.0 dla wartości, za którą
+ręczy suma kontrolna, etykieta albo oficjalny format, 0.85 dla statystycznego przypuszczenia;
+znaleziska sędziego mają wynik 0.5. Polskie imię z nazwiskiem ma wynik 0.9, a samo imię 0.8, więc
+przypuszczenie, że to miejsce, wygrywa z nim. Sekret jest maskowany w całości, razem ze wszystkim,
+co wykryto w jego wnętrzu. Fragment wychodzący poza tekst, typ zapisany w jakikolwiek inny sposób
+albo zapisany tak jak etykieta wbudowanego tokenu (`OSOBA`, `DATA`) powoduje wyjątek `ValueError` z
+nazwą twojego detektora.
 
 ## Zanim zaczniesz na tym polegać
 

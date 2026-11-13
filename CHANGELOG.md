@@ -15,6 +15,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   joins the first name; in the next cell it is masked on its own, so the row keeps its columns.
   Across a line or a cell the word must read as a surname, so "Imię: Jan\nNazwisko:", "Jan;Anna",
   "Jan;Kraków" and "Kamil\nNowak Transport" under a signature stay apart.
+- **A place spelled like a first name** keeps the language model's label: "Wakacje na Kubie" went
+  to the model as a person, since a first name outranked the model wherever the two overlapped
+  (#16). A first name alone, with no surname, initial or form of address, now scores 0.8, below
+  the model's 0.85, and is still masked as a person without the model. "Asia" alone is the
+  continent, as "Maja" is the month; "Asia Kowalska" and "pani Asia" stay people.
 
 ## [0.3.3] - 2026-11-12
 

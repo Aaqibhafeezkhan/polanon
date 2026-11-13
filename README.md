@@ -602,10 +602,11 @@ anonymizer.anonymize_sync("Wniosek EMP-11111").anonymized  # "Wniosek <EMPLOYEE_
 ```
 
 The score decides who wins where detections overlap: 1.0 for a value a checksum, a label or an
-official format vouches for, 0.85 for a statistical guess; the judge's findings score 0.5. A secret
-is masked whole, with whatever was detected inside it. A span outside the text, a type spelled any
-other way, or one spelled like a built-in token label (`OSOBA`, `DATA`) raises `ValueError` naming
-your guard.
+official format vouches for, 0.85 for a statistical guess; the judge's findings score 0.5. A Polish
+name with its surname scores 0.9 and a first name alone 0.8, so a guess of a place wins over it. A
+secret is masked whole, with whatever was detected inside it. A span outside the text, a type
+spelled any other way, or one spelled like a built-in token label (`OSOBA`, `DATA`) raises
+`ValueError` naming your guard.
 
 ## Before you rely on it
 

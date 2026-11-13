@@ -4,7 +4,15 @@ import time
 
 import pytest
 
-from polanon import Anonymizer, DenylistGuard, MockJudge, RegexGuard, SecretsGuard, default_guards
+from polanon import (
+    Anonymizer,
+    DenylistGuard,
+    MockJudge,
+    PersonNameGuard,
+    RegexGuard,
+    SecretsGuard,
+    default_guards,
+)
 from polanon.guards.base import Guard
 from polanon.judge.base import JudgeError
 from polanon.pipeline import anonymize, mask_known_values
@@ -521,3 +529,35 @@ def test_a_known_pin_that_equals_a_year_leaves_dates_joined_to_dates_readable(te
 def test_a_known_pin_joined_to_what_is_no_date_is_still_masked(text):
     result = Anonymizer([]).anonymize_sync(text, {"<SEKRET_1>": "2025"})
     assert "2025" not in result.anonymized
+
+
+@pytest.mark.parametrize(
+    ("place", "text", "expected"),
+    [
+        ("Kubie", "Wakacje na Kubie były super.", "Wakacje na <MIEJSCE_1> były super."),
+        ("Kubę", "Lecę na Kubę w maju.", "Lecę na <MIEJSCE_1> w maju."),
+    ],
+)
+async def test_a_first_name_alone_gives_way_to_the_language_model_s_place(place, text, expected):
+    """Cuba went to the model as a person, and its answer treated it as one."""
+    model = FirstOccurrenceGuard(place, "LOCATION")
+    result = await anonymize(
+        text, enabled=ALL, guards=[PersonNameGuard(), model], judge=None, existing_mapping={}
+    )
+    assert result.anonymized == expected
+    rules = await anonymize(
+        text, enabled=ALL, guards=[PersonNameGuard()], judge=None, existing_mapping={}
+    )
+    assert rules.anonymized == text.replace(place, "<OSOBA_1>")
+
+
+async def test_a_name_with_its_surname_still_outranks_the_language_model():
+    model = FirstOccurrenceGuard("Kuba Nowak", "LOCATION")
+    result = await anonymize(
+        "Kuba Nowak przyjdzie.",
+        enabled=ALL,
+        guards=[PersonNameGuard(), model],
+        judge=None,
+        existing_mapping={},
+    )
+    assert result.anonymized == "<OSOBA_1> przyjdzie."
