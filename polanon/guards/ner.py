@@ -59,6 +59,17 @@ _LOAD_LOCK = threading.Lock()
 #: this list, which is what catches a heading like "NOTATKA WEWNĘTRZNA" without needing the phrase.
 LABEL_STOPWORDS = frozenset(
     {
+        # Academic and professional titles: the model tagged the "n." of "dr n. med." as a person.
+        "dr",
+        "n",
+        "med",
+        "hab",
+        "prof",
+        "mgr",
+        "inż",
+        "inz",
+        "lek",
+        "dent",
         "pesel",
         "nip",
         "regon",

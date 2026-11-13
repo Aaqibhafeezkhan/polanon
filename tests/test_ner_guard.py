@@ -2,7 +2,7 @@
 
 import pytest
 
-from polanon.guards.ner import LABEL_MAP, NerGuard
+from polanon.guards.ner import LABEL_MAP, NerGuard, _is_only_labels
 
 pytestmark = pytest.mark.slow
 
@@ -149,6 +149,30 @@ def test_a_heading_made_only_of_form_words_is_not_a_name(guard):
     found = [text[s.start : s.end] for s in guard.detect(text, {"PERSON", "ORG", "LOCATION"})]
     assert "NOTATKA WEWNĘTRZNA" not in found
     assert any("Anna" in fragment for fragment in found), found
+
+
+@pytest.mark.parametrize(
+    ("fragment", "only_titles"),
+    [
+        ("n.", True),
+        ("dr n. med.", True),
+        ("prof. dr hab. inż.", True),
+        ("lek. dent.", True),
+        ("dr n. med. Ewa Zawadzka", False),
+        ("Ewa", False),
+    ],
+)
+def test_a_span_of_academic_titles_alone_is_dropped(fragment, only_titles):
+    """The Polish model tagged the "n." of "dr n. med." as a person, and it went out as a token."""
+    assert _is_only_labels(fragment) is only_titles
+
+
+@needs_model
+def test_the_title_of_a_doctor_is_not_a_person(guard):
+    text = "Ordynator oddziału: dr n. med. Ewa Zawadzka"
+    found = [text[s.start : s.end] for s in guard.detect(text, {"PERSON"})]
+    assert "n." not in found
+    assert any("Ewa Zawadzka" in fragment for fragment in found), found
 
 
 @needs_model

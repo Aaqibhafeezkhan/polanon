@@ -26,6 +26,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   type whose values always carry one, or with fewer than three letters and digits, now stays as
   written; any other piece, such as the name of a loose span around an e-mail address, is masked
   wherever it stands from the first turn on.
+- **An academic title alone** stays readable: the Polish model tagged the "n." of "dr n. med." as a
+  person. A span the model finds made only of titles such as dr, n., med., hab., prof., mgr, inż.
+  and lek. is dropped, as form labels are; "dr n. med. Ewa Zawadzka" keeps the name masked.
 
 ## [0.3.3] - 2026-11-12
 
