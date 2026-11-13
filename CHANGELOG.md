@@ -20,6 +20,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   (#16). A first name alone, with no surname, initial or form of address, now scores 0.8, below
   the model's 0.85, and is still masked as a person without the model. "Asia" alone is the
   continent, as "Maja" is the month; "Asia Kowalska" and "pani Asia" stay people.
+- **A piece left over from a losing detection** is treated alike in every turn (#20). Masked in
+  place in the first turn, it was a known value in the next, so the bare "NIP" that an address
+  rule left behind went to the model as an address in every sentence. A piece with no digit of a
+  type whose values always carry one, or with fewer than three letters and digits, now stays as
+  written; any other piece, such as the name of a loose span around an e-mail address, is masked
+  wherever it stands from the first turn on.
 
 ## [0.3.3] - 2026-11-12
 

@@ -213,21 +213,39 @@ def _outside(spans: list[Span], ranges: list[tuple[int, int]], text: str) -> lis
     return kept
 
 
-def _whole_ranges(merged: list[Span], detected: list[Span]) -> set[tuple[int, int]]:
-    """Return the ranges of merged spans that are a whole detection, not a piece cut out of one.
+#: Types whose every value carries a digit: an identifier, a phone number, a date, an address with
+#: its house number.
+_DIGIT_TYPES = frozenset(
+    {"PESEL", "NIP", "REGON", "KRS", "PL_ID", "PL_PASSPORT", "IBAN", "CREDIT_CARD", "PHONE"}
+    | {"POSTAL_CODE", "ADDRESS", "PLATE", "VIN", "DATE", "BIRTH_DATE", "TAX_ID", "COMPANY_ID"}
+    | {"BANK_ACCOUNT"}
+)
+#: A piece with fewer letters and digits than this names nothing on its own.
+_SHORTEST_PIECE = 3
+
+
+def _stray_pieces(merged: list[Span], detected: list[Span], text: str) -> set[tuple[int, int]]:
+    """Return the ranges of pieces cut out of a losing detection that name nothing on their own.
 
     merge_spans keeps what a losing detection covered outside the winner, so nothing a guard flagged
-    goes out. Such a piece can be a stray word, though: an address rule that ran from an e-mail
-    domain into the next line left the bare word "NIP" behind. Masking it in place costs little;
-    treating it as a known value masked every "NIP" in the document, so only whole detections are.
+    goes out: the name of a loose span around an e-mail address stays masked. Such a piece is a
+    value like any other, masked wherever it stands, in this turn and, through the mapping, in every
+    later one. A piece can be a stray word, though: an address rule that ran from an e-mail domain
+    into the next line left the bare word "NIP" behind, and every "NIP" of the conversation went to
+    the model as an address. A piece with no digit of a type whose values always carry one, or with
+    fewer than three letters and digits, is such a word, and stays as written.
     """
     starts = {(span.entity_type, span.start) for span in detected}
     ends = {(span.entity_type, span.end) for span in detected}
-    return {
-        (span.start, span.end)
-        for span in merged
-        if (span.entity_type, span.start) in starts and (span.entity_type, span.end) in ends
-    }
+    stray: set[tuple[int, int]] = set()
+    for span in merged:
+        if (span.entity_type, span.start) in starts and (span.entity_type, span.end) in ends:
+            continue  # a whole detection, or two of one type joined
+        characters = [char for char in text[span.start : span.end] if char.isalnum()]
+        digitless = not any(char.isdigit() for char in characters)
+        if len(characters) < _SHORTEST_PIECE or (span.entity_type in _DIGIT_TYPES and digitless):
+            stray.add((span.start, span.end))
+    return stray
 
 
 def _one_type_per_value(spans: list[Span], text: str) -> list[Span]:
@@ -374,8 +392,10 @@ def _mask_stage1(
     if allowlist is not None:
         detected = allowlist.drop_allowed(detected, text)
     merged = merge_spans(detected, text)
-    whole = _whole_ranges(merged, detected)
-    merged = _one_type_per_value(merged, text)
+    stray = _stray_pieces(merged, detected, text)
+    merged = _one_type_per_value(
+        [span for span in merged if (span.start, span.end) not in stray], text
+    )
 
     known: dict[tuple[str, bool], tuple[str, str]] = {}
     for token, value in existing_mapping.items():
@@ -383,9 +403,8 @@ def _mask_stage1(
         if entity_type is not None and value != token:
             _remember(known, value, entity_type, trusted=False)
     for span in merged:
-        if (span.start, span.end) in whole:
-            value = text[span.start : span.end]
-            _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
+        value = text[span.start : span.end]
+        _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
     occupied = [(span.start, span.end) for span in merged] + tokens
     placement = place_known_values(
         text, haystack, known.values(), occupied, absorb=True, cross_occupied=True

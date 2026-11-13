@@ -265,15 +265,46 @@ async def test_tokens_follow_reading_order_when_a_value_is_recognised_only_later
     assert result.anonymized == "Spółka <FIRMA_1> przejęła <FIRMA_2>. Dane: <FIRMA_1>."
 
 
-async def test_a_piece_left_over_from_a_losing_detection_is_not_masked_elsewhere():
-    """An address rule once ran from an e-mail domain into the next line and left "NIP" behind;
-    every "NIP" in the document then reached the model as an address."""
-    text = "Kontakt: jan@example.com\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
-    guard = FixedGuard(
-        Span(9, 24, "EMAIL"), Span(29, 42, "NIP"), Span(22, 32, "ADDRESS", 0.8, "fixed")
-    )
-    result = await mask(text, [guard])
-    assert result.anonymized == "Kontakt: <EMAIL_1>\n<ADRES_1> <NIP_1>\nProszę podać NIP nabywcy."
+STRAY_LABEL = "Kontakt: jan@example.com\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
+#: An address rule that once ran from an e-mail domain into the next line, and the two values it
+#: lost to, which leave the label "NIP" between them.
+STRAY_LABEL_GUARD = FixedGuard(
+    Span(9, 24, "EMAIL"), Span(29, 42, "NIP"), Span(22, 32, "ADDRESS", 0.8, "fixed")
+)
+
+
+async def test_a_word_left_over_from_a_losing_detection_without_its_digits_stays_readable():
+    """The bare "NIP" left of an address is no address: masked in place, it took a token that the
+    next turn then searched for in every sentence."""
+    result = await mask(STRAY_LABEL, [STRAY_LABEL_GUARD])
+    assert result.anonymized == "Kontakt: <EMAIL_1>\nNIP <NIP_1>\nProszę podać NIP nabywcy."
+    assert set(result.mapping.values()) == {"jan@example.com", "526-000-00-05"}
+
+
+async def test_a_word_left_over_from_a_losing_detection_stays_readable_in_the_next_turn():
+    first = await mask(STRAY_LABEL, [STRAY_LABEL_GUARD])
+    second = await mask("Proszę podać NIP nabywcy i NIP sprzedawcy.", [], mapping=first.mapping)
+    assert second.anonymized == "Proszę podać NIP nabywcy i NIP sprzedawcy."
+
+
+async def test_a_name_left_over_beside_an_address_is_masked_alike_in_both_turns():
+    """A loose name span around an e-mail leaves the name masked; it was masked only in place in
+    the first turn, and everywhere from the next one on."""
+    text = "Kontakt: Jan Kowalski <jan.k@firma.example>\nJan Kowalski oddzwoni."
+    loose = Span(text.index("Jan"), text.index(">") + 1, "PERSON", 0.85, "fixed")
+    email = Span(text.index("jan.k"), text.index(">"), "EMAIL", 1.0, "fixed")
+    first = await mask(text, [FixedGuard(loose, email)])
+    assert first.anonymized == "Kontakt: <OSOBA_1> <<EMAIL_1>>\n<OSOBA_1> oddzwoni."
+    second = await mask("Jan Kowalski oddzwoni.", [], mapping=first.mapping)
+    assert second.anonymized == "<OSOBA_1> oddzwoni."
+
+
+async def test_a_piece_of_a_losing_detection_too_short_to_name_anything_stays_readable():
+    text = "Od: K <k.nowak@firma.example>"
+    loose = Span(text.index("K"), len(text), "PERSON", 0.85, "fixed")
+    email = Span(text.index("k.nowak"), text.index(">"), "EMAIL", 1.0, "fixed")
+    result = await mask(text, [FixedGuard(loose, email)])
+    assert result.anonymized == "Od: K <<EMAIL_1>>"
 
 
 async def test_the_judge_reviews_only_the_masked_text():
@@ -484,15 +515,15 @@ async def test_known_value_crossing_a_surer_detection_keeps_the_rest_under_its_o
     assert is_lossless(result)
 
 
-async def test_leftover_sharing_the_start_of_its_detection_is_not_masked_elsewhere():
+async def test_leftover_sharing_the_start_of_its_detection_stays_readable():
     """The address rule starts at "NIP" and loses the number to the NIP rule: the bare word left
-    over is masked in place, not in every sentence that mentions a NIP."""
+    over stays as written, there as in every sentence that mentions a NIP."""
     text = "Kontakt: jan@example.com\nNIP 526-000-00-05\nProszę podać NIP nabywcy."
     guard = FixedGuard(
         Span(9, 24, "EMAIL"), Span(29, 42, "NIP"), Span(25, 42, "ADDRESS", 0.8, "fixed")
     )
     result = await mask(text, [guard])
-    assert result.anonymized == "Kontakt: <EMAIL_1>\n<ADRES_1> <NIP_1>\nProszę podać NIP nabywcy."
+    assert result.anonymized == "Kontakt: <EMAIL_1>\nNIP <NIP_1>\nProszę podać NIP nabywcy."
 
 
 async def test_one_value_read_as_two_types_with_equal_confidence_takes_the_first_type():
