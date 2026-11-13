@@ -421,6 +421,10 @@ _WORD = re.compile(r"[^\W\d_]+(?:-[^\W\d_]+)*")
 _SPACE = re.compile(r"[ \t\u00a0]+")
 _SPACE_AFTER_ABBREVIATION = re.compile(r"\.?[ \t\u00a0]+")
 _AFTER_INITIAL = re.compile(r"\.[ \t\u00a0]*")
+#: One line break, as a hard-wrapped e-mail puts between a first name and its surname.
+_LINE_BREAK = re.compile(r"[ \t\u00a0]*\r?\n[ \t\u00a0]*")
+#: One ";", "," or "|", as a CSV line or a Markdown table puts between two cells.
+_CELL_BREAK = re.compile(r"[ \t\u00a0]*[;,|][ \t\u00a0]*")
 
 #: A Roman numeral, which follows a name in capitals without being one: "Jana Pawła II".
 _ROMAN = re.compile(r"[IVXLCDM]+")
@@ -608,8 +612,14 @@ class PersonNameGuard(Guard):
             if found is None:
                 index += 1
                 continue
-            first, last = found
+            first, last, cell = found
             spans.append(Span(words[first].start, words[last].end, "PERSON", NAME_SCORE, self.name))
+            if cell is not None:
+                # A surname in the next cell is masked on its own, so the row keeps its columns.
+                spans.append(
+                    Span(words[cell].start, words[cell].end, "PERSON", NAME_SCORE, self.name)
+                )
+                last = cell
             index = taken = last + 1
         return spans
 
@@ -806,8 +816,12 @@ def _initials_and_surname(text: str, words: list[_Word], index: int) -> tuple[in
     return index, candidate
 
 
-def _person_at(text: str, words: list[_Word], index: int, taken: int) -> tuple[int, int] | None:
+def _person_at(
+    text: str, words: list[_Word], index: int, taken: int
+) -> tuple[int, int, int | None] | None:
     """Return the first and last word index of a person found at `index`, or None.
+
+    The third index is a surname in the next cell of a table or a CSV line, masked apart.
 
     Args:
         text: the whole text.
@@ -817,8 +831,10 @@ def _person_at(text: str, words: list[_Word], index: int, taken: int) -> tuple[i
             is only taken from there on.
     """
     word = words[index]
+    found: tuple[int, int] | None
     if _is_initial(text, word):
-        return _initials_and_surname(text, words, index)
+        found = _initials_and_surname(text, words, index)
+        return None if found is None else (*found, None)
     address = _address_before(text, words, index)
     readings = NAME_FORMS.get(word.key) if "-" not in word.key else None
     if readings is not None:
@@ -827,7 +843,8 @@ def _person_at(text: str, words: list[_Word], index: int, taken: int) -> tuple[i
         return _around_first_name(text, words, (index, taken), readings, address)
     if address is None or _is_title(word):
         return None
-    return _addressed_surname(text, words, index, address)
+    found = _addressed_surname(text, words, index, address)
+    return None if found is None else (*found, None)
 
 
 def _around_first_name(
@@ -836,13 +853,18 @@ def _around_first_name(
     position: tuple[int, int],
     readings: frozenset[Tag],
     address: frozenset[Tag] | None,
-) -> tuple[int, int] | None:
-    """Extend a first name to a second first name and a surname that agree with it."""
+) -> tuple[int, int, int | None] | None:
+    """Extend a first name to a second first name and a surname that agree with it.
+
+    The surname may also stand on the next line, or in the next cell of a table or a CSV line,
+    returned as the third index; see :func:`_surname_across`.
+    """
     index = position[0]
     ambiguous = words[index].key in AMBIGUOUS_FORMS
     trusted = address is not None or not ambiguous
     tags = (readings & address or readings) if address is not None else readings
     first = last = index
+    cell = None
 
     following = _neighbour(text, words, last, 1)
     if following is not None:
@@ -867,8 +889,17 @@ def _around_first_name(
             and _written_as_a_name(text, words, following, words[last], bool(tags & _NOMINATIVE))
         ):
             last = following
+    else:
+        across = _surname_across(text, words, last, tags, words[index])
+        if across is not None:
+            surname_index, on_the_next_line = across
+            strong = True
+            if on_the_next_line:
+                last = surname_index
+            else:
+                cell = surname_index
 
-    if last == index and address is None:
+    if last == index and cell is None and address is None:
         before = _surname_before(text, words, position, tags, trusted)
         if before is not None:
             first, settled = before
@@ -876,7 +907,44 @@ def _around_first_name(
 
     if not trusted and not strong:
         return None
-    return first, last
+    return first, last, cell
+
+
+def _surname_across(
+    text: str, words: list[_Word], index: int, tags: frozenset[Tag], name: _Word
+) -> tuple[int, bool] | None:
+    r"""A surname on the next line of a hard-wrapped e-mail, or in the next cell of a table.
+
+    "Janem\nKowalskim", "Jan;Kowalski", "| Jan | Kowalski |". Across a line or a cell the next
+    word is as often the next field, a town, a department or a label, so a capitalised word is
+    not enough here: the word must read as a surname that agrees with the first name, and a weak
+    reading counts only with both words written as names. A first name or a title there is the
+    next field: "Jan;Anna", "Imię: Jan\nNazwisko: ...". On the next line the surname must also
+    end the name there: under a signature, "Kamil\nNowak Transport" is a company.
+
+    Returns:
+        The surname's index and whether a line break, rather than a cell, stands before it.
+    """
+    following = index + 1
+    if following >= len(words):
+        return None
+    start, end = words[index].end, words[following].start
+    on_the_next_line = _LINE_BREAK.fullmatch(text, start, end) is not None
+    if not on_the_next_line and _CELL_BREAK.fullmatch(text, start, end) is None:
+        return None
+    candidate = words[following]
+    if _is_title(candidate) or candidate.key in NAME_FORMS:
+        return None
+    surname = surname_reading(candidate.text)
+    if surname is None or not _agrees(surname.tags, tags):
+        return None
+    if not (surname.strong or (_name_shaped(name.text) and _name_shaped(candidate.text))):
+        return None
+    if on_the_next_line:
+        after = _neighbour(text, words, following, 1)
+        if after is not None and _name_shaped(words[after].text):
+            return None
+    return following, on_the_next_line
 
 
 def _surname_before(

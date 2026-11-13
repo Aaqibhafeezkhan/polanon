@@ -259,6 +259,54 @@ def test_a_surname_in_capitals_is_taken_where_the_name_ends(text, expected):
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        (
+            "Proszę o kontakt z panem Janem\nKowalskim w sprawie faktury.",
+            ["Janem\nKowalskim"],
+        ),
+        ("Pozdrawiam\nAnna\r\nWiśniewska", ["Anna\r\nWiśniewska"]),
+        ("Podpisała Anna\nNowak.", ["Anna\nNowak"]),
+    ],
+)
+def test_a_surname_on_the_next_line_of_a_wrapped_text_joins_its_first_name(text, expected):
+    """A hard-wrapped e-mail put the surname on its own line, and it went out in clear."""
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("imie;nazwisko\nJan;Kowalski\nAnna;Wiśniewska", ["Jan", "Kowalski", "Anna", "Wiśniewska"]),
+        ("| Jan | Kowalski | 50810112354 |", ["Jan", "Kowalski"]),
+        ("Jan,Kowalski,Kraków", ["Jan", "Kowalski"]),
+        ("Marek, Zając", ["Marek", "Zając"]),
+    ],
+)
+def test_a_surname_in_the_next_cell_is_masked_as_a_value_of_its_own(text, expected):
+    """A CSV export or a Markdown table kept the surname; one token for both cells would also
+    swallow a column, so the surname gets its own."""
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Imię: Jan\nNazwisko: Kowalski", ["Jan"]),
+        ("Jan;Anna;Piotr", ["Jan", "Anna", "Piotr"]),
+        ("Jan;Kraków;Polska", ["Jan"]),
+        ("Uczestnicy: Jan\nDział: sprzedaż", ["Jan"]),
+        ("Anna\n\nNowak przejmuje projekt.", ["Anna"]),
+        ("jan;nowak", ["jan"]),
+    ],
+)
+def test_a_field_label_a_first_name_or_a_town_in_the_next_cell_stays_apart(text, expected):
+    """Across a line or a cell the next word is often the next field, so it needs a surname
+    reading, and a paragraph break or a weak surname in lowercase is no join."""
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("ANNA PROSI O FAKTURĘ DO PIĄTKU", ["ANNA"]),
         ("wyślij Kasi PDF z umową", ["Kasi"]),
         ("mieszkam przy al. Jana Pawła II 43A", ["Jana Pawła"]),
@@ -306,8 +354,9 @@ def test_an_abbreviation_or_a_sentence_end_is_not_an_initial(text):
     assert _found(text) == []
 
 
-def test_a_name_does_not_continue_across_a_line_break():
+def test_a_name_does_not_continue_into_a_company_on_the_next_line():
     assert _found("Pozdrawiam\nKamil\nNowak Transport") == ["Kamil"]
+    assert _found("Pozdrawiam\nKamil\nNowak Sp. z o.o.") == ["Kamil"]
 
 
 def test_nothing_is_returned_when_person_masking_is_off():

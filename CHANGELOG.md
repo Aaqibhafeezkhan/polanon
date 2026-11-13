@@ -5,6 +5,17 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Fixed
+
+- **A surname on the next line or in the next cell** is masked without the language model:
+  "z panem Janem\nKowalskim" in a hard-wrapped e-mail, "Jan;Kowalski" in a CSV export and
+  "| Jan | Kowalski |" in a Markdown table kept the surname in clear (#15). On the next line it
+  joins the first name; in the next cell it is masked on its own, so the row keeps its columns.
+  Across a line or a cell the word must read as a surname, so "Imię: Jan\nNazwisko:", "Jan;Anna",
+  "Jan;Kraków" and "Kamil\nNowak Transport" under a signature stay apart.
+
 ## [0.3.3] - 2026-11-12
 
 Fixes only, and nothing that worked before stops working: a patch release, as CONTRIBUTING.md
