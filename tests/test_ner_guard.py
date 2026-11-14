@@ -158,6 +158,43 @@ def test_on_a_line_with_no_language_a_lowercase_word_is_no_name():
     ]
 
 
+def test_a_text_read_before_is_not_read_again():
+    """An agent sends its system prompt, its tools and the whole history with every call.
+
+    Masking a call of 105 messages took 28 seconds, 20 of them in spaCy reading texts it had read
+    in the call before. The guard remembers what it found in a text, under the text's digest only.
+    """
+    text = "Spotkanie z Janem Kowalskim."
+    read = []
+
+    def nlp(piece):
+        read.append(piece)
+        return _Document([_Entity(piece, "Janem Kowalskim", "persName")])
+
+    guard = NerGuard()
+    guard._nlp = nlp
+    first = guard.detect(text, {"PERSON"})
+    assert guard.detect(text, {"PERSON"}) == first
+    assert len(read) == 1
+    first.clear()
+    assert guard.detect(text, {"PERSON"}) != []
+    guard.detect(text, {"PERSON", "ORG"})
+    assert len(read) == 2
+    assert "Kowalsk" not in repr(guard._found)
+
+    small = NerGuard(cache_texts=1)
+    small._nlp = nlp
+    for _ in range(2):
+        small.detect(text, {"PERSON"})
+        small.detect("Spotkanie z Janem Kowalskim, jutro.", {"PERSON"})
+    assert len(read) == 6
+    off = NerGuard(cache_texts=0)
+    off._nlp = nlp
+    off.detect(text, {"PERSON"})
+    off.detect(text, {"PERSON"})
+    assert len(read) == 8
+
+
 def test_an_english_model_is_trusted_on_english_lines():
     class _EnglishModel:
         lang = "en"

@@ -17,6 +17,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   call is still refused, and `--drop-unsupported` still leaves the content out; the two flags
   exclude each other.
 
+### Changed
+
+- **spaCy reads a text once.** A chat sends its whole history with every call, and an agent its
+  system prompt and the descriptions of its tools too: masking an agent's call of 105 messages
+  took 28 seconds, 20 of them in spaCy reading some two thousand texts it had read in the call
+  before. `NerGuard` now remembers what it found in up to 20 000 texts (`cache_texts`, 0 turns it
+  off), under each text's SHA-256 digest, never the text itself; the same call took 13 seconds.
+
 ### Fixed
 
 - **The gateway's last check no longer refuses an agent's history over names from code.** With

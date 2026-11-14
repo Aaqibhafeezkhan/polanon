@@ -7,10 +7,12 @@ so it silently returns nothing. Talking to spaCy ourselves keeps the mapping exp
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import logging
 import re
 import threading
+from collections import OrderedDict
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,12 @@ _WHITESPACE = re.compile(r"\s+")
 #: wait for the first one instead of each loading their own copy. One lock for the module rather
 #: than one per guard, so a guard can still be pickled.
 _LOAD_LOCK = threading.Lock()
+
+#: How many texts a guard remembers what it found in. A chat sends its whole history with every
+#: call, and an agent its system prompt and the descriptions of its tools too: some two thousand
+#: texts a call, nearly all of them read in the call before.
+CACHE_TEXTS = 20_000
+_CACHE_LOCK = threading.Lock()
 
 #: Form and document labels the Polish models sometimes tag as names. Masking them only makes the
 #: text harder to read, and they identify nobody. A span is dropped when *every* word in it is on
@@ -538,10 +546,21 @@ class NerGuard(Guard):
 
     name = "spacy_ner"
 
-    def __init__(self, spacy_model: str = "pl_core_news_md") -> None:
-        """Store the model name; the pipeline itself loads on first use."""
+    def __init__(
+        self, spacy_model: str = "pl_core_news_md", cache_texts: int = CACHE_TEXTS
+    ) -> None:
+        """Store the model name; the pipeline itself loads on first use.
+
+        Args:
+            spacy_model: the spaCy package or directory to load.
+            cache_texts: how many texts to remember what the model found in, so a text sent again,
+                as a chat's history is, is not read again; 0 reads every text every time. A text
+                is remembered by its SHA-256 digest, never as written.
+        """
         self.spacy_model = spacy_model
+        self.cache_texts = cache_texts
         self._nlp: Any | None = None
+        self._found: OrderedDict[tuple[str, frozenset[str]], tuple[Span, ...]] = OrderedDict()
 
     def _get_pipeline(self) -> Any:
         """Load and cache the spaCy pipeline, once even when several threads ask at the same time.
@@ -578,6 +597,23 @@ class NerGuard(Guard):
         wanted = SUPPORTED & enabled
         if not wanted or not text.strip():
             return []
+        digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        key = (digest, frozenset(wanted))
+        with _CACHE_LOCK:
+            found = self._found.get(key)
+            if found is not None:
+                self._found.move_to_end(key)
+                return list(found)
+        spans = self._read(text, wanted)
+        if self.cache_texts > 0:
+            with _CACHE_LOCK:
+                self._found[key] = tuple(spans)
+                while len(self._found) > self.cache_texts:
+                    self._found.popitem(last=False)
+        return spans
+
+    def _read(self, text: str, wanted: frozenset[str] | set[str]) -> list[Span]:
+        """Run the model over `text` and keep what reads as a name."""
         nlp = self._get_pipeline()
         spans: list[Span] = []
         for offset, piece in _chunks(text, CHUNK_CHARS):
