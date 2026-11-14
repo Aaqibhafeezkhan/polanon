@@ -33,6 +33,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Fixed
 
+- **A model's reasoning sent back with its answer** is masked by `MaskedTurn.mask_messages`:
+  OpenRouter returns the reasoning next to the answer, in `reasoning` and `reasoning_details`, and
+  a client that kept the answer sent it back with the history, restored, in the clear. Now
+  `reasoning`, `reasoning_content` and the text and summary of every item of `reasoning_details`
+  are masked, and encrypted reasoning passes as it is. Found by the gateway's last check, which
+  refused the call, in a test against OpenRouter.
 - **A surname on the next line or in the next cell** is masked without the language model:
   "z panem Janem\nKowalskim" in a hard-wrapped e-mail, "Jan;Kowalski" in a CSV export and
   "| Jan | Kowalski |" in a Markdown table kept the surname in clear (#15). On the next line it

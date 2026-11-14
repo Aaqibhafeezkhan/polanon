@@ -309,6 +309,35 @@ def test_an_openai_history_keeps_its_arguments_and_tool_results_valid_json():
     assert refusal["refusal"] == "Nie podam danych <OSOBA_3>."
 
 
+def test_a_provider_s_reasoning_in_an_assistant_message_is_masked_and_sealed_parts_pass():
+    """OpenRouter returns the model's reasoning with its answer; a client that sends the answer
+    back with the history sent the reasoning, restored, in the clear."""
+    details = [
+        {"type": "reasoning.text", "text": "Pyta o Annę Nowak.", "format": "unknown", "index": 0},
+        {"type": "reasoning.summary", "summary": "Anna Nowak, telefon.", "index": 1},
+        {"type": "reasoning.encrypted", "data": "gAAAA-sealed", "index": 2},
+        "unknown",
+    ]
+    messages = [
+        {"role": "user", "content": "Kim jest Anna Nowak?"},
+        {
+            "role": "assistant",
+            "content": "To klientka.",
+            "reasoning": "Anna Nowak to klientka.",
+            "reasoning_content": "Szukam: Anna Nowak.",
+            "reasoning_details": details,
+        },
+    ]
+    _, answer = anonymizer.turn().mask_messages(messages)
+    assert answer["reasoning"] == "<OSOBA_1> to klientka."
+    assert answer["reasoning_content"] == "Szukam: <OSOBA_1>."
+    text, summary, sealed, odd = answer["reasoning_details"]
+    assert text == {**details[0], "text": "Pyta o <OSOBA_2>."}
+    assert summary == {**details[1], "summary": "<OSOBA_1>, telefon."}
+    assert sealed == details[2]
+    assert odd == "unknown"
+
+
 def test_arguments_given_as_a_value_and_old_function_calls_are_masked():
     messages = [
         {

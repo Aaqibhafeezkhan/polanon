@@ -161,6 +161,25 @@ def test_an_embeddings_input_that_is_not_text_is_refused(value):
         mask_embeddings_request(turn(), {"input": value})
 
 
+def test_an_answer_sent_back_with_its_reasoning_is_masked_and_not_refused():
+    """OpenRouter's reasoning came back restored, and the next call that carried it was refused
+    by the last check, since nothing masked it."""
+    answer = {
+        "role": "assistant",
+        "content": "Gotowe.",
+        "reasoning": "Pisze do: Jan Kowalski.",
+        "reasoning_details": [
+            {"type": "reasoning.text", "text": "Jan Kowalski, urlop.", "index": 0}
+        ],
+    }
+    one = turn()
+    masked = mask_chat_request(
+        one, chat(user("Jan Kowalski prosi o urlop."), answer, user("Dzięki."))
+    )
+    assert leaked_tokens(masked, one.mapping) == []
+    assert masked["messages"][1]["reasoning"] == "Pisze do: <OSOBA_1>."
+
+
 # --- responses ---------------------------------------------------------------------------------
 
 

@@ -174,11 +174,13 @@ class MaskedTurn:
 
         The text of every message is masked, and so are the input of a ``tool_use`` block, the
         content of a ``tool_result`` block or of a ``"tool"`` message, the arguments of
-        ``tool_calls`` and a ``refusal``. A tool result or arguments written as JSON stay valid
-        JSON. Roles, ids, tool names and every other field are copied as they are, and the
-        citations of a text block are left out, since what they quote may be personal data. A
-        block no text mask reaches, such as an image, a document or a model's signed reasoning, is
-        refused or left out, as `unknown_blocks` says.
+        ``tool_calls``, a ``refusal``, and the reasoning a provider such as OpenRouter returns next
+        to an answer: ``reasoning``, ``reasoning_content`` and the text and summary of every item
+        of ``reasoning_details``, whose encrypted data passes as it is. A tool result or arguments
+        written as JSON stay valid JSON. Roles, ids, tool names and every other field are copied
+        as they are, and the citations of a text block are left out, since what they quote may be
+        personal data. A block no text mask reaches, such as an image, a document or a model's
+        signed reasoning, is refused or left out, as `unknown_blocks` says.
 
         A value first recognised in a later message, such as the question, is also masked in the
         earlier ones, where nothing recognised it on its own: a message masked before the mapping
@@ -272,6 +274,13 @@ class MaskedTurn:
             out["function_call"] = self._arguments_of(message["function_call"], text)
         if isinstance(message.get("refusal"), str):
             out["refusal"] = text(message["refusal"])
+        for field in _REASONING_FIELDS:
+            if isinstance(message.get(field), str):
+                out[field] = text(message[field])
+        if isinstance(message.get("reasoning_details"), list):
+            out["reasoning_details"] = [
+                _reasoning_detail(detail, text) for detail in message["reasoning_details"]
+            ]
         return out
 
     def _content(self, content: Any, text: _Text) -> Any:
@@ -331,6 +340,22 @@ class MaskedTurn:
             raise MaskingUnavailableError(
                 f"{what} cannot be masked; pass unknown_blocks='drop' to leave such blocks out"
             )
+
+
+#: Fields in which a provider such as OpenRouter or DeepSeek returns a model's reasoning as text,
+#: next to the answer. A client that keeps the answer sends them back with the history.
+_REASONING_FIELDS = ("reasoning", "reasoning_content")
+
+
+def _reasoning_detail(detail: Any, text: _Text) -> Any:
+    """One item of ``reasoning_details``: its text and summary masked, encrypted data as it is."""
+    if not isinstance(detail, Mapping):
+        return detail
+    out = dict(detail)
+    for field in ("text", "summary"):
+        if isinstance(detail.get(field), str):
+            out[field] = text(detail[field])
+    return out
 
 
 def _walk(value: Any, text: _Text, default: Callable[[Any], Any] | None = None) -> Any:
