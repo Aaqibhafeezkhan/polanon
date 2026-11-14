@@ -5,7 +5,14 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
-## [Unreleased]
+## [0.3.4] - 2026-11-14
+
+A new extra and fixes, and nothing that worked before stops working: a patch release, as
+CONTRIBUTING.md describes. The gateway comes with `pip install "polanon[gateway]"`; `pip install
+polanon` alone is unchanged and still needs nothing beyond the standard library. Where detection
+missed or mislabelled a value it now differs, so a text may come out with other tokens: a first
+name alone gives way to the language model's place or company, and a stray word left over where
+two detections overlapped stays readable.
 
 ### Added
 
