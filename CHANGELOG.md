@@ -72,6 +72,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   place, and "while" in a Polish sentence a place too. A span glued to a letter, a digit or a "_"
   is dropped, but not after a line break written out as `\n`, as an escaped JSON string has it,
   so `Kontakt:\nAnna Lindqvist` still names her. The benchmark is unchanged.
+- **A span that opens with an English small word** is no name on a line that shows no language
+  either: a tool's description "That's the limit" gave the person "That's", masked 64 times in
+  one agent's call once it was known; "This Week" was a company. The benchmark is unchanged.
 
 ## [0.3.5] - 2026-11-14
 

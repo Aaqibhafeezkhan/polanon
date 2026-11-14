@@ -484,9 +484,12 @@ def _named_without_language(fragment: str) -> bool:
 
     A parameter described as "Max results" or a heading such as "Skills for" shows neither
     language, and the Polish model tagged such words too. A span with a word in lowercase is kept
-    only when it holds a Polish first name, as "anna nowak" does.
+    only when it holds a Polish first name, as "anna nowak" does; one that opens with an English
+    small word, "That's" or "This Week", is no name.
     """
     words = fragment.split()
+    if words[0].lower().split("'")[0] in _ENGLISH_WORDS:
+        return False
     return all(not word[0].islower() for word in words) or _holds_a_first_name(fragment)
 
 

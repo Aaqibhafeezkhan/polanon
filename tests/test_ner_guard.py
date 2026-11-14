@@ -224,6 +224,18 @@ def test_a_piece_of_an_identifier_and_a_traceback_are_no_names():
     ]
 
 
+def test_a_span_opening_with_an_english_small_word_is_no_name_on_a_short_line():
+    """A tool's description, "That's the limit", is too short to show a language, and the model
+    took "That's" for a person in it: 64 times in one agent's call, once it was known."""
+    text = "That's the limit\nThis Week\nOla Kowalska"
+    entities = [
+        _Entity(text, "That's", "persName"),
+        _Entity(text, "This Week", "orgName"),
+        _Entity(text, "Ola Kowalska", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Ola Kowalska"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as
