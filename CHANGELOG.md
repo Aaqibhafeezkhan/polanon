@@ -67,6 +67,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   is left out of the count. In a text that is plainly English as a whole, a model's reasoning or a
   manual, a line too short to show a language, such as "Possible causes" or "Max", is read as
   English too; in a Polish text it stays as it was. The benchmark is unchanged.
+- **A piece of a longer word, a Python traceback and more small English words** are no longer
+  names: "service" of `ha_call_service` was a company, "File" of `File "/srv/app.py", line 12` a
+  place, and "while" in a Polish sentence a place too. A span glued to a letter, a digit or a "_"
+  is dropped, but not after a line break written out as `\n`, as an escaped JSON string has it,
+  so `Kontakt:\nAnna Lindqvist` still names her. The benchmark is unchanged.
 
 ## [0.3.5] - 2026-11-14
 

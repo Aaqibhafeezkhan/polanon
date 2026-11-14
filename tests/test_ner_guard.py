@@ -186,6 +186,44 @@ def test_an_english_line_quoting_polish_is_english_and_so_are_short_lines_of_an_
     assert _found(NerGuard(), polish, [_Entity(polish, "Marek", "persName")]) == ["Marek"]
 
 
+def test_a_quoted_word_of_code_is_no_name_on_a_polish_line():
+    """A smart home's state printed as JSON in a tool's result is a Polish line by its device
+    names, and the Polish model took its keys, "attributes" and "context", for places. Masked
+    once, they were masked in every key of every later result.
+    """
+    text = (
+        '{"entity_id": "light.salon", "state": "on", "attributes": {"friendly_name": '
+        '"Światło w salonie", "city": "Gdańsk"}, "context": {"user_id": null}}'
+    )
+    entities = [
+        _Entity(text, "attributes"),
+        _Entity(text, "context"),
+        _Entity(text, "Gdańsk"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Gdańsk"]
+
+
+def test_a_piece_of_an_identifier_and_a_traceback_are_no_names():
+    """In an agent's tool results "service" of `ha_call_service` was a company, "File" of a Python
+    traceback a place, and "while" in a Polish sentence a place too."""
+    text = (
+        "Użyj `ha_call_service` do włączenia światła w salonie, while trwa remont.\n"
+        '  File "/srv/app/main.py", line 12, in Wroclaw_handler\n'
+        "Spotkanie w Gdańsku."
+    )
+    entities = [
+        _Entity(text, "service", "orgName"),
+        _Entity(text, "while"),
+        _Entity(text, "File"),
+        _Entity(text, "Gdańsku"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Gdańsku"]
+    escaped = "Zgłoszenie od klientki:\\nAnna Lindqvist z Gdańska"
+    assert _found(NerGuard(), escaped, [_Entity(escaped, "Anna Lindqvist", "persName")]) == [
+        "Anna Lindqvist"
+    ]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

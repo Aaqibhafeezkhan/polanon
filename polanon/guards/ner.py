@@ -328,7 +328,8 @@ _ENGLISH_WORDS = frozenset(
         "which", "who", "how", "why", "where", "all", "any", "each", "every", "only", "into",
         "about", "after", "before", "over", "under", "between", "without", "within", "use",
         "don't", "doesn't", "isn't", "here", "such", "some", "more", "other", "also", "just",
-        "very",
+        "very", "while", "because", "although", "however", "though", "since", "until", "unless",
+        "whether", "both", "either", "neither", "instead", "already",
     }
 )  # fmt: skip
 
@@ -366,7 +367,13 @@ _QUOTED = re.compile(r'„[^”\n]*”|“[^”\n]*”|«[^»\n]*»|»[^«\n]*«
 _SENTENCE_OPENERS = frozenset(" \t\"'“”„«»([*_`#>-•")
 _SENTENCE_ENDS = frozenset("\n.!?")
 
-_ENGLISH, _POLISH, _UNKNOWN = "en", "pl", ""
+_ENGLISH, _POLISH, _UNKNOWN, _CODE = "en", "pl", "", "code"
+
+#: A line break or a tab written out as an escaped JSON string prints it.
+_ESCAPED_BREAKS = frozenset({"\\n", "\\t", "\\r"})
+
+#: A line of a Python traceback, where the model took "File" for a place.
+_TRACEBACK = re.compile(r'\s*File "[^"\n]*", line \d+')
 
 
 def _evidence(text: str) -> tuple[int, int]:
@@ -459,6 +466,19 @@ def _is_code(fragment: str) -> bool:
     return fragment.islower() and fragment in _ENGLISH_WORDS
 
 
+def _inside_a_word(text: str, span: Span) -> bool:
+    r"""Return whether a span is a piece of a longer word, "service" of "ha_call_service".
+
+    A line break written as the two characters "\n", as an escaped JSON string prints it, ends
+    the word before it: "Kontakt:\nJan Kowalski" names a person.
+    """
+    before = text[span.start - 1] if span.start > 0 else " "
+    if text[max(0, span.start - 2) : span.start] in _ESCAPED_BREAKS:
+        before = " "
+    after = text[span.end] if span.end < len(text) else " "
+    return before == "_" or after == "_" or before.isalnum() or after.isalnum()
+
+
 def _named_without_language(fragment: str) -> bool:
     """Return whether a span on a line that shows no language reads as a name.
 
@@ -477,13 +497,16 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
     kept = []
     for span in spans:
         fragment = text[span.start : span.end]
-        if _is_code(fragment):
+        if _is_code(fragment) or _inside_a_word(text, span):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
         if line_start not in languages:
             line_end = text.find("\n", span.start)
-            languages[line_start] = _language(text[line_start : None if line_end < 0 else line_end])
+            line = text[line_start : None if line_end < 0 else line_end]
+            languages[line_start] = _CODE if _TRACEBACK.match(line) else _language(line)
         language = languages[line_start]
+        if language == _CODE:
+            continue
         if language == _UNKNOWN:
             if english_text is None:
                 english_text = _is_english_text(text)
