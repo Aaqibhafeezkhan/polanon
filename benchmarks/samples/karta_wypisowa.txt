@@ -1,0 +1,28 @@
+KARTA INFORMACYJNA LECZENIA SZPITALNEGO
+
+Szpital Specjalistyczny Lipowy Gaj Sp. z o.o.
+Oddział Chorób Wewnętrznych
+ul. Szpitalna 8, 15-276 Białystok
+tel. 85 740 21 00, e-mail: interna@lipowygaj.example
+
+Pacjentka: Halina Sobczak
+PESEL: 47832208149
+Data urodzenia: 22.03.1847
+Adres: ul. Brzozowa 14/2, 16-070 Choroszcz
+Telefon: 604 318 552
+Osoba upoważniona do informacji o stanie zdrowia: córka Marta Sobczak-Wilk, tel. 698 207 115
+
+Okres hospitalizacji: od 04.03.2024 do 11.03.2024
+
+Rozpoznanie zasadnicze: zaostrzenie przewlekłej niewydolności serca (I50.0).
+Rozpoznania współistniejące: migotanie przedsionków utrwalone (I48.2), cukrzyca typu 2 (E11).
+
+Epikryza: pacjentkę Halinę Sobczak przyjęto z powodu narastającej duszności i obrzęków kończyn
+dolnych. W leczeniu zastosowano diuretyki dożylnie, uzyskując poprawę. Echo serca: EF 35%.
+W trakcie pobytu bez powikłań. Wypisana do domu w stanie ogólnym dobrym.
+
+Zalecenia: furosemid 40 mg rano, bisoprolol 5 mg wieczorem, kontrola w poradni kardiologicznej
+za 4 tygodnie, codzienna kontrola masy ciała. W razie duszności zgłosić się do lekarza.
+
+Lekarz prowadzący: lek. Tomasz Kaczmarek
+Ordynator oddziału: dr n. med. Ewa Zawadzka

@@ -439,11 +439,11 @@ niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Mapowanie przec
 w postaci, w jakiej została zapisana za pierwszym razem.
 
 Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 86% wartości,
-a reguły z `pl_core_news_md` — 98%, przy czym nic nie zostaje zamaskowane tylko w części. Jedenaście
+a reguły z `pl_core_news_md` 98%, przy czym nic nie zostaje zamaskowane tylko w części. Dwanaście
 krótkich dokumentów to test regresji, a nie benchmark badawczy:
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) opisują,
-co zostaje przeoczone i dlaczego, i podają wynik Presidio na tych samych dokumentach z tym samym
-modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie liczenia.
+co zostaje przeoczone i dlaczego, i podają wynik Presidio na pierwszych jedenastu z nich z tym
+samym modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie liczenia.
 
 ## Warto wiedzieć
 

@@ -2,9 +2,10 @@
 
 Fictional Polish documents used for demos, manual end-to-end checks and the annotated benchmark:
 a CV, a VAT invoice, a customer complaint, an IT support ticket, an employment contract, an
-internal IT note, and a handful of chat messages typed the way people type them — in lowercase,
-without Polish letters — with a few sentences whose words only look like names. Three invoices
-come from abroad, addressed to the same Polish companies: a British one in English, a Swedish one
+internal IT note, a hospital discharge summary, and a handful of chat messages typed the way
+people type them, in lowercase and without Polish letters, with a few sentences whose words only
+look like names. Three invoices come from abroad, addressed to the same Polish companies: a
+British one in English, a Swedish one
 with Bankgiro and Plusgiro accounts, and a Swiss one in German.
 
 Every name, address and identifier is made up. The identifiers carry valid checksums so the guards
@@ -16,3 +17,8 @@ would in one company's paperwork. No data about an actual person belongs in this
 
 `monthly_roster.txt` keeps surname-first monthly periods and names beside ordinary numbers
 masked without a language model. The separate name-guard tests cover punctuated date formats.
+
+`karta_wypisowa.txt` is a hospital discharge summary, health data being the most sensitive kind:
+a patient with her PESEL, birth date, address and phone, a daughter authorised to hear about her,
+two doctors behind their titles ("lek.", "dr n. med."), and the hospital's own address and phone.
+The patient was born in 1847, before the register began, so her PESEL belongs to nobody.

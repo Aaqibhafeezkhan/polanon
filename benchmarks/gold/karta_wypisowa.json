@@ -1,0 +1,77 @@
+{
+  "source": "karta_wypisowa.txt",
+  "entities": [
+    {
+      "value": "Halina Sobczak",
+      "type": "PERSON"
+    },
+    {
+      "value": "Halinę Sobczak",
+      "type": "PERSON"
+    },
+    {
+      "value": "Marta Sobczak-Wilk",
+      "type": "PERSON"
+    },
+    {
+      "value": "Tomasz Kaczmarek",
+      "type": "PERSON"
+    },
+    {
+      "value": "Ewa Zawadzka",
+      "type": "PERSON"
+    },
+    {
+      "value": "Szpital Specjalistyczny Lipowy Gaj Sp. z o.o.",
+      "type": "ORG"
+    },
+    {
+      "value": "47832208149",
+      "type": "PESEL"
+    },
+    {
+      "value": "22.03.1847",
+      "type": "BIRTH_DATE"
+    },
+    {
+      "value": "ul. Szpitalna 8",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "ul. Brzozowa 14/2",
+      "type": "ADDRESS"
+    },
+    {
+      "value": "15-276",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "16-070",
+      "type": "POSTAL_CODE"
+    },
+    {
+      "value": "Białystok",
+      "type": "LOCATION"
+    },
+    {
+      "value": "Choroszcz",
+      "type": "LOCATION"
+    },
+    {
+      "value": "85 740 21 00",
+      "type": "PHONE"
+    },
+    {
+      "value": "604 318 552",
+      "type": "PHONE"
+    },
+    {
+      "value": "698 207 115",
+      "type": "PHONE"
+    },
+    {
+      "value": "interna@lipowygaj.example",
+      "type": "EMAIL"
+    }
+  ]
+}

@@ -422,11 +422,11 @@ letter plus an accent, no-break spaces and en dashes inside numbers, and invisib
 characters do not hide a value. The mapping keeps each value as it was first written.
 
 On the annotated sample documents in the repository, the rules alone fully mask 86% of the
-values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Eleven short
+values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Twelve short
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
-missed and why, and for Presidio on the same documents with the same model: 66% fully masked, 76%
-at its most lenient.
+missed and why, and for Presidio on the first eleven of them with the same model: 66% fully
+masked, 76% at its most lenient.
 
 ## Worth knowing
 

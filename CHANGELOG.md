@@ -7,6 +7,16 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **A twelfth benchmark document**, a hospital discharge summary, health data being the most
+  sensitive kind (#4): a patient with her PESEL, birth date, address and phone, her daughter, two
+  doctors behind their titles and the hospital's address. Every value is made up, and the patient
+  was born in 1847, so her PESEL belongs to nobody. The rules alone mask all of it but its two
+  places; with `pl_core_news_md` all 18 values are masked, and the ward's name is read as a company.
+  The corpus now has 187 annotated values: 161 masked with the rules alone (86%) and 184 with the
+  model (98%), with 8 over-masked spans, the ward one of them.
+
 ### Fixed
 
 - **A surname on the next line or in the next cell** is masked without the language model:

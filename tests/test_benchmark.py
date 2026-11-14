@@ -107,10 +107,10 @@ def test_adding_the_polish_model_covers_almost_everything():
     partial = sum(score.partial for score in totals.values())
     assert masked / gold >= 0.95
     assert partial == 0
-    # The model still reads "ksiegowosci", typed without Polish letters, as a place, and on the
-    # foreign invoices it tags country names, "Company Registered in England and Wales", a Swedish
-    # line item and the month "August".
-    assert extra <= 7
+    # The model still reads "ksiegowosci", typed without Polish letters, as a place, the hospital
+    # ward "Oddział Chorób Wewnętrznych" as a company, and on the foreign invoices it tags country
+    # names, "Company Registered in England and Wales", a Swedish line item and the month "August".
+    assert extra <= 8
 
 
 @needs_model

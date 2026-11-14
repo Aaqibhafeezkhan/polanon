@@ -1,10 +1,10 @@
 # How well polanon detects
 
-[`samples/`](samples/) holds eleven synthetic documents. Eight are Polish — a CV, a VAT invoice, a
+[`samples/`](samples/) holds twelve synthetic documents. Nine are Polish: a CV, a VAT invoice, a
 customer complaint, an IT support ticket, an employment contract, an internal IT note, chat
-messages typed the way people type them, in lowercase and without Polish letters, and a monthly
-roster of surnames and periods — and three are
-invoices from abroad: British, Swedish and Swiss. [`gold/`](gold/) annotates the 169 values that
+messages typed the way people type them, in lowercase and without Polish letters, a monthly
+roster of surnames and periods, and a hospital discharge summary. Three are invoices from abroad:
+British, Swedish and Swiss. [`gold/`](gold/) annotates the 187 values that
 must be masked, and [`run.py`](run.py) reports whether each one was **fully** covered, because half
 a masked PESEL is a leak rather than half a success. It scores the guards and the merging of
 their findings, not the pass that masks every later occurrence of a value already found: through
@@ -13,10 +13,14 @@ can only come out the same or better.
 
 | Configuration | Fully masked | Partially masked | Missed | Over-masked spans |
 |---|---:|---:|---:|---:|
-| polanon, guards only, no model | 145 / 169 (86%) | 0 | 24 | 0 |
-| polanon, guards + `pl_core_news_md` | **166 / 169 (98%)** | 0 | 3 | 7 |
+| polanon, guards only, no model | 161 / 187 (86%) | 0 | 26 | 0 |
+| polanon, guards + `pl_core_news_md` | **184 / 187 (98%)** | 0 | 3 | 8 |
 | Presidio 2.2.366, set up for Polish with the same model | 112 / 169 (66%) | 25 | 32 | 47 |
 | Presidio, phone recognizer at leniency 0 | 128 / 169 (76%) | 29 | 12 | 76 |
+
+Presidio was measured on the first eleven documents, before the discharge summary joined them, and
+has not been run on the twelve; on those eleven polanon masks 145 of 169 with the rules alone and
+166 of 169 with the model, with 7 over-masked spans.
 
 Presidio is the usual answer to "mask personal data before an LLM call", so it is the baseline.
 [`compare_presidio.py`](compare_presidio.py) gives it the same Polish spaCy model, every offline recognizer it
@@ -41,17 +45,17 @@ formula. What the model adds is places and company names without a legal form.
 
 | Entity | Annotated | Masked | Partial | Missed | Right type |
 |---|---:|---:|---:|---:|---:|
-| `PERSON` | 29 | 29 | 0 | 0 | 29 |
-| `LOCATION` | 23 | 20 | 0 | 3 | 20 |
-| `ORG` | 16 | 16 | 0 | 0 | 16 |
-| `ADDRESS` | 15 | 15 | 0 | 0 | 15 |
-| `EMAIL` | 14 | 14 | 0 | 0 | 14 |
-| `POSTAL_CODE` | 14 | 14 | 0 | 0 | 14 |
-| `PHONE` | 12 | 12 | 0 | 0 | 12 |
+| `PERSON` | 39 | 39 | 0 | 0 | 39 |
+| `LOCATION` | 25 | 22 | 0 | 3 | 22 |
+| `ADDRESS` | 17 | 17 | 0 | 0 | 17 |
+| `ORG` | 17 | 17 | 0 | 0 | 17 |
+| `POSTAL_CODE` | 16 | 16 | 0 | 0 | 16 |
+| `EMAIL` | 15 | 15 | 0 | 0 | 15 |
+| `PHONE` | 15 | 15 | 0 | 0 | 15 |
 | `NIP` | 6 | 6 | 0 | 0 | 6 |
 | `BANK_ACCOUNT` | 5 | 5 | 0 | 0 | 5 |
 | `IBAN` | 5 | 5 | 0 | 0 | 5 |
-| `PESEL` | 4 | 4 | 0 | 0 | 4 |
+| `PESEL` | 5 | 5 | 0 | 0 | 5 |
 | `IP_ADDRESS` | 3 | 3 | 0 | 0 | 3 |
 | `REGON` | 3 | 3 | 0 | 0 | 3 |
 | `SECRET` | 3 | 3 | 0 | 0 | 3 |
@@ -60,20 +64,25 @@ formula. What the model adds is places and company names without a legal form.
 | `MAC_ADDRESS` | 2 | 2 | 0 | 0 | 2 |
 | `PLATE` | 2 | 2 | 0 | 0 | 2 |
 | `PL_ID` | 2 | 2 | 0 | 0 | 2 |
+| `BIRTH_DATE` | 1 | 1 | 0 | 0 | 1 |
 | `VIN` | 1 | 1 | 0 | 0 | 1 |
 
 </details>
 
-**Read the number honestly.** Eleven short documents are a regression check, not a research
+**Read the number honestly.** Twelve short documents are a regression check, not a research
 benchmark, and the corpus was written by the same person who wrote the guards, who tuned them
 against it; Presidio was never tuned on it. The misses are
 instructive: the word *Kraków* is masked in one document and missed in another, and *Bristol* and
 one *Zürich* are missed on the foreign invoices, because places come from a statistical model and not
 a rule. So do the over-masked spans: *ksiegowosci* typed without Polish letters, which the model
-takes for a place, and on the foreign invoices country names, a Swedish line item, the month
-*August*, which a Polish model reads as names, and the label phrase *Company Registered in England
-and Wales*, read as a company. [`tests/test_benchmark.py`](../tests/test_benchmark.py) turns these numbers into
-floors so they cannot quietly get worse.
+takes for a place, the hospital ward *Oddział Chorób Wewnętrznych*, read as a company, and on the
+foreign invoices country names, a Swedish line item, the month *August*, which a Polish model reads
+as names, and the label phrase *Company Registered in England and Wales*, read as a company. Without
+the model the discharge summary loses only its two places, *Białystok* and *Choroszcz*: the
+patient, her daughter and both doctors, the PESEL, the birth date, the addresses, the phones and
+the hospital's company name are all masked by rules.
+[`tests/test_benchmark.py`](../tests/test_benchmark.py) turns these numbers into floors so they
+cannot quietly get worse.
 
 ## Running it
 
