@@ -47,6 +47,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   the gateway's last check refused the call. `MaskedTurn.mask_messages` and the gateway's
   Responses API masking now repeat the pass until the mapping stops growing, at most four times
   (`polanon.turn.MASKING_PASSES`).
+- **A number, a quote, a literal of code and a small English word** are no longer names. In an
+  agent's tool results the Polish model tagged "2026" as a company, `File "` of a Python
+  traceback and Python's "None" as people, and "has" and "before" on lines it read as Polish. A
+  span of digits alone, one with a double quote, a literal such as "None", "True" or "null", and
+  one English function word in lowercase are now dropped on a line of any language; the rules
+  still find the numbers that matter. The benchmark is unchanged.
 
 ## [0.3.5] - 2026-11-14
 

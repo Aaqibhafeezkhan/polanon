@@ -158,6 +158,28 @@ def test_on_a_line_with_no_language_a_lowercase_word_is_no_name():
     ]
 
 
+def test_a_number_a_quote_and_an_english_word_are_no_names():
+    """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
+    Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as
+    Polish.
+    """
+    text = (
+        "Zamówienie z 2026 roku.\n"
+        'Plik "raport.txt" nie ma nagłówka.\n'
+        "Pole has i pole before są puste, pisze Zielona Góra.\n"
+        "Stan: None"
+    )
+    entities = [
+        _Entity(text, "None", "persName"),
+        _Entity(text, "2026", "orgName"),
+        _Entity(text, 'Plik "', "orgName"),
+        _Entity(text, "has", "orgName"),
+        _Entity(text, "before", "placeName"),
+        _Entity(text, "Zielona Góra"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Zielona Góra"]
+
+
 def test_a_text_read_before_is_not_read_again():
     """An agent sends its system prompt, its tools and the whole history with every call.
 

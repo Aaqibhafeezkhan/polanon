@@ -344,6 +344,9 @@ _POLISH_WORDS = frozenset(
     }
 )  # fmt: skip
 
+#: The literals of Python, JSON and YAML, which tool results print where a value is missing.
+_CODE_LITERALS = frozenset({"None", "True", "False", "null", "true", "false", "nil", "NaN"})
+
 _POLISH_LETTERS = re.compile("[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]")
 _WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?")
 _NAME_PARTS = re.compile(r"[\W\d_]+")
@@ -418,12 +421,21 @@ def _holds_a_first_name(fragment: str) -> bool:
 
 
 def _is_code(fragment: str) -> bool:
-    """Return whether a span reads as code: a backtick, or a "_" with no Polish first name.
+    """Return whether a span is no name on any line: code, a number, or an English small word.
 
-    "replace_all" and "volume_level" are names of parameters, on a line of any language;
-    "jan_kowalski" is somebody's login.
+    A backtick, a double quote and a "_" with no Polish first name mark code: "replace_all",
+    "volume_level", `File "` of a Python traceback; "jan_kowalski" is somebody's login. A span of
+    digits alone, such as "2026", is a number, and the rules find numbers that matter; "None",
+    "True" or "null" is a literal of code. One English function word in lowercase, "has" or
+    "before", is no name even on a Polish line.
     """
-    return "`" in fragment or ("_" in fragment and not _holds_a_first_name(fragment))
+    if "`" in fragment or '"' in fragment:
+        return True
+    if "_" in fragment and not _holds_a_first_name(fragment):
+        return True
+    if fragment.replace(" ", "").isdigit() or fragment in _CODE_LITERALS:
+        return True
+    return fragment.islower() and fragment in _ENGLISH_WORDS
 
 
 def _named_without_language(fragment: str) -> bool:
