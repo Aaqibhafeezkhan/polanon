@@ -200,7 +200,7 @@ calls, the keys or the logs. What it protects:
   for every original value, by the rules the masking follows; a call that still holds one is not
   sent. Endpoints other than chat completions, the Responses API, embeddings and the list of
   models are refused rather than passed on, and so are images, files and audio, unless
-  `--drop-unsupported` leaves them out. A Responses API call that keeps the conversation at the
+  `--drop-unsupported` leaves them out or `--pass-unsupported` sends them unmasked. A Responses API call that keeps the conversation at the
   provider, with `previous_response_id` or `conversation`, is refused: the gateway holds no mapping
   between calls to restore it with. Encrypted reasoning and compaction pass unread; the provider
   sealed them from masked text, so they hold tokens, not values.
@@ -210,6 +210,11 @@ calls, the keys or the logs. What it protects:
   long as the call. The log holds the path, the status, the time and counts of masked types.
 
 What it does not protect, and is the operator's part:
+
+- **What `--pass-unsupported` lets through.** An image, a scan, a file and its name reach the
+  provider as they are: a face, a signature or a PESEL in a photo of a document is not masked. The
+  last check still searches the text around them and a file's name by the rules of the masking,
+  so a value glued into a name with underscores, as in "umowa_Jan_Kowalski.pdf", goes out.
 
 - **The machine.** Calls arrive in the clear and answers leave restored. Anyone who can read the
   gateway's memory, or a tool's own history, reads them; so can anything the operator puts in

@@ -24,8 +24,9 @@ if TYPE_CHECKING:
     from polanon import Anonymizer
 
 #: What :meth:`MaskedTurn.mask_messages` does with a block no text mask reaches, such as an image,
-#: a document or a model's signed reasoning: refuse the whole list, or leave the block out.
-UnknownBlocks = Literal["raise", "drop"]
+#: a document or a model's signed reasoning: refuse the whole list, leave the block out, or keep it
+#: as it is, unmasked, for a caller who accepts that the model sees it.
+UnknownBlocks = Literal["raise", "drop", "keep"]
 
 _Text = Callable[[str], str]
 
@@ -103,12 +104,13 @@ class MaskedTurn:
             mapping: token -> original value from earlier turns of the same conversation. It is
                 read, never modified.
             unknown_blocks: what :meth:`mask_messages` does with a block it cannot mask:
-                ``"raise"`` refuses, ``"drop"`` leaves the block out.
+                ``"raise"`` refuses, ``"drop"`` leaves the block out, ``"keep"`` sends it as it
+                is, unmasked: an image, a document and whatever text they carry.
 
         Raises:
             TypeError: when `known` is a single string, which would be read letter by letter.
             ValueError: when the anonymizer has a stage-2 judge, which needs an event loop, or
-                for an `unknown_blocks` that is neither "raise" nor "drop".
+                for an `unknown_blocks` that is not "raise", "drop" or "keep".
             MaskingUnavailableError: when the known values cannot be made into a guard.
         """
         if isinstance(known, str):
@@ -119,8 +121,8 @@ class MaskedTurn:
                 "a MaskedTurn masks without an event loop, so it cannot run the stage-2 judge "
                 f"{anonymizer.judge.name!r}: use an Anonymizer without a judge"
             )
-        if unknown_blocks not in ("raise", "drop"):
-            raise ValueError(f"unknown_blocks is 'raise' or 'drop', not {unknown_blocks!r}")
+        if unknown_blocks not in ("raise", "drop", "keep"):
+            raise ValueError(f"unknown_blocks is 'raise', 'drop' or 'keep', not {unknown_blocks!r}")
         terms = [term for term in known if term.strip()]
         self._anonymizer = _with_known_values(anonymizer, terms) if terms else anonymizer
         self._mapping: dict[str, str] = dict(mapping or {})
@@ -180,7 +182,7 @@ class MaskedTurn:
         written as JSON stay valid JSON. Roles, ids, tool names and every other field are copied
         as they are, and the citations of a text block are left out, since what they quote may be
         personal data. A block no text mask reaches, such as an image, a document or a model's
-        signed reasoning, is refused or left out, as `unknown_blocks` says.
+        signed reasoning, is refused, left out or kept as it is, as `unknown_blocks` says.
 
         A value first recognised in a later message, such as the question, is also masked in the
         earlier ones, where nothing recognised it on its own: a message masked before the mapping
@@ -314,8 +316,7 @@ class MaskedTurn:
             if block.get("content") is not None:
                 out["content"] = self._tool_content(block["content"], text)
             return out
-        self._leave_out(f"a {kind!r} block")
-        return None
+        return self._unmaskable(block, f"a {kind!r} block")
 
     def _tool_content(self, content: Any, text: _Text) -> Any:
         """What a tool returned: a text, often JSON, or a list of blocks."""
@@ -326,8 +327,7 @@ class MaskedTurn:
     def _tool_call(self, call: Any, text: _Text) -> dict[str, Any] | None:
         """One OpenAI tool call, with its arguments masked."""
         if not isinstance(call, Mapping) or not isinstance(call.get("function"), Mapping):
-            self._leave_out("a tool call that is not a function call")
-            return None
+            return self._unmaskable(call, "a tool call that is not a function call")
         return {**call, "function": self._arguments_of(call["function"], text)}
 
     def _arguments_of(self, function: Mapping[str, Any], text: _Text) -> dict[str, Any]:
@@ -340,12 +340,15 @@ class MaskedTurn:
             out["arguments"] = _walk(arguments, text)
         return out
 
-    def _leave_out(self, what: str) -> None:
-        """Refuse something that cannot be masked, unless the turn was told to leave it out."""
+    def _unmaskable(self, value: Any, what: str) -> dict[str, Any] | None:
+        """Something no text mask reaches: refused, left out (None), or kept as it is."""
         if self._unknown_blocks == "raise":
             raise MaskingUnavailableError(
                 f"{what} cannot be masked; pass unknown_blocks='drop' to leave such blocks out"
             )
+        if self._unknown_blocks == "keep" and isinstance(value, Mapping):
+            return dict(value)
+        return None
 
 
 #: Fields in which a provider such as OpenRouter or DeepSeek returns a model's reasoning as text,

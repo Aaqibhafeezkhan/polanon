@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any
+from typing import Any, Literal
 
 from polanon.pipeline import mask_known_values
 from polanon.stream_restore import StreamRestorer, restored
@@ -46,6 +46,8 @@ _SCHEMA_MAPS = frozenset(
 )
 
 _Text = Callable[[str], str]
+#: What the gateway does with content it cannot mask, such as an image.
+_Unsupported = Literal["refuse", "drop", "pass"]
 
 
 class GatewayRequestError(ValueError):
@@ -129,6 +131,7 @@ def mask_responses_request(
     *,
     instructions: str | None = None,
     drop_unsupported: bool = False,
+    pass_unsupported: bool = False,
 ) -> dict[str, Any]:
     """Return a ``/responses`` request with everything that carries data masked.
 
@@ -152,13 +155,20 @@ def mask_responses_request(
             None leaves them as they are.
         drop_unsupported: leave out content that cannot be masked, such as an image, rather than
             refuse the call.
+        pass_unsupported: send such content as it is, unmasked, rather than refuse the call.
 
     Raises:
+        ValueError: when told both to drop and to pass what cannot be masked.
         GatewayRequestError: for a request that keeps state at the provider, asks for audio, or
             has an input that is neither text nor a list of items.
         MaskingUnavailableError: when masking fails, or for content that cannot be masked while
-            `drop_unsupported` is off.
+            neither `drop_unsupported` nor `pass_unsupported` is on.
     """
+    if drop_unsupported and pass_unsupported:
+        raise ValueError("content that cannot be masked is either left out or sent: drop or pass")
+    unsupported: _Unsupported = (
+        "drop" if drop_unsupported else "pass" if pass_unsupported else "refuse"
+    )
     for field in _PROVIDER_STATE:
         if body.get(field):
             raise GatewayRequestError(
@@ -187,7 +197,7 @@ def mask_responses_request(
 
     def mask(kind: str, original: Any) -> Any:
         if kind == "item":
-            return _item(turn, original, drop_unsupported)
+            return _item(turn, original, unsupported)
         return turn.mask(original)
 
     masked, sizes = [], []
@@ -417,7 +427,7 @@ def _sequence_key(event: Mapping[str, Any], suffix: str) -> tuple[Any, ...]:
     )
 
 
-def _item(turn: MaskedTurn, item: Any, drop: bool) -> dict[str, Any] | None:
+def _item(turn: MaskedTurn, item: Any, unsupported: _Unsupported) -> dict[str, Any] | None:
     """One item of a Responses API input, masked, or None when it is left out."""
     if not isinstance(item, Mapping):
         raise TypeError(f"an input item is a dictionary, not {type(item).__name__}")
@@ -428,7 +438,7 @@ def _item(turn: MaskedTurn, item: Any, drop: bool) -> dict[str, Any] | None:
         if isinstance(content, str):
             out["content"] = turn.mask(content)
         elif isinstance(content, list):
-            parts = (_part(turn, part, drop) for part in content)
+            parts = (_part(turn, part, unsupported) for part in content)
             out["content"] = [part for part in parts if part is not None]
         return out
     if kind in ("function_call", "custom_tool_call"):
@@ -441,22 +451,21 @@ def _item(turn: MaskedTurn, item: Any, drop: bool) -> dict[str, Any] | None:
         if isinstance(output, str):
             out["output"] = _json_masked(turn, output)
         elif isinstance(output, list):
-            parts = (_part(turn, part, drop) for part in output)
+            parts = (_part(turn, part, unsupported) for part in output)
             out["output"] = [part for part in parts if part is not None]
         return out
     if kind == "reasoning":
         for field in ("summary", "content"):
             if isinstance(item.get(field), list):
-                parts = (_part(turn, part, drop) for part in item[field])
+                parts = (_part(turn, part, unsupported) for part in item[field])
                 out[field] = [part for part in parts if part is not None]
         return out
     if kind in _SEALED_ITEMS:
         return out
-    _unsupported(f"a {kind!r} item", drop)
-    return None
+    return _unsupported(out, f"a {kind!r} item", unsupported)
 
 
-def _part(turn: MaskedTurn, part: Any, drop: bool) -> dict[str, Any] | None:
+def _part(turn: MaskedTurn, part: Any, unsupported: _Unsupported) -> dict[str, Any] | None:
     """One content part, masked, or None when it is left out.
 
     The annotations of an output text are left out: they point into the text by position, and
@@ -471,16 +480,18 @@ def _part(turn: MaskedTurn, part: Any, drop: bool) -> dict[str, Any] | None:
         return out
     if kind == "refusal":
         return {**part, "refusal": turn.mask(part.get("refusal") or "")}
-    _unsupported(f"a {kind!r} part", drop)
-    return None
+    return _unsupported(dict(part), f"a {kind!r} part", unsupported)
 
 
-def _unsupported(what: str, drop: bool) -> None:
-    """Refuse content that cannot be masked, unless the gateway was told to leave it out."""
-    if not drop:
+def _unsupported(
+    value: dict[str, Any], what: str, unsupported: _Unsupported
+) -> dict[str, Any] | None:
+    """Content that cannot be masked: refused, left out (None), or passed as it is."""
+    if unsupported == "refuse":
         raise MaskingUnavailableError(
             f"{what} cannot be masked; pass unknown_blocks='drop' to leave such blocks out"
         )
+    return value if unsupported == "pass" else None
 
 
 def _json_masked(turn: MaskedTurn, text: str) -> str:

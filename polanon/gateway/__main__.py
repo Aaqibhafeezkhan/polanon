@@ -21,7 +21,7 @@ import logging
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from polanon import (
     WELL_KNOWN_NAMES,
@@ -81,7 +81,7 @@ def main(
         upstream_key=env.get("POLANON_UPSTREAM_KEY") or None,
         gateway_key=gateway_key,
         instructions=None if args.instructions == "none" else args.instructions,
-        unsupported="drop" if args.drop_unsupported else "refuse",
+        unsupported=_unsupported(args),
         max_body=args.max_body_mb * 1024 * 1024,
         timeout=args.timeout,
     )
@@ -122,10 +122,17 @@ def _parser() -> argparse.ArgumentParser:
         default="pl",
         help="language of the note telling the model what the tokens are, or none",
     )
-    parser.add_argument(
+    unsupported = parser.add_mutually_exclusive_group()
+    unsupported.add_argument(
         "--drop-unsupported",
         action="store_true",
         help="leave out content that cannot be masked, such as images, rather than refuse the call",
+    )
+    unsupported.add_argument(
+        "--pass-unsupported",
+        action="store_true",
+        help="send content that cannot be masked, such as images and files, to the provider as it "
+        "is, unmasked, rather than refuse the call",
     )
     parser.add_argument(
         "--max-body-mb", type=int, default=10, help="largest request, in MB (default: 10)"
@@ -175,6 +182,12 @@ def _loopback(host: str) -> bool:
         return False
 
 
+def _unsupported(args: argparse.Namespace) -> Literal["refuse", "drop", "pass"]:
+    if args.drop_unsupported:
+        return "drop"
+    return "pass" if args.pass_unsupported else "refuse"
+
+
 def _banner(args: argparse.Namespace, config: Any, detection: str) -> str:
     """One line on what the gateway does, with no key in it."""
     if config.gateway_key:
@@ -183,9 +196,10 @@ def _banner(args: argparse.Namespace, config: Any, detection: str) -> str:
         keys = "the provider gets the operator's key"
     else:
         keys = "the client's key is passed on"
+    unmasked = "; images and files go to the provider unmasked" if args.pass_unsupported else ""
     return (
         f"polanon gateway on http://{args.host}:{args.port}/v1 -> {args.upstream}; "
-        f"masking with {detection}; {keys}"
+        f"masking with {detection}; {keys}{unmasked}"
     )
 
 

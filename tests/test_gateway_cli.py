@@ -105,6 +105,14 @@ def test_the_options_reach_the_gateway():
     assert served.app._anonymizer.allowlist is None
 
 
+def test_content_that_cannot_be_masked_may_be_passed_and_the_banner_says_so(capsys):
+    _, served = run([*UPSTREAM, "--pass-unsupported"])
+    assert served.app._config.unsupported == "pass"
+    assert "images and files go to the provider unmasked" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        run([*UPSTREAM, "--pass-unsupported", "--drop-unsupported"])
+
+
 def test_without_the_model_the_banner_says_places_are_not_masked(monkeypatch, capsys):
     monkeypatch.setattr("polanon.gateway.__main__.ner_available", lambda model: False)
     run(["--upstream", "https://provider.test/v1"])

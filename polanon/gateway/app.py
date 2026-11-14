@@ -66,7 +66,8 @@ class GatewayConfig:
         instructions: the language of the note that tells the model what the tokens are, "pl" or
             "en", or None to leave the messages without it.
         unsupported: what to do with content that cannot be masked, such as an image: "refuse" the
-            call or "drop" the content and send the rest.
+            call, "drop" the content and send the rest, or "pass" it to the provider as it is,
+            unmasked.
         max_body: the largest request accepted, in bytes.
         timeout: seconds to wait for the provider.
     """
@@ -75,7 +76,7 @@ class GatewayConfig:
     upstream_key: str | None = field(default=None, repr=False)
     gateway_key: str | None = field(default=None, repr=False)
     instructions: str | None = "pl"
-    unsupported: Literal["refuse", "drop"] = "refuse"
+    unsupported: Literal["refuse", "drop", "pass"] = "refuse"
     max_body: int = 10 * 1024 * 1024
     timeout: float = 600.0
 
@@ -193,9 +194,14 @@ class Gateway:
         body = await self._body(receive)
         turn = self._turn()
         drop = self._config.unsupported == "drop"
+        keep = self._config.unsupported == "pass"
         masked = await self._mask(
             lambda: mask_responses_request(
-                turn, body, instructions=self._instructions, drop_unsupported=drop
+                turn,
+                body,
+                instructions=self._instructions,
+                drop_unsupported=drop,
+                pass_unsupported=keep,
             )
         )
         self._check(masked, turn)
@@ -314,9 +320,8 @@ class Gateway:
         return body
 
     def _turn(self) -> MaskedTurn:
-        unknown: Literal["raise", "drop"] = (
-            "drop" if self._config.unsupported == "drop" else "raise"
-        )
+        blocks: dict[str, Literal["raise", "drop", "keep"]] = {"drop": "drop", "pass": "keep"}
+        unknown = blocks.get(self._config.unsupported, "raise")
         return MaskedTurn(self._anonymizer, unknown_blocks=unknown)
 
     async def _mask(self, masking: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -332,7 +337,8 @@ class Gateway:
                 raise _RefusalError(
                     400,
                     f"{what}, so the call was not sent; start the gateway with "
-                    "--drop-unsupported to leave such content out",
+                    "--drop-unsupported to leave such content out, or with --pass-unsupported "
+                    "to send it unmasked",
                     "unsupported_content",
                 ) from exc
             raise _RefusalError(

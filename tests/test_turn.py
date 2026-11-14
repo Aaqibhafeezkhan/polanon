@@ -296,6 +296,28 @@ def test_a_block_that_cannot_be_masked_is_refused_unless_it_may_be_left_out():
     ]
 
 
+def test_a_block_that_cannot_be_masked_goes_as_it_is_when_the_turn_keeps_it():
+    """An operator who wants the model to see the images sends them unmasked, and says so."""
+    data = "iVBORw0KGgo="
+    image = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}}
+    message = {
+        "role": "user",
+        "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_02", "content": [image]},
+            {"type": "text", "text": "Co jest na zdjęciu Anny Nowak?"},
+        ],
+    }
+    [masked] = anonymizer.turn(unknown_blocks="keep").mask_messages([message])
+    assert masked["content"] == [
+        {"type": "tool_result", "tool_use_id": "toolu_02", "content": [image]},
+        {"type": "text", "text": "Co jest na zdjęciu <OSOBA_1>?"},
+    ]
+    call = {"id": "c9", "type": "custom", "custom": {"name": "sql", "input": "SELECT 1"}}
+    history = [{"role": "assistant", "content": None, "tool_calls": [call]}]
+    [kept] = anonymizer.turn(unknown_blocks="keep").mask_messages(history)
+    assert kept["tool_calls"] == [call]
+
+
 def test_an_openai_history_keeps_its_arguments_and_tool_results_valid_json():
     messages = [
         {"role": "system", "content": "Jesteś asystentem CRM."},
@@ -411,7 +433,7 @@ def test_messages_that_are_not_chat_messages_are_refused():
         anonymizer.turn().mask_messages([{"role": "user", "content": 5}])
     with pytest.raises(TypeError, match="a content block is a dictionary"):
         anonymizer.turn().mask_messages([{"role": "user", "content": ["Jan Kowalski"]}])
-    with pytest.raises(ValueError, match="'raise' or 'drop'"):
+    with pytest.raises(ValueError, match="'raise', 'drop' or 'keep'"):
         anonymizer.turn(unknown_blocks="skip")  # type: ignore[arg-type]
 
 

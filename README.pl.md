@@ -457,7 +457,8 @@ Co robi z jednym wywołaniem:
   w opisach narzędzi i formatu odpowiedzi: opisy, tytuły i przykładowe wartości. Nazwy narzędzi,
   typy i nazwy parametrów zostają, więc narzędzia dalej działają. Pole `name` uczestnika pomija.
 - Obrazu, pliku ani dźwięku nie da się zamaskować, więc takie wywołanie jest odrzucane;
-  `--drop-unsupported` pomija taką treść i wysyła resztę.
+  `--drop-unsupported` pomija taką treść i wysyła resztę, a `--pass-unsupported` wysyła ją do
+  dostawcy taką, jaka jest, bez maskowania, razem z nazwą pliku, gdy chcesz, żeby model ją widział.
 - Zanim cokolwiek wyjdzie, przeszukuje całe zapytanie jeszcze raz pod kątem każdej oryginalnej
   wartości i odmawia wysyłki, jeśli któraś wciąż tam jest.
 - Do wiadomości systemowej dopisuje notatkę, która mówi modelowi, czym są tokeny: `--instructions

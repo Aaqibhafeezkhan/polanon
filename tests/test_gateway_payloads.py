@@ -2,6 +2,7 @@
 
 import copy
 import json
+import time
 
 import pytest
 
@@ -100,6 +101,19 @@ def test_an_image_in_a_message_is_refused():
     body = chat(user([{"type": "text", "text": "Co to?"}, image]))
     with pytest.raises(MaskingUnavailableError):
         mask_chat_request(turn(), body)
+
+
+def test_an_image_and_a_file_go_as_they_are_when_the_turn_keeps_them():
+    """The operator chose to let the model see them: the text is masked, they are not."""
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 2_000_000}}
+    file = {"type": "file", "file": {"filename": "a.pdf", "file_data": "data:;base64,JVBERi0="}}
+    one = MaskedTurn(ANONYMIZER, unknown_blocks="keep")
+    body = chat(user([{"type": "text", "text": "Jan Kowalski?"}, image, file]))
+    masked = mask_chat_request(one, body)
+    assert masked["messages"][0]["content"] == [{"type": "text", "text": "<OSOBA_1>?"}, image, file]
+    started = time.perf_counter()
+    assert leaked_tokens(masked, one.mapping) == []
+    assert time.perf_counter() - started < 5
 
 
 @pytest.mark.parametrize(
@@ -652,6 +666,18 @@ def test_an_image_or_an_item_the_gateway_does_not_know_is_refused_or_left_out(it
     assert masked["input"][-1]["content"] == "<OSOBA_1>?"
     assert "image_url" not in json.dumps(masked)
     assert "web_search_call" not in json.dumps(masked)
+
+
+def test_a_responses_request_passes_what_it_cannot_mask_when_told_to():
+    image = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+    item = {"type": "web_search_call", "id": "ws1"}
+    text = {"type": "input_text", "text": "Jan Kowalski?"}
+    body = {"input": [item, {"role": "user", "content": [image, text]}]}
+    masked = mask_responses_request(turn(), body, pass_unsupported=True)
+    assert masked["input"][0] == item
+    assert masked["input"][1]["content"] == [image, {"type": "input_text", "text": "<OSOBA_1>?"}]
+    with pytest.raises(ValueError, match="drop or pass"):
+        mask_responses_request(turn(), body, drop_unsupported=True, pass_unsupported=True)
 
 
 def test_tool_outputs_and_custom_tools_are_masked():

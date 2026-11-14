@@ -142,6 +142,7 @@ async def test_an_image_is_refused_and_nothing_is_sent():
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "unsupported_content"
     assert "--drop-unsupported" in response.json()["error"]["message"]
+    assert "--pass-unsupported" in response.json()["error"]["message"]
     assert provider.requests == []
 
 
@@ -155,6 +156,18 @@ async def test_an_image_is_left_out_when_the_gateway_is_told_to_drop_it():
     assert response.status_code == 200
     _, body = provider.requests[0]
     assert body["messages"][-1]["content"] == [{"type": "text", "text": "<OSOBA_1>?"}]
+
+
+async def test_an_image_goes_to_the_provider_as_it_is_when_the_gateway_passes_it():
+    provider = Provider()
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+    async with client(provider, unsupported="pass") as gw:
+        response = await gw.post(
+            "/v1/chat/completions", json=chat([{"type": "text", "text": "Jan Kowalski?"}, image])
+        )
+    assert response.status_code == 200
+    _, body = provider.requests[0]
+    assert body["messages"][-1]["content"] == [{"type": "text", "text": "<OSOBA_1>?"}, image]
 
 
 async def test_embeddings_are_asked_for_masked_text():
@@ -539,6 +552,10 @@ async def test_an_image_in_a_responses_call_is_refused_or_left_out():
         dropped = await gw.post("/v1/responses", json=body)
     assert dropped.status_code == 200
     assert received[0]["input"][0]["content"] == []
+    async with client(_responses_provider(received), unsupported="pass") as gw:
+        passed = await gw.post("/v1/responses", json=body)
+    assert passed.status_code == 200
+    assert received[1]["input"][0]["content"] == [image]
 
 
 async def test_the_provider_s_error_on_a_responses_call_passes_through():

@@ -5,6 +5,18 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Added
+
+- **The gateway can send what it cannot mask, when told to.** `polanon-gateway
+  --pass-unsupported` sends an image, a file or another part it cannot mask to the provider as it
+  is, unmasked, and masks the text around it, for an operator who wants the model to see a photo
+  or a document sent to an agent. The banner says so. `MaskedTurn(unknown_blocks="keep")` and
+  `mask_responses_request(pass_unsupported=True)` do the same in code. Without the flag such a
+  call is still refused, and `--drop-unsupported` still leaves the content out; the two flags
+  exclude each other.
+
 ## [0.3.5] - 2026-11-14
 
 A new way back for names and fixes for agents, and nothing that worked before stops working: a

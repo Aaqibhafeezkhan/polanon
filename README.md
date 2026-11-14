@@ -442,7 +442,8 @@ What it does with a call:
   of an answer format: descriptions, titles and example values. Tool names, types and parameter
   names stay, so the tools keep working. A participant's `name` is left out.
 - An image, a file or audio cannot be masked, so the call is refused; `--drop-unsupported` leaves
-  such content out and sends the rest.
+  such content out and sends the rest, and `--pass-unsupported` sends it to the provider as it is,
+  unmasked, with a file's name, for an operator who wants the model to see it.
 - Before anything leaves, the payload is searched once more for every original value, and the call
   is refused if one is still there.
 - A note telling the model what the tokens are joins the system message: `--instructions en`, or
