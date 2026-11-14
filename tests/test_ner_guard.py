@@ -284,6 +284,28 @@ def test_a_span_opening_with_or_holding_an_english_small_word_is_no_name_on_any_
     ]
 
 
+def test_a_word_in_inline_code_is_no_name_unless_it_holds_a_first_name():
+    """An agent's Polish answers named a button `Uncheck`, and the Polish model took it for a
+    person on line after line: masked 85 times in one call once known. What stands between two
+    backticks of its line is code; a login with a Polish first name in it is still a person's.
+    """
+    text = (
+        "Kliknij `Uncheck`, a potem `Zapisz zmiany` w oknie ustawień.\n"
+        "Konto `anna.nowak` założyła Ola Kowalska.\n"
+        "Krok 3:\\nWybierz `Archive` i potwierdź.\n"
+        "Pomiń ` znak, a potem Gdańsk."
+    )
+    entities = [
+        _Entity(text, "Uncheck", "persName"),
+        _Entity(text, "Zapisz zmiany", "orgName"),
+        _Entity(text, "anna.nowak", "persName"),
+        _Entity(text, "Ola Kowalska", "persName"),
+        _Entity(text, "Archive", "orgName"),
+        _Entity(text, "Gdańsk"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["anna.nowak", "Ola Kowalska", "Gdańsk"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

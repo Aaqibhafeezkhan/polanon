@@ -88,6 +88,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   when it has two capitalised words or a Polish first name: "Maria Lindqvist at Northwind
   Traders" gives both names, "tokens and passwords" none. "Will" and "May" are first names too,
   so a span they open with a capital letter is read as before.
+- **A word in inline code is no name.** An agent's Polish answers named a button `Uncheck`, and
+  the Polish model took it for a person on line after line: masked 85 times in one call once
+  known. A span between two backticks of its line, a line break written out as `\n` ending one
+  too, is now dropped, unless it holds a Polish first name, as the login `anna.nowak` does.
 
 ## [0.3.5] - 2026-11-14
 

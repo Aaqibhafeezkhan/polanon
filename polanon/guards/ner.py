@@ -526,6 +526,25 @@ def _cut_at_english_words(text: str, span: Span) -> list[Span]:
     return kept
 
 
+def _in_inline_code(text: str, span: Span) -> bool:
+    r"""Return whether a span stands between two backticks of its line, as `Uncheck` does.
+
+    Markdown sets code, a command or a button's label in backticks, and in an agent's Polish
+    answers the Polish model took `Uncheck` for a person on line after line: masked 85 times in
+    one call once known. A line break written out as "\n" ends a line too. A login with a Polish
+    first name in it, `anna.nowak`, is still a person's.
+    """
+    real, escaped = text.rfind("\n", 0, span.start), text.rfind("\\n", 0, span.start)
+    line_start = max(real + 1, escaped + 2 if escaped >= 0 else 0)
+    ends = [end for end in (text.find("\n", span.end), text.find("\\n", span.end)) if end >= 0]
+    line_end = min(ends, default=len(text))
+    return (
+        text.count("`", line_start, span.start) % 2 == 1
+        and text.count("`", span.end, line_end) > 0
+        and not _holds_a_first_name(text[span.start : span.end])
+    )
+
+
 def _inside_a_word(text: str, span: Span) -> bool:
     r"""Return whether a span is a piece of a longer word, "service" of "ha_call_service".
 
@@ -574,7 +593,12 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
     )
     for span in pieces:
         fragment = text[span.start : span.end]
-        if _is_code(fragment) or _inside_a_word(text, span) or _lowercase_place(span, fragment):
+        if (
+            _is_code(fragment)
+            or _in_inline_code(text, span)
+            or _inside_a_word(text, span)
+            or _lowercase_place(span, fragment)
+        ):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
         if line_start not in languages:
