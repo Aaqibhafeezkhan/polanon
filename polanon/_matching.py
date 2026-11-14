@@ -17,7 +17,7 @@ import unicodedata
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, lru_cache
 
 from polanon._view import DASHES, INVISIBLE, View, as_read
 from polanon.policy import ENTITY_TYPES, LABEL_TO_ENTITY, TOKEN_PATTERN
@@ -168,15 +168,25 @@ def value_keys(value: str, entity_type: str) -> list[tuple[str, str]]:
     A password, or a custom identifier, is one value only as written, and never the same value as
     a name that reads alike: the name keeps a token whose spellings are searched for in any case.
     """
+    return list(_value_keys(value, entity_type))
+
+
+#: How many values the keys stay computed for: every text of a call is masked against the whole
+#: mapping, a few hundred values, so each value's keys were computed thousands of times a call.
+_KEYED_VALUES = 65_536
+
+
+@lru_cache(maxsize=_KEYED_VALUES)
+def _value_keys(value: str, entity_type: str) -> tuple[tuple[str, str], ...]:
     read = reading(value)
     if not folds(entity_type):
-        return [("exact", read)]
+        return (("exact", read),)
     folded = fold(read)
     lowercase_word = read == folded and read.isalpha()
     keys = [("lowercase word" if lowercase_word else "folded", folded)]
     if entity_type in _GROUPED_TYPES:
         keys.append(("grouped", _GROUP_SEPARATOR.sub("", folded)))
-    return keys
+    return tuple(keys)
 
 
 class Ranges:
@@ -320,6 +330,24 @@ class Needle:
         return self.folds and self.read.isalpha() and not self.read.islower()
 
 
+#: How many sets of values the search stays prepared for. Masking one call reads every text of
+#: it against the same values, so a set is used thousands of times before the mapping grows.
+_PREPARED = 16
+
+
+def forget() -> None:
+    """Drop what was prepared for the latest values, and the values with it.
+
+    That is the search for the latest sets of values and the keys computed for the latest values.
+
+    A long-running process, such as the gateway, calls it after each call, so the values of a call
+    stay in memory no longer than the call does.
+    """
+    _prepared_needles.cache_clear()
+    _prepared_tables.cache_clear()
+    _value_keys.cache_clear()
+
+
 def needles(values: Iterable[tuple[str, str]]) -> list[Needle]:
     """Return the values worth searching for, one per spelling and letter-case rule, longest first.
 
@@ -328,6 +356,11 @@ def needles(values: Iterable[tuple[str, str]]) -> list[Needle]:
     one whose case matters goes first, so a password is placed before a name that differs from it
     only in case.
     """
+    return list(_prepared_needles(tuple(values)))
+
+
+@lru_cache(maxsize=_PREPARED)
+def _prepared_needles(values: tuple[tuple[str, str], ...]) -> tuple[Needle, ...]:
     found: dict[tuple[str, bool], Needle] = {}
     for value, payload in values:
         read = reading(value)
@@ -340,7 +373,7 @@ def needles(values: Iterable[tuple[str, str]]) -> list[Needle]:
             ungrouped = _GROUP_SEPARATOR.sub("", fold(read))
         needle = Needle(value.strip(), read, payload, folding, ungrouped)
         found.setdefault((needle.written, folding), needle)
-    return sorted(found.values(), key=lambda needle: (-len(needle.read), needle.folds))
+    return tuple(sorted(found.values(), key=lambda needle: (-len(needle.read), needle.folds)))
 
 
 def occurrences(haystack: str, wanted: list[str]) -> list[list[int]]:
@@ -353,15 +386,22 @@ def occurrences(haystack: str, wanted: list[str]) -> list[list[int]]:
     if len(wanted) <= _FEW_VALUES:
         return [_each(haystack, needle) for needle in wanted]
     found: list[list[int]] = [[] for _ in wanted]
+    tables, pending = _prepared_tables(tuple(wanted))
+    for index, needle in pending:
+        found[index] = _each(haystack, needle)
+    _scan(haystack, tables, found)
+    return found
+
+
+@lru_cache(maxsize=_PREPARED)
+def _prepared_tables(wanted: tuple[str, ...]) -> tuple[_Tables, tuple[tuple[int, str], ...]]:
+    """The prefix tables of many strings, and the strings searched for one by one instead."""
     tables: _Tables = {}
     pending = list(enumerate(wanted))
     for prefix_chars in _PREFIX_CHARS:
         _index(tables, pending, prefix_chars)
         pending = _crowded(tables)
-    for index, needle in pending:
-        found[index] = _each(haystack, needle)
-    _scan(haystack, tables, found)
-    return found
+    return tables, tuple(pending)
 
 
 #: First characters -> a longer prefix, by how many characters it has -> length -> the string

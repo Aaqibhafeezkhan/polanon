@@ -23,6 +23,7 @@ from typing import Any, Literal
 import httpx
 
 from polanon import Anonymizer, MaskedTurn, MaskingUnavailableError, token_instructions
+from polanon._matching import forget as forget_prepared_searches
 from polanon.gateway.payloads import (
     ChatStream,
     GatewayRequestError,
@@ -167,6 +168,8 @@ class Gateway:
             time.perf_counter() - started,
             counts or "nothing",
         )
+        # The search for known values is prepared once per call; it holds the call's values.
+        forget_prepared_searches()
 
     async def _chat(self, scope: Scope, receive: Receive, send: Send) -> tuple[int, dict[str, int]]:
         body = await self._body(receive)

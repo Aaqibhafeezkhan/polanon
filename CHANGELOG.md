@@ -24,6 +24,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   took 28 seconds, 20 of them in spaCy reading some two thousand texts it had read in the call
   before. `NerGuard` now remembers what it found in up to 20 000 texts (`cache_texts`, 0 turns it
   off), under each text's SHA-256 digest, never the text itself; the same call took 13 seconds.
+- **The search for known values is prepared once per set of values.** Every text of a call is
+  masked and checked against the whole mapping, and the search for its few hundred values, with
+  each value's keys, was built anew for each of some 2,700 texts. It is now kept for the latest
+  values, and the gateway drops it after each call (`polanon._matching.forget`), so a call's
+  values stay in memory no longer than the call. Masking the agent's call of 105 messages now
+  takes 8 seconds and its last check 1 instead of 13 and 3.5.
 
 ### Fixed
 

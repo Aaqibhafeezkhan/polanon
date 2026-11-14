@@ -561,3 +561,26 @@ async def test_a_name_with_its_surname_still_outranks_the_language_model():
         existing_mapping={},
     )
     assert result.anonymized == "<OSOBA_1> przyjdzie."
+
+
+def test_the_search_for_known_values_is_prepared_once_per_set_of_values():
+    """An agent's call of 115 messages masked about 2,700 texts against 290 values, and prepared
+    the same search for them each time: two thirds of the masking time.
+    """
+    from polanon import _matching
+
+    _matching.forget()
+    values = {f"<OSOBA_{n}>": f"Osobowa{n} Testowa" for n in range(1, 151)}
+    texts = [f"Wpis {n}: Osobowa{n} Testowa dzwoniła." for n in range(1, 41)]
+    masked = [mask_known_values(text, values) for text in texts]
+    assert masked[0] == "Wpis 1: <OSOBA_1> dzwoniła."
+    assert _matching._prepared_needles.cache_info().misses == 1
+    assert _matching._prepared_tables.cache_info().hits >= len(texts) - 1
+    masker = Anonymizer([RegexGuard()])
+    for text in texts:
+        masker.anonymize_sync(text, values)
+    assert _matching._value_keys.cache_info().hits >= len(values) * (len(texts) - 1)
+    _matching.forget()
+    assert _matching._prepared_needles.cache_info().currsize == 0
+    assert _matching._prepared_tables.cache_info().currsize == 0
+    assert _matching._value_keys.cache_info().currsize == 0

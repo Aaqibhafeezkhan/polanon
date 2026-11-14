@@ -170,6 +170,17 @@ async def test_an_image_goes_to_the_provider_as_it_is_when_the_gateway_passes_it
     assert body["messages"][-1]["content"] == [{"type": "text", "text": "<OSOBA_1>?"}, image]
 
 
+async def test_no_value_of_a_call_stays_in_the_search_prepared_for_it():
+    from polanon import _matching
+
+    many = ", ".join(f"Osobowa{n} Testowa" for n in range(1, 140))
+    async with client(Provider()) as gw:
+        await gw.post("/v1/chat/completions", json=chat(f"Lista: {many}. Jan Kowalski"))
+    assert _matching._prepared_needles.cache_info().currsize == 0
+    assert _matching._prepared_tables.cache_info().currsize == 0
+    assert _matching._value_keys.cache_info().currsize == 0
+
+
 async def test_embeddings_are_asked_for_masked_text():
     provider = Provider()
     async with client(provider) as gw:
