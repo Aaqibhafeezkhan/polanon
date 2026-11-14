@@ -113,3 +113,16 @@ def test_with_the_polish_model_little_leaks_and_little_is_masked_for_nothing():
     used = sum(score.uses for score in scores.values())
     assert wasted <= 54
     assert wasted / used <= 0.25
+
+
+@needs_model
+@pytest.mark.slow
+def test_in_paranoid_mode_nothing_leaks_and_more_than_half_the_tokens_hide_nothing():
+    """What `mode="paranoid"` buys and what it costs: "sopotu" and "Erik Holm" are masked, and so
+    are "return", "message" and "notify" of the tools and the agent's English."""
+    scores = run(anonymizer_for(with_ner=True, mode="paranoid"))
+    assert sum(score.leaked for score in scores.values()) == 0
+    wasted = sum(score.wasted_uses for score in scores.values())
+    used = sum(score.uses for score in scores.values())
+    assert wasted <= 223
+    assert wasted / used > 0.5

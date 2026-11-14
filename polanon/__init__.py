@@ -53,7 +53,7 @@ from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.mock import MockJudge
 from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
-from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, token_for
+from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, Mode, check_mode, token_for
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import StreamRestorer, restored
 from polanon.turn import MaskedTurn, UnknownBlocks, token_instructions
@@ -124,7 +124,11 @@ _NER_INSTALL = (
 
 
 def default_guards(
-    *, denylist: Iterable[str] = (), with_ner: bool = True, spacy_model: str = "pl_core_news_md"
+    *,
+    denylist: Iterable[str] = (),
+    with_ner: bool = True,
+    spacy_model: str = "pl_core_news_md",
+    mode: Mode = "normal",
 ) -> list[Guard]:
     """Guards in recommended order. NER guard is imported lazily because spaCy is heavy/optional.
 
@@ -137,9 +141,16 @@ def default_guards(
         spacy_model: the installed spaCy model's package name (underscores or hyphens), or a
             model directory. The directory must contain meta.json and config.cfg; the pipeline
             itself loads on first use.
+        mode: how much of what the spaCy model reads as a name is masked. "normal" leaves out
+            what it reads as a name in English prose, code and identifiers, where nearly all of
+            it is ordinary words, at the price of a name opening an English sentence or a place
+            typed in lowercase; "paranoid" masks all of it, and many more words of an agent's
+            English become tokens. The rules are the same in both, so without the model the
+            mode changes nothing.
 
     Raises:
         TypeError: when `denylist` is a single string, which would be read letter by letter.
+        ValueError: for a mode that is neither "normal" nor "paranoid".
         NerModelUnavailableError: when `with_ner` is on and spaCy or the model is not installed.
             It is raised here rather than on the first text to mask, with the command that fixes
             it, and it is both a ModuleNotFoundError and a MaskingUnavailableError.
@@ -148,6 +159,7 @@ def default_guards(
     if isinstance(denylist, str):
         # The term itself stays out of the message: it is what the caller wants kept hidden.
         raise TypeError("denylist takes a list of terms, not a single string")
+    check_mode(mode)
     guards: list[Guard] = [
         RegexGuard(),
         SecretsGuard(),
@@ -163,7 +175,7 @@ def default_guards(
             raise NerModelUnavailableError(str(exc)) from None
         from polanon.guards.ner import NerGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model))
+        guards.append(NerGuard(spacy_model=spacy_model, mode=mode))
     return guards
 
 

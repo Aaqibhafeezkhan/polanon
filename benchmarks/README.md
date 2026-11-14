@@ -108,15 +108,16 @@ once is masked wherever it stands.
 | polanon, guards only, no model | 20 of 122 | 0 | 0 of 143 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 1 of 122 | 20 | 68 of 233 |
 | polanon, guards + `pl_core_news_md` | **2 of 122** | 12 | **54 of 218** |
-| the same, without the model's filters for English and code | 0 of 122 | 129 | 224 of 390 |
+| the same, `mode="paranoid"` | 0 of 122 | 128 | 223 of 389 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
 nothing is masked for nothing. With the model, two values leak by design: "sopotu", a place typed
 in lowercase in a chat, dropped since a place in lowercase stopped being one, so that "text" and
 "service" of a manual are not, and "Erik Holm" opening an English sentence, where a capitalised
-word is read as English. Taking every
-name the model finds leaks nothing and wastes more than half of the token uses, on "return",
-"message", "notify" and "That's". What the default still masks for nothing is mostly "Max", of
+word is read as English. `mode="paranoid"` takes every
+name the model finds: it leaks nothing and wastes more than half of the token uses, on "return",
+"message", "notify" and "That's". On the twelve documents it masks the same 184 values as the
+default, with 8 over-masked spans instead of 6. What the default still masks for nothing is mostly "Max", of
 the chip, the vacuum's fan speed and "Max results" in the tools, and "Dell".
 [`tests/test_agent_benchmark.py`](../tests/test_agent_benchmark.py) holds these numbers as
 bounds both ways.
@@ -129,6 +130,7 @@ python benchmarks/run.py --ner           # with pl_core_news_md
 python benchmarks/run.py --ner --markdown
 python benchmarks/demo.py --ner          # print the masked documents
 python benchmarks/run_agent.py --ner --show 20   # an agent's calls, and what hides nothing
+python benchmarks/run_agent.py --ner --paranoid  # the same with mode="paranoid"
 ```
 
 The Presidio comparison needs Presidio, which is not a dependency of this project:

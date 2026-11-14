@@ -575,6 +575,21 @@ list(ENTITY_TYPES)  # every name you can use
 A name that is neither built in nor declared in a guard's `entity_types` raises `ValueError`, so a
 typo such as `"PERSONS"` cannot quietly switch masking off.
 
+With the spaCy model, `mode` sets how much of what it reads as a name is masked. The Polish model
+takes English words for names, and an AI agent's prompt, tools, code and logs are full of them:
+"return", "message" or a button's "Uncheck" become tokens the model cannot read. The default,
+`mode="normal"`, leaves out what the model finds in English prose, in code and identifiers, and a
+place written in lowercase; the price is a name opening an English sentence, or "jadę do gdyni",
+which go out as written. `mode="paranoid"` masks all of it:
+
+```python
+guards = default_guards(mode="paranoid")
+```
+
+On the calls of an AI agent in `benchmarks/`, "normal" lets 2 of 122 marked values through and a
+quarter of the token uses hide nothing; "paranoid" lets none through, and more than half hide
+nothing. The rules are the same in both, so without the model the mode changes nothing.
+
 ## A second opinion: the judge
 
 Rules and a language model miss what identifies someone only by context: "the finance director of

@@ -7,6 +7,7 @@ Tokens are Polish-labelled on purpose: people read them in previews of what a mo
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 #: Canonical entity type -> token label used in ``<LABEL_n>``.
 ENTITY_TYPES: dict[str, str] = {
@@ -38,6 +39,20 @@ ENTITY_TYPES: dict[str, str] = {
     "BANK_ACCOUNT": "KONTO",  # an account number that is not an IBAN: Bankgiro, sort code, ...
     "OTHER": "INNE",  # only produced by the stage-2 judge, for context that identifies someone
 }
+
+#: How much of what the language model reads as a name is masked. "normal" leaves out what it
+#: reads as a name in English prose, in code and in identifiers, where nearly all of it is
+#: ordinary words; "paranoid" masks all of it, for text where a leak costs more than a word the
+#: model can no longer read.
+Mode = Literal["normal", "paranoid"]
+MODES: tuple[Mode, ...] = ("normal", "paranoid")
+
+
+def check_mode(mode: str) -> None:
+    """Raise ValueError for a mode that is neither "normal" nor "paranoid"."""
+    if mode not in MODES:
+        raise ValueError(f"mode must be 'normal' or 'paranoid', not {mode!r}")
+
 
 #: Matches a complete token and captures its label and number.
 TOKEN_PATTERN = r"<(?P<label>[A-Z_]+)_(?P<n>\d+)>"  # noqa: S105 - a regex, not a secret

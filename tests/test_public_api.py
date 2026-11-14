@@ -291,6 +291,20 @@ def test_a_missing_language_model_is_also_masking_unavailable(monkeypatch, found
     assert "with_ner=False" in str(error.value)
 
 
+def test_the_mode_reaches_the_spacy_guard(monkeypatch):
+    installed = {"spacy", "pl_core_news_md"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name in installed else None
+    )
+    assert default_guards()[-1].mode == "normal"
+    assert default_guards(mode="paranoid")[-1].mode == "paranoid"
+
+
+def test_an_unknown_mode_is_refused_even_without_the_model():
+    with pytest.raises(ValueError, match="'normal' or 'paranoid'"):
+        default_guards(with_ner=False, mode="strict")  # type: ignore[arg-type]
+
+
 def test_the_language_model_is_reported_available_only_when_it_is_installed(monkeypatch):
     installed = {"spacy", "pl_core_news_md"}
     monkeypatch.setattr(

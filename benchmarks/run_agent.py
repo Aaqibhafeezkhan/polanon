@@ -18,6 +18,7 @@ Usage:
     python benchmarks/run_agent.py              # guards that need no model
     python benchmarks/run_agent.py --ner        # also load the Polish spaCy model
     python benchmarks/run_agent.py --ner --show 20   # list the values masked for nothing
+    python benchmarks/run_agent.py --ner --paranoid  # the spaCy guard in mode="paranoid"
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from polanon import Allowlist, Anonymizer, MaskedTurn, default_guards
 from polanon.allowlist import WELL_KNOWN_NAMES
 from polanon.gateway.payloads import mask_chat_request
 from polanon.guards.names_pl import fold
-from polanon.policy import TOKEN_PATTERN
+from polanon.policy import TOKEN_PATTERN, Mode
 
 
 @dataclass
@@ -123,10 +124,12 @@ def score_call(anonymizer: Anonymizer, request: dict[str, Any], marked: list[Mar
     return score
 
 
-def anonymizer_for(*, with_ner: bool, spacy_model: str = "pl_core_news_md") -> Anonymizer:
+def anonymizer_for(
+    *, with_ner: bool, spacy_model: str = "pl_core_news_md", mode: Mode = "normal"
+) -> Anonymizer:
     """The guards the gateway masks with, and its list of well-known names."""
     return Anonymizer(
-        default_guards(with_ner=with_ner, spacy_model=spacy_model),
+        default_guards(with_ner=with_ner, spacy_model=spacy_model, mode=mode),
         allowlist=Allowlist(WELL_KNOWN_NAMES),
     )
 
@@ -197,8 +200,12 @@ def main() -> None:
     parser.add_argument(
         "--show", type=int, default=0, help="list this many values masked for nothing"
     )
+    parser.add_argument(
+        "--paranoid", action="store_true", help='the spaCy guard in mode="paranoid"'
+    )
     args = parser.parse_args()
-    anonymizer = anonymizer_for(with_ner=args.ner, spacy_model=args.spacy_model)
+    mode: Mode = "paranoid" if args.paranoid else "normal"
+    anonymizer = anonymizer_for(with_ner=args.ner, spacy_model=args.spacy_model, mode=mode)
     _report(run(anonymizer), markdown=args.markdown, show=args.show)
 
 

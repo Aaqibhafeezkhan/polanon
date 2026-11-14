@@ -25,6 +25,7 @@ Usage:
     python benchmarks/run.py              # guards that need no model
     python benchmarks/run.py --ner        # also load the Polish spaCy model
     python benchmarks/run.py --ner --markdown   # table ready to paste into the README
+    python benchmarks/run.py --ner --paranoid   # the spaCy guard in mode="paranoid"
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from polanon import (
     SecretsGuard,
     merge_spans,
 )
-from polanon.policy import ENTITY_TYPES
+from polanon.policy import ENTITY_TYPES, Mode
 
 SAMPLES = Path(__file__).parent / "samples"
 GOLD = Path(__file__).parent / "gold"
@@ -178,7 +179,7 @@ def run(guards: list[Guard], *, union: bool = False) -> tuple[dict[str, Score], 
     return totals, extra, len(documents)
 
 
-def guards_for(with_ner: bool, spacy_model: str) -> list[Guard]:
+def guards_for(with_ner: bool, spacy_model: str, mode: Mode = "normal") -> list[Guard]:
     """Build the guard stack for one configuration."""
     guards: list[Guard] = [
         RegexGuard(),
@@ -191,7 +192,7 @@ def guards_for(with_ner: bool, spacy_model: str) -> list[Guard]:
     if with_ner:
         from polanon.guards.ner import NerGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model))
+        guards.append(NerGuard(spacy_model=spacy_model, mode=mode))
     return guards
 
 
@@ -241,10 +242,15 @@ def main() -> int:
     parser.add_argument("--ner", action="store_true", help="also load the spaCy model")
     parser.add_argument("--spacy-model", default="pl_core_news_md")
     parser.add_argument("--markdown", action="store_true", help="print a markdown table")
+    parser.add_argument(
+        "--paranoid", action="store_true", help='the spaCy guard in mode="paranoid"'
+    )
     args = parser.parse_args()
 
-    totals, extra, documents = run(guards_for(args.ner, args.spacy_model))
-    print(f"configuration: guards without a model{' + spaCy NER' if args.ner else ''}\n")
+    mode: Mode = "paranoid" if args.paranoid else "normal"
+    totals, extra, documents = run(guards_for(args.ner, args.spacy_model, mode))
+    model = f" + spaCy NER, {mode}" if args.ner else ""
+    print(f"configuration: guards without a model{model}\n")
     report(totals, extra, documents, args.markdown)
     return 0
 

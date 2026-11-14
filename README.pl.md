@@ -602,6 +602,21 @@ Nazwa, która nie jest ani wbudowana, ani zadeklarowana w `entity_types` któreg
 powoduje wyjątek `ValueError`, więc literówka w rodzaju `"PERSONS"` nie może po cichu wyłączyć
 maskowania.
 
+Z modelem spaCy `mode` ustala, ile z tego, co model uznaje za nazwę, zostaje zamaskowane. Polski
+model bierze angielskie słowa za nazwy, a prompt, narzędzia, kod i logi agenta AI są ich pełne:
+„return”, „message” czy „Uncheck” z przycisku stają się tokenami, których model nie przeczyta.
+Domyślny `mode="normal"` pomija to, co model znajdzie w angielskim tekście, w kodzie
+i identyfikatorach, oraz miejsce zapisane małą literą; ceną jest nazwisko otwierające angielskie
+zdanie albo „jadę do gdyni”, które wychodzą bez zmian. `mode="paranoid"` maskuje wszystko:
+
+```python
+guards = default_guards(mode="paranoid")
+```
+
+Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 2 ze 122 oznaczonych wartości,
+a ćwierć użyć tokenów nic nie ukrywa; „paranoid” nie przepuszcza żadnej, ale nic nie ukrywa ponad
+połowa użyć. Reguły są w obu trybach te same, więc bez modelu tryb niczego nie zmienia.
+
 ## Druga opinia: sędzia
 
 Reguły i model językowy przeoczają to, co pozwala kogoś zidentyfikować wyłącznie z kontekstu:

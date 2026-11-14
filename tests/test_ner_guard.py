@@ -363,6 +363,30 @@ def test_a_word_after_a_model_number_is_no_person():
     assert _found(NerGuard(), text, entities) == ["Ola Kowalska", "Maja Nowak"]
 
 
+def test_in_paranoid_mode_every_name_the_model_finds_is_kept():
+    """The filters for English and code let a little through by design: a name opening an English
+    sentence, a word in inline code, a place typed in lowercase. With `mode="paranoid"` every
+    span with a letter in it is kept, so the carets under a traceback are still dropped."""
+    text = (
+        "Erik Holm from our team will measure the room on Monday.\n"
+        "Kliknij `Uncheck`, a jutro jedziemy do sopotu.\n"
+        "            ^^^^^^^^^^"
+    )
+    entities = [
+        _Entity(text, "Erik Holm", "persName"),
+        _Entity(text, "Uncheck", "persName"),
+        _Entity(text, "sopotu"),
+        _Entity(text, "^^^^^^^^^^", "orgName"),
+    ]
+    assert _found(NerGuard(), text, entities) == []
+    assert _found(NerGuard(mode="paranoid"), text, entities) == ["Erik Holm", "Uncheck", "sopotu"]
+
+
+def test_an_unknown_mode_is_refused():
+    with pytest.raises(ValueError, match="'normal' or 'paranoid'"):
+        NerGuard(mode="strict")  # type: ignore[arg-type]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

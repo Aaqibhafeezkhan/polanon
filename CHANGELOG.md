@@ -9,6 +9,15 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **`mode="paranoid"` masks every name the spaCy model finds.** The filters that keep an AI
+  agent's English, code and identifiers readable let a little through by design: a name opening
+  an English sentence, a word in inline code, a place typed in lowercase. `default_guards(mode=
+  "paranoid")` and `NerGuard(mode="paranoid")` keep every span with a letter in it instead. On
+  the agent's calls of the benchmark no marked value leaks, against 2 of 122 in the default
+  `mode="normal"`, and 223 of 389 token uses hide nothing, against 54 of 218. On the twelve
+  documents it masks the same 184 values, with 8 over-masked spans instead of 6. The rules are
+  the same in both modes. `benchmarks/run.py` and `benchmarks/run_agent.py` take `--paranoid`.
+
 - **A benchmark of an AI agent's calls.** `benchmarks/agent_corpus.py` holds four invented calls
   of a personal assistant as its client sends them to a model: an English system prompt with a
   Polish memory of its user, thirteen tool definitions, and the JSON its tools return from a
@@ -16,8 +25,8 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   52 values that must not reach the model are marked where they are written.
   `benchmarks/run_agent.py` masks each call as the gateway does and counts what still reaches the
   model and the tokens that hide nothing, with their uses: with `pl_core_news_md`, 2 of 122
-  occurrences and 54 of 218 uses, against 1 and 68 of 233 in 0.3.5, and 0 and 224 of 390 when
-  every name the model finds is taken. `tests/test_agent_benchmark.py` holds both as bounds, and
+  occurrences and 54 of 218 uses, against 1 and 68 of 233 in 0.3.5, and 0 and 223 of 389 in
+  the new `mode="paranoid"`. `tests/test_agent_benchmark.py` holds both as bounds, and
   CI prints the table.
 
 - **The gateway can send what it cannot mask, when told to.** `polanon-gateway

@@ -19,6 +19,7 @@ from typing import Any
 
 from polanon.guards.base import Guard
 from polanon.guards.names_pl import NAME_FORMS, fold, is_common_adjective
+from polanon.policy import Mode, check_mode
 from polanon.types import Span
 
 logger = logging.getLogger(__name__)
@@ -478,7 +479,11 @@ def _is_code(fragment: str) -> bool:
         return True
     if "_" in fragment and not _holds_a_first_name(fragment):
         return True
-    return not any(char.isalpha() for char in fragment) or fragment in _CODE_LITERALS
+    return not _has_a_letter(fragment) or fragment in _CODE_LITERALS
+
+
+def _has_a_letter(fragment: str) -> bool:
+    return any(char.isalpha() for char in fragment)
 
 
 def _bare(word: str) -> str:
@@ -753,7 +758,10 @@ class NerGuard(Guard):
     name = "spacy_ner"
 
     def __init__(
-        self, spacy_model: str = "pl_core_news_md", cache_texts: int = CACHE_TEXTS
+        self,
+        spacy_model: str = "pl_core_news_md",
+        cache_texts: int = CACHE_TEXTS,
+        mode: Mode = "normal",
     ) -> None:
         """Store the model name; the pipeline itself loads on first use.
 
@@ -762,9 +770,20 @@ class NerGuard(Guard):
             cache_texts: how many texts to remember what the model found in, so a text sent again,
                 as a chat's history is, is not read again; 0 reads every text every time. A text
                 is remembered by its SHA-256 digest, never as written.
+            mode: "normal" leaves out what the Polish model reads as a name in English prose,
+                in code, in identifiers and in a place written in lowercase, where nearly all of
+                it is ordinary words; a name opening an English sentence and "jadę do gdyni" go
+                out as written. "paranoid" keeps every span with a letter in it. In the calls of
+                an AI agent in ``benchmarks/run_agent.py``, "normal" lets 2 of 122 values through
+                and a quarter of the token uses hide nothing, "paranoid" none and more than half.
+
+        Raises:
+            ValueError: for a mode that is neither "normal" nor "paranoid".
         """
+        check_mode(mode)
         self.spacy_model = spacy_model
         self.cache_texts = cache_texts
+        self.mode = mode
         self._nlp: Any | None = None
         self._found: OrderedDict[tuple[str, frozenset[str]], tuple[Span, ...]] = OrderedDict()
 
@@ -830,6 +849,8 @@ class NerGuard(Guard):
                 start, end = offset + entity.start_char, offset + entity.end_char
                 spans.extend(self._line_spans(text, start, end, str(entity_type)))
         spans = _join_hyphenated(text, spans)
+        if self.mode == "paranoid":
+            return [span for span in spans if _has_a_letter(text[span.start : span.end])]
         if getattr(nlp, "lang", "pl") == "pl":
             spans = _without_english_misreadings(text, spans)
         return spans
