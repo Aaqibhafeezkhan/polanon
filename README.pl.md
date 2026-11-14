@@ -464,6 +464,9 @@ Co robi z jednym wywołaniem:
   maskowanie nie rusza, takich jak nazwy pól, identyfikatory i nazwy narzędzi.
 - Do wiadomości systemowej dopisuje notatkę, która mówi modelowi, czym są tokeny: `--instructions
   en` albo `none`, żeby jej nie dodawać.
+- `--paranoid` maskuje każdą nazwę, którą znajdzie model spaCy, tak jak `mode="paranoid"`.
+  Domyślnie pomija to, co znajdzie w angielskim tekście, w kodzie i identyfikatorach, bo prompt,
+  narzędzia i logi agenta są pełne angielskich słów, które polski model bierze za nazwy.
 - Niczego nie zapisuje na dysku. Narzędzie wysyła całą rozmowę przy każdym wywołaniu, a każde
   wywołanie jest maskowane i przywracane osobno. Z `POLANON_KEY` ustawionym na 64 znaki
   szesnastkowe dana osoba ma jeden token w każdym wywołaniu i w każdym przypadku gramatycznym.

@@ -125,3 +125,25 @@ def test_without_the_extra_the_command_says_what_to_install(monkeypatch, capsys)
     assert status == BAD_SETTING
     assert served.calls == []
     assert 'pip install "polanon[gateway]"' in capsys.readouterr().err
+
+
+def test_paranoid_mode_reaches_the_spacy_guard_and_the_banner(monkeypatch, capsys):
+    from polanon.gateway.__main__ import _anonymizer, _parser
+
+    installed = {"spacy", "pl_core_news_md"}
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name in installed else None
+    )
+    argv = ["--upstream", "https://provider.test/v1", "--paranoid"]
+    anonymizer, detection = _anonymizer(_parser().parse_args(argv), {})
+    assert anonymizer.guards[-1].mode == "paranoid"
+    assert detection == "rules and pl_core_news_md in paranoid mode"
+    normal, detection = _anonymizer(_parser().parse_args(argv[:2]), {})
+    assert normal.guards[-1].mode == "normal"
+    assert "paranoid" not in detection
+
+
+def test_paranoid_mode_without_the_model_says_it_changes_nothing(capsys):
+    status, _ = run([*UPSTREAM, "--paranoid"])
+    assert status == 0
+    assert "--paranoid needs the spaCy model" in capsys.readouterr().err

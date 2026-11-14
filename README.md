@@ -449,6 +449,9 @@ What it does with a call:
   names, ids and tools' names, are not searched.
 - A note telling the model what the tokens are joins the system message: `--instructions en`, or
   `none` to leave it out.
+- `--paranoid` masks every name the spaCy model finds, as `mode="paranoid"` does. By default
+  what it finds in English prose, code and identifiers is left out, since an agent's prompt,
+  tools and logs are full of English words the Polish model takes for names.
 - It keeps nothing on disk. A tool sends the whole conversation with every call, and each call is
   masked and restored on its own. With `POLANON_KEY` set to 64 hexadecimal characters, a person
   keeps one token in every call and in every grammatical case.

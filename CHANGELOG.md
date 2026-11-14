@@ -9,6 +9,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **`polanon-gateway --paranoid`** masks with the spaCy guard in `mode="paranoid"`, and the banner
+  says so. Without the model the flag changes nothing, and the banner says that too.
+
 - **`mode="paranoid"` masks every name the spaCy model finds.** The filters that keep an AI
   agent's English, code and identifiers readable let a little through by design: a name opening
   an English sentence, a word in inline code, a place typed in lowercase. `default_guards(mode=

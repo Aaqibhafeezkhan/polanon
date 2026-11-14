@@ -31,6 +31,7 @@ from polanon import (
     default_guards,
     ner_available,
 )
+from polanon.policy import Mode
 
 #: Exit status for a setting the gateway refuses to start with.
 BAD_SETTING = 2
@@ -112,6 +113,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--spacy-model", default="pl_core_news_md", help="the spaCy model to load")
     parser.add_argument(
+        "--paranoid",
+        action="store_true",
+        help="mask every name the spaCy model finds, also in English prose, code and "
+        "identifiers: less gets through, and many more words become tokens the model cannot read",
+    )
+    parser.add_argument(
         "--no-well-known-names",
         action="store_true",
         help="also mask names on the well-known list, such as Facebook, Excel or ZUS",
@@ -154,6 +161,11 @@ def _anonymizer(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[Anony
     detection = f"rules and {args.spacy_model}" if with_ner else "rules alone"
     if not args.rules_only and not with_ner:
         detection += " (spaCy or the model is not installed: places are not masked)"
+    mode: Mode = "paranoid" if args.paranoid else "normal"
+    if args.paranoid:
+        detection += (
+            " in paranoid mode" if with_ner else " (--paranoid needs the spaCy model: no change)"
+        )
     pseudonyms = None
     if env.get("POLANON_KEY"):
         try:
@@ -166,7 +178,7 @@ def _anonymizer(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[Anony
         detection += ", stable tokens"
     allowlist = None if args.no_well_known_names else Allowlist(WELL_KNOWN_NAMES)
     anonymizer = Anonymizer(
-        default_guards(with_ner=with_ner, spacy_model=args.spacy_model),
+        default_guards(with_ner=with_ner, spacy_model=args.spacy_model, mode=mode),
         allowlist=allowlist,
         pseudonyms=pseudonyms,
     )
