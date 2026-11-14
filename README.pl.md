@@ -460,7 +460,8 @@ Co robi z jednym wywołaniem:
   `--drop-unsupported` pomija taką treść i wysyła resztę, a `--pass-unsupported` wysyła ją do
   dostawcy taką, jaka jest, bez maskowania, razem z nazwą pliku, gdy chcesz, żeby model ją widział.
 - Zanim cokolwiek wyjdzie, przeszukuje całe zapytanie jeszcze raz pod kątem każdej oryginalnej
-  wartości i odmawia wysyłki, jeśli któraś wciąż tam jest.
+  wartości i odmawia wysyłki, jeśli któraś wciąż tam jest. Nie przeszukuje nazw z kodu, których
+  maskowanie nie rusza, takich jak nazwy pól, identyfikatory i nazwy narzędzi.
 - Do wiadomości systemowej dopisuje notatkę, która mówi modelowi, czym są tokeny: `--instructions
   en` albo `none`, żeby jej nie dodawać.
 - Niczego nie zapisuje na dysku. Narzędzie wysyła całą rozmowę przy każdym wywołaniu, a każde

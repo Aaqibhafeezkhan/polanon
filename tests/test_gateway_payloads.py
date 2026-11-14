@@ -545,6 +545,60 @@ def test_a_value_hidden_in_a_key_of_the_payload_is_found():
     ) == ["<OSOBA_1>"]
 
 
+def test_the_last_check_reads_names_from_code_as_the_masking_does():
+    """An agent's history refused every call: words the masking took for names in a tool's JSON
+    result, "service" or "text", stood in the keys, ids, types and function names it never masks.
+
+    Those are names from code. Every text and every value, also inside a JSON string, is still
+    searched, and a key that reads as text is too.
+    """
+    mapping = {"<FIRMA_1>": "service", "<SEKRET_1>": "call", "<MIEJSCE_1>": "text"}
+    arguments = json.dumps({"service": "<FIRMA_1>", "entity": "light.salon"})
+    payload = {
+        "model": "vendor/model-v1.0",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": "Włączam.",
+                "tool_calls": [
+                    {
+                        "id": "call_00_Ab3",
+                        "type": "function",
+                        "function": {"name": "ha_call_service", "arguments": arguments},
+                    }
+                ],
+                "reasoning_details": [
+                    {"type": "reasoning.text", "text": "<MIEJSCE_1>", "index": 0}
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_00_Ab3", "content": '{"text": "ok"}'},
+        ],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "ha_call_service",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"service": {"type": "string"}, "text": {"type": "string"}},
+                        "required": ["service", "text"],
+                    },
+                },
+            }
+        ],
+    }
+    assert leaked_tokens(payload, mapping) == []
+    for leak in (
+        '{"service": "service"}',
+        "A sentence with a service in it.",
+        "{not JSON, a service}",
+        '{"service service": 1}',
+    ):
+        found = copy.deepcopy(payload)
+        found["messages"][1]["content"] = leak
+        assert leaked_tokens(found, mapping) == ["<FIRMA_1>"], leak
+
+
 # --- the Responses API -------------------------------------------------------------------------
 
 

@@ -17,6 +17,16 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   call is still refused, and `--drop-unsupported` still leaves the content out; the two flags
   exclude each other.
 
+### Fixed
+
+- **The gateway's last check no longer refuses an agent's history over names from code.** With
+  Home Assistant's tools, a word of a tool's JSON result the masking took for a name, "service"
+  or "text", also stood in a JSON key, a tool call's id, a type such as "reasoning.text", a
+  tool's name or the parameters a tool requires, which the masking leaves as they are, and every
+  call was refused. The check now reads the payload as the masking does: a JSON text value by
+  value, and those names from code, written without a space, not at all. Every other text, every
+  value and a key with a space in it are searched as before.
+
 ## [0.3.5] - 2026-11-14
 
 A new way back for names and fixes for agents, and nothing that worked before stops working: a

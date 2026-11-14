@@ -9,6 +9,7 @@ mapping that restores the answer is the one the request was masked with.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal
 
@@ -46,6 +47,26 @@ _SCHEMA_MAPS = frozenset(
 )
 
 _Text = Callable[[str], str]
+
+#: Fields whose value names something in the API or in code rather than saying anything: an id, a
+#: type, a role, a model, a tool's name, the parameters a tool requires. The masking leaves them
+#: as they are.
+_NAMING_FIELDS = frozenset(
+    {
+        "id",
+        "tool_call_id",
+        "call_id",
+        "item_id",
+        "type",
+        "role",
+        "model",
+        "object",
+        "name",
+        "required",
+    }
+)
+#: A name from code: one word of letters, digits and ``_ . : / -``, with no space.
+_CODE_NAME = re.compile(r"[\w.:/-]+")
 #: What the gateway does with content it cannot mask, such as an image.
 _Unsupported = Literal["refuse", "drop", "pass"]
 
@@ -257,6 +278,13 @@ def leaked_tokens(payload: Any, mapping: Mapping[str, str]) -> list[str]:
     mapping by the rules the masking itself follows, so a short number inside a date or a short
     surname inside a longer word does not count, as it would not be masked either. Only tokens
     are returned, never values, so the result may be logged.
+
+    It reads the payload as the masking does. A text that is a JSON object or array, such as a
+    tool's arguments or result, is searched value by value. Names from code are left alone, as
+    the masking leaves them: a key written as a field name, ``tool_call_id`` or ``attributes``,
+    and an id, a type, a role, a model or a tool's name written without spaces, such as
+    ``call_00_Ab3`` or ``reasoning.text``. A key with a space in it, ``"Jan Kowalski"``, is a text
+    and is searched.
     """
     values = {token: value for token, value in mapping.items() if value != token}
     if not values:
@@ -637,18 +665,35 @@ def _json_escaped(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)[1:-1]
 
 
-def _texts(value: Any) -> Iterable[str]:
-    """Every string in a JSON-like value, keys included."""
+def _texts(value: Any, field: Any = None) -> Iterable[str]:
+    """Every text of a JSON-like value the last check reads; see :func:`leaked_tokens`."""
     if isinstance(value, str):
-        yield value
+        if field in _NAMING_FIELDS and _CODE_NAME.fullmatch(value):
+            return
+        parsed = _json_container(value)
+        if parsed is None:
+            yield value
+        else:
+            yield from _texts(parsed)
     elif isinstance(value, dict):
         for key, item in value.items():
-            if isinstance(key, str):
+            if isinstance(key, str) and not _CODE_NAME.fullmatch(key):
                 yield key
-            yield from _texts(item)
+            yield from _texts(item, key)
     elif isinstance(value, list | tuple):
         for item in value:
-            yield from _texts(item)
+            yield from _texts(item, field)
+
+
+def _json_container(text: str) -> Any:
+    """The object or array a text holds as JSON, or None for any other text."""
+    if text.lstrip()[:1] not in ("{", "["):
+        return None
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict | list) else None
 
 
 def _tokens_that_mask(text: str, values: Mapping[str, str]) -> list[str]:

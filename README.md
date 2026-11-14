@@ -445,7 +445,8 @@ What it does with a call:
   such content out and sends the rest, and `--pass-unsupported` sends it to the provider as it is,
   unmasked, with a file's name, for an operator who wants the model to see it.
 - Before anything leaves, the payload is searched once more for every original value, and the call
-  is refused if one is still there.
+  is refused if one is still there. Names from code the masking leaves as they are, such as field
+  names, ids and tools' names, are not searched.
 - A note telling the model what the tokens are joins the system message: `--instructions en`, or
   `none` to leave it out.
 - It keeps nothing on disk. A tool sends the whole conversation with every call, and each call is

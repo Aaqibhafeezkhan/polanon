@@ -198,7 +198,10 @@ calls, the keys or the logs. What it protects:
   so are the descriptions, titles and example values of the tools and of an answer format; a
   participant's `name` is left out, and before a call leaves its whole payload is searched once more
   for every original value, by the rules the masking follows; a call that still holds one is not
-  sent. Endpoints other than chat completions, the Responses API, embeddings and the list of
+  sent. It reads the payload as the masking does: a JSON text value by value, and names from
+  code, which the masking leaves as they are, not at all: field names, ids, types, roles, models,
+  tools' names and the parameters a tool requires, written without a space. A value someone put
+  into one of those, a login as a JSON key, goes out unchecked. Endpoints other than chat completions, the Responses API, embeddings and the list of
   models are refused rather than passed on, and so are images, files and audio, unless
   `--drop-unsupported` leaves them out or `--pass-unsupported` sends them unmasked. A Responses API call that keeps the conversation at the
   provider, with `previous_response_id` or `conversation`, is refused: the gateway holds no mapping
