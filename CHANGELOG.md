@@ -92,6 +92,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   the Polish model took it for a person on line after line: masked 85 times in one call once
   known. A span between two backticks of its line, a line break written out as `\n` ending one
   too, is now dropped, unless it holds a Polish first name, as the login `anna.nowak` does.
+- **A span without a letter is no name.** Under a Python traceback in an agent's tool results the
+  Polish model took the carets for companies and places, a Markdown heading's "####" for a
+  company and the offset of a timestamp, "808+00:00", for a place. What used to be dropped for
+  digits alone is now dropped for having no letter at all.
 
 ## [0.3.5] - 2026-11-14
 

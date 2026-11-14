@@ -451,18 +451,19 @@ def _holds_a_first_name(fragment: str) -> bool:
 
 
 def _is_code(fragment: str) -> bool:
-    """Return whether a span is no name on any line: code, a number, or an English small word.
+    """Return whether a span is no name on any line: code, a number, or no word at all.
 
     A backtick, a double quote and a "_" with no Polish first name mark code: "replace_all",
-    "volume_level", `File "` of a Python traceback; "jan_kowalski" is somebody's login. A span of
-    digits alone, such as "2026", is a number, and the rules find numbers that matter; "None",
-    "True" or "null" is a literal of code.
+    "volume_level", `File "` of a Python traceback; "jan_kowalski" is somebody's login. A span
+    without a letter is no name: "2026" is a number, and the rules find numbers that matter, the
+    carets under a traceback or a heading's "####" are marks. "None", "True" or "null" is a
+    literal of code.
     """
     if "`" in fragment or '"' in fragment:
         return True
     if "_" in fragment and not _holds_a_first_name(fragment):
         return True
-    return fragment.replace(" ", "").isdigit() or fragment in _CODE_LITERALS
+    return not any(char.isalpha() for char in fragment) or fragment in _CODE_LITERALS
 
 
 def _bare(word: str) -> str:

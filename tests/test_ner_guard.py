@@ -306,6 +306,25 @@ def test_a_word_in_inline_code_is_no_name_unless_it_holds_a_first_name():
     assert _found(NerGuard(), text, entities) == ["anna.nowak", "Ola Kowalska", "Gdańsk"]
 
 
+def test_a_span_without_a_letter_is_no_name():
+    """Under a Python traceback the Polish model took the carets for companies and places, a
+    Markdown heading's "####" for a company and the offset of a timestamp for a place."""
+    text = (
+        "    wynik = licz(dane)\n"
+        "            ^^^^^^^^^^\n"
+        "#### Konfiguracja w Gdańsku\n"
+        "Ostatnia zmiana 2026-01-02T10:00:00.808+00:00 w Sopocie."
+    )
+    entities = [
+        _Entity(text, "^^^^^^^^^^", "orgName"),
+        _Entity(text, "####", "orgName"),
+        _Entity(text, "Gdańsku"),
+        _Entity(text, "808+00:00"),
+        _Entity(text, "Sopocie"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Gdańsku", "Sopocie"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as
