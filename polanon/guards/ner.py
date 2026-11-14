@@ -357,6 +357,9 @@ _LANGUAGES_IN_ENGLISH = frozenset(
     }
 )  # fmt: skip
 
+#: A model number, letters and digits in one word, then the spaces before a span: "M4 ".
+_MODEL_NUMBER_BEFORE = re.compile(r"(?<![^\W_])((?=[^\W_]*[^\W\d_])[^\W_]+)[ \t]+$")
+
 #: English small words that are first names too: "Will Nowak" opens with one, and is a person.
 _FIRST_NAMES_TOO = frozenset({"will", "may"})
 
@@ -582,6 +585,19 @@ def _lowercase_place(span: Span, fragment: str) -> bool:
     return span.entity_type in ("LOCATION", "ORG") and " " not in fragment and fragment.islower()
 
 
+def _after_a_model_number(text: str, span: Span, fragment: str) -> bool:
+    """Return whether a person follows a word of letters and digits, as "Max" of "M4 Max" does.
+
+    An agent's tool results listed a laptop's "M4 Max" and a vacuum's "S8 Pro", and the Polish
+    model took "Max" for a person, masked 44 times in one call once known. A person with a Polish
+    first name is kept: "12A Maja Nowak" is a house number and a woman.
+    """
+    if span.entity_type != "PERSON" or _holds_a_first_name(fragment):
+        return False
+    before = _MODEL_NUMBER_BEFORE.search(text, max(0, span.start - 40), span.start)
+    return before is not None and any(char.isdigit() for char in before[1])
+
+
 def _language_named_in_english(span: Span, fragment: str) -> bool:
     """Return whether a place or a company opens with the English name of a language or nation.
 
@@ -624,6 +640,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
             or _inside_a_word(text, span)
             or _lowercase_place(span, fragment)
             or _language_named_in_english(span, fragment)
+            or _after_a_model_number(text, span, fragment)
         ):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1

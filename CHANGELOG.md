@@ -102,6 +102,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   company that opens with the English name of a language or a nation is now dropped; a real one,
   "British Airways" or "Czech Republic", is no secret either. A person is left alone: "German" is
   a Polish first name too.
+- **A word after a model number is no person.** An agent's tool results listed a laptop's "M4
+  Max" and a vacuum's "S8 Pro", and the Polish model took "Max" for a person, masked 44 times in
+  one call once known. A person right after a word of letters and digits is now dropped, unless
+  it holds a Polish first name: "12A Maja Nowak" is a house number and a woman.
 
 ## [0.3.5] - 2026-11-14
 

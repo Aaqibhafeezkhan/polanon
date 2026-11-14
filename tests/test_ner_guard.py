@@ -346,6 +346,23 @@ def test_the_english_name_of_a_language_is_no_place_or_company():
     assert _found(NerGuard(), text, entities) == ["Gdańsku", "German Nowak", "Krakowie"]
 
 
+def test_a_word_after_a_model_number_is_no_person():
+    """An agent's tool results listed a laptop's "M4 Max" and a vacuum's "S8 Pro", and the Polish
+    model took "Max" for a person, masked 44 times in one call once known. A person that holds a
+    Polish first name is kept after such a word too."""
+    text = (
+        "Laptop ma układ M4 Max, a odkurzacz S8 Pro stoi w biurze u Ola Kowalska.\n"
+        "Przy bramie 12A Maja Nowak odbierze paczkę."
+    )
+    entities = [
+        _Entity(text, "Max", "persName"),
+        _Entity(text, "Pro", "persName"),
+        _Entity(text, "Ola Kowalska", "persName"),
+        _Entity(text, "Maja Nowak", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Ola Kowalska", "Maja Nowak"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as
