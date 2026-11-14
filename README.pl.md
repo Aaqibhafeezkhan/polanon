@@ -116,7 +116,8 @@ cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
 Niezerowy kod wyjścia oznacza, że coś poszło nie tak, a komunikat na stderr wyjaśnia, co. `--file`
 sam czyta bajty pliku i odróżnia od siebie UTF-8, UTF-16 (tak zapisuje Windows PowerShell 5.1
 przy `>`) i cp1250; tekst, którego nie da się jednoznacznie zdekodować, jest odrzucany, zamiast być
-maskowany po omacku.
+maskowany po omacku. `--ner --paranoid` maskuje każdą nazwę, którą znajdzie model, także
+w angielskim tekście i w kodzie, tak jak [`mode="paranoid"`](#co-maskować).
 
 W systemie Windows zamiast potoków i przekierowań lepiej używać `--file` i `--mapping`. Windows
 PowerShell 5.1 przekodowuje tekst przekazywany potokiem do programu na ASCII, więc polskie litery

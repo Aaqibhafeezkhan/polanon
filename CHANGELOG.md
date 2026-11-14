@@ -9,6 +9,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **`polanon --ner --paranoid`** masks with the spaCy guard in `mode="paranoid"`. Without `--ner`
+  the flag is refused, since it changes nothing without the model.
+
 - **`polanon-gateway --paranoid`** masks with the spaCy guard in `mode="paranoid"`, and the banner
   says so. Without the model the flag changes nothing, and the banner says that too.
 

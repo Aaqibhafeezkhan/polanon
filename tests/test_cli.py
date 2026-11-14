@@ -81,6 +81,28 @@ def test_ner_without_spacy_says_what_to_install(capsys, monkeypatch):
     assert "polanon[ner]" in capsys.readouterr().err
 
 
+def test_paranoid_reaches_the_spacy_guard(capsys, monkeypatch):
+    import polanon.__main__ as cli
+    from polanon import default_guards
+
+    asked = []
+
+    def spy(**kwargs):
+        asked.append(kwargs)
+        return default_guards(with_ner=False)
+
+    monkeypatch.setattr(cli, "default_guards", spy)
+    assert main(["--ner", "--paranoid", TEXT]) == 0
+    assert main(["--ner", TEXT]) == 0
+    assert [call["mode"] for call in asked] == ["paranoid", "normal"]
+
+
+def test_paranoid_without_the_model_is_refused(capsys):
+    with pytest.raises(SystemExit):
+        main(["--paranoid", TEXT])
+    assert "--paranoid needs --ner" in capsys.readouterr().err
+
+
 def test_the_command_runs_with_docstrings_stripped():
     """python -OO removes docstrings, and the description used to be read from one."""
     import subprocess

@@ -68,9 +68,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="pl_core_news_md",
         help="spaCy model to load with --ner (default: %(default)s)",
     )
+    parser.add_argument(
+        "--paranoid",
+        action="store_true",
+        help="with --ner, mask every name the model finds, also in English prose and code",
+    )
     args = parser.parse_args(argv)
     if args.file is not None and args.text:
         parser.error("--file cannot be combined with text arguments")
+    if args.paranoid and not args.ner:
+        parser.error("--paranoid needs --ner: it sets what the spaCy model may leave out")
 
     _write_utf8(sys.stdout)
     _write_utf8(sys.stderr)
@@ -89,7 +96,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     try:
-        guards = default_guards(with_ner=args.ner, spacy_model=args.spacy_model)
+        guards = default_guards(
+            with_ner=args.ner,
+            spacy_model=args.spacy_model,
+            mode="paranoid" if args.paranoid else "normal",
+        )
     except ModuleNotFoundError as exc:
         print(f"polanon: {exc}", file=sys.stderr)
         return MISSING_MODEL

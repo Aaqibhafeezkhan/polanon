@@ -109,7 +109,9 @@ cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
 
 A non-zero exit status means something went wrong and stderr says what. `--file` reads the file's
 bytes itself and tells UTF-8, UTF-16 (what Windows PowerShell 5.1 writes with `>`) and cp1250
-apart; text it cannot decode for certain is refused rather than masked half-blind.
+apart; text it cannot decode for certain is refused rather than masked half-blind. `--ner
+--paranoid` masks every name the model finds, also in English prose and code, as
+[`mode="paranoid"`](#choosing-what-to-mask) does.
 
 On Windows, prefer `--file` and `--mapping` to pipes and redirection. Windows PowerShell 5.1
 re-encodes text piped into a program as ASCII, so Polish letters arrive as `?` and a garbled name
