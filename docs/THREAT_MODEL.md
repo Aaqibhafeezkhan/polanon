@@ -20,6 +20,7 @@ tokens reach the provider, and puts the originals back into the answer, also whi
 | `RemoteJudge` | masked text, sent to an API | **no**, a testing aid only |
 | The key of `Pseudonyms` | what turns a guessed value into its stable token | yes, and as sensitive as the mapping |
 | A search index with stable tokens | masked passages and their embeddings | **no** more than the provider: it is masked text |
+| `polanon-gateway` | the calls of the tools that use it, in the clear, and their keys | yes: it runs on the operator's machine, and the operator answers for it |
 
 ## What is protected
 
@@ -181,6 +182,37 @@ application's part:
   where you can.
 - **A saved pipeline** holds the name of the key's variable, never the key, and the mapping store
   only as its own `to_dict` describes it.
+
+## The gateway
+
+`polanon-gateway` masks the calls of tools that speak the OpenAI API and restores their answers.
+It is software the operator runs on their own machine, not a service: nobody else holds the
+calls, the keys or the logs. What it protects:
+
+- **What reaches the provider.** Every message, tool result and earlier tool call is masked, a
+  participant's `name` is left out, and before a call leaves its whole payload is searched once more
+  for every original value, by the rules the masking follows; a call that still holds one is not
+  sent. Endpoints other than chat completions, embeddings and the list of models are refused rather
+  than passed on, and so are images, files and audio, unless `--drop-unsupported` leaves them out.
+- **Who can use it.** It listens on `127.0.0.1`. On any other address it refuses to start without
+  `POLANON_GATEWAY_KEY`, which every client must then send, compared in constant time.
+- **What it keeps.** Nothing on disk: each call is masked and restored with a mapping that lives as
+  long as the call. The log holds the path, the status, the time and counts of masked types.
+
+What it does not protect, and is the operator's part:
+
+- **The machine.** Calls arrive in the clear and answers leave restored. Anyone who can read the
+  gateway's memory, or a tool's own history, reads them; so can anything the operator puts in
+  front of it, such as a reverse proxy that logs bodies.
+- **The keys.** By default the client's key is passed on to the provider; `POLANON_UPSTREAM_KEY`
+  and `POLANON_GATEWAY_KEY` are read from the environment and never printed. Keep them out of shell
+  history and out of files others can read.
+- **Encryption on the network.** The gateway speaks plain HTTP. Beyond `127.0.0.1`, put it behind
+  TLS, or keep it on a network the operator trusts.
+- **Detection.** The gateway masks what the guards find, no more: run it with the spaCy model, and
+  read "Residual risk" below. The stage-2 judge is not used.
+- **What the provider learns anyway.** The structure of the conversation, its length and timing,
+  the tool schemas, and whatever the tokens' context gives away.
 
 ## Residual risk to accept consciously
 

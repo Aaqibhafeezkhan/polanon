@@ -79,6 +79,29 @@ jobs:
       - name: Test against the oldest Haystack allowed
         run: pip install "haystack-ai==3.0.0" && pytest tests/test_haystack.py -p no:cacheprovider
 
+  gateway:
+    name: The gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The extra alone, without spaCy: the gateway masks with the rules when the model is absent.
+      - name: Install
+        run: pip install -e ".[dev,gateway]"
+
+      - name: Type-check with the gateway's packages installed
+        run: mypy polanon
+
+      # test_gateway_server.py serves the gateway with uvicorn over real sockets; the main job
+      # has no uvicorn and skips it.
+      - name: Test the gateway, end to end
+        run: pytest tests/test_gateway_payloads.py tests/test_gateway_app.py tests/test_gateway_cli.py tests/test_gateway_server.py tests/test_layering.py
+
   versions:
     name: The built wheel on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
@@ -132,3 +155,6 @@ jobs:
           masked="$(/tmp/bare/bin/polanon "Jan Kowalski, PESEL 50810112354")"
           echo "$masked"
           test "$masked" = "<OSOBA_1>, PESEL <PESEL_1>"
+          # Without its extra the gateway's command says what to install, and starts nothing.
+          if /tmp/bare/bin/polanon-gateway --upstream http://localhost:1/v1 2> hint.txt; then exit 1; fi
+          grep -q 'polanon\[gateway\]' hint.txt

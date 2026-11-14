@@ -9,6 +9,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **A masking gateway for tools that speak the OpenAI API**, run by whoever needs it on their own
+  machine: `pip install "polanon[gateway]"`, then `polanon-gateway --upstream
+  https://api.openai.com/v1`, and Hermes Agent, n8n, Open WebUI or LibreChat point their base URL at
+  `http://127.0.0.1:8787/v1`. It serves `/v1/chat/completions`, streamed or not and with tool calls,
+  `/v1/embeddings` and `/v1/models`, and refuses every other endpoint, images and audio. Every call
+  is masked, checked once more for any original value before it leaves, and restored on the way
+  back, a tool call's arguments as valid JSON. It keeps nothing on disk, listens on 127.0.0.1 and
+  needs a key every client sends to listen anywhere else, takes keys from the environment only, and
+  logs counts, never values. The library still imports no web framework: the gateway is a plain
+  ASGI application with httpx, served by uvicorn.
+
 - **A twelfth benchmark document**, a hospital discharge summary, health data being the most
   sensitive kind (#4): a patient with her PESEL, birth date, address and phone, her daughter, two
   doctors behind their titles and the hospital's address. Every value is made up, and the patient

@@ -92,6 +92,7 @@ modelu, gdy imiona i nazwiska w nim zawarte oraz przywrócona odpowiedź liczą 
 | Dodatkowo miejsca oraz imiona, nazwiska i organizacje, których nie wychwyci żadna reguła | `pip install "polanon[ner]"`, a potem `python -m spacy download pl_core_news_md` |
 | Sędziowie etapu 2 (lokalny model w Ollamie albo zdalny) | `pip install "polanon[judge]"` |
 | Komponenty do potoków [Haystacka 3](#z-haystackiem) | `pip install "polanon[haystack]"` |
+| [Bramka](#bramka-dla-każdego-narzędzia-zgodnego-z-api-openai) dla narzędzi korzystających z API OpenAI | `pip install "polanon[gateway]"` |
 
 Następnie użyj `default_guards()` z modelem albo `default_guards(with_ner=False)` bez niego.
 Inny model spaCy to kwestia jednego argumentu: `default_guards(spacy_model="pl_core_news_lg")`.
@@ -418,6 +419,61 @@ to, co dostaje każdy komponent, a maskownik dostaje oryginały. Nieudane urucho
 wejścia w snapshocie błędu, zapisywanym na dysk przy `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Oba
 są domyślnie wyłączone.
 
+## Bramka dla każdego narzędzia zgodnego z API OpenAI
+
+Narzędzia takie jak Hermes Agent, n8n, Open WebUI czy LibreChat rozmawiają z modelem przez API
+OpenAI. `polanon-gateway` staje między takim narzędziem a dostawcą, na komputerze tego, kto ją
+uruchamia: każda wiadomość jest maskowana, zanim wyjdzie, a odpowiedź wraca z oryginalnymi
+wartościami, strumieniowo albo nie, razem z wywołaniami narzędzi.
+
+```bash
+pip install "polanon[gateway,ner]"
+python -m spacy download pl_core_news_md
+polanon-gateway --upstream https://api.openai.com/v1
+```
+
+Potem ustaw w narzędziu adres bazowy `http://127.0.0.1:8787/v1` i zostaw jego klucz API: bramka
+przekazuje go dostawcy. Model lokalny działa tak samo, dla Ollamy `--upstream
+http://localhost:11434/v1`.
+
+| Narzędzie | Gdzie wpisać adres bazowy |
+|---|---|
+| Hermes Agent | nazwany dostawca w `config.yaml`, z `base_url` i `api_mode: chat_completions` |
+| n8n | Base URL w poświadczeniach OpenAI |
+| Open WebUI | adres połączenia z API OpenAI |
+| LibreChat | `baseURL` własnego endpointu w `librechat.yaml` |
+
+Co robi z jednym wywołaniem:
+
+- Obsługuje `/v1/chat/completions`, strumieniowo albo nie, `/v1/embeddings` i `/v1/models`, a
+  każdy inny endpoint odrzuca, więc nic, czego nie umie zamaskować, nie wychodzi w postaci, w
+  jakiej przyszło.
+- Maskuje każdą wiadomość, wynik narzędzia i wcześniejsze wywołanie narzędzia, a pole `name`
+  uczestnika pomija; schematy narzędzi przechodzą bez zmian.
+- Obrazu, pliku ani dźwięku nie da się zamaskować, więc takie wywołanie jest odrzucane;
+  `--drop-unsupported` pomija taką treść i wysyła resztę.
+- Zanim cokolwiek wyjdzie, przeszukuje całe zapytanie jeszcze raz pod kątem każdej oryginalnej
+  wartości i odmawia wysyłki, jeśli któraś wciąż tam jest.
+- Do wiadomości systemowej dopisuje notatkę, która mówi modelowi, czym są tokeny: `--instructions
+  en` albo `none`, żeby jej nie dodawać.
+- Niczego nie zapisuje na dysku. Narzędzie wysyła całą rozmowę przy każdym wywołaniu, a każde
+  wywołanie jest maskowane i przywracane osobno. Z `POLANON_KEY` ustawionym na 64 znaki
+  szesnastkowe dana osoba ma jeden token w każdym wywołaniu i w każdym przypadku gramatycznym.
+
+Klucze zostają u tego, kto uruchamia bramkę, i są brane wyłącznie ze zmiennych środowiskowych.
+Domyślnie bramka przekazuje dalej klucz narzędzia; `POLANON_UPSTREAM_KEY` wysyła zamiast niego
+inny. Bramka słucha na `127.0.0.1`. Żeby była dostępna z innego komputera, ustaw `--host` i
+`POLANON_GATEWAY_KEY`, który każdy klient musi wtedy wysyłać: bez tego klucza bramka odmawia
+startu. Log podaje ścieżkę, status, czas i liczbę zamaskowanych wartości każdego typu, nigdy samą
+wartość.
+
+Nie ma żadnej usługi w chmurze: bramka działa tam, gdzie ją zainstalowano, a kto ją uruchamia,
+odpowiada za ten komputer, swoje klucze i dostawcę, do którego idą wywołania. Na razie bez
+obsługi: Responses API (`/v1/responses`), które Hermes Agent wybiera dla modeli GPT-5, jeśli nie
+ustawi się `api_mode: chat_completions`, oraz Messages API Anthropic.
+[Model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#the-gateway)
+opisuje, przed czym bramka chroni, a przed czym nie.
+
 ## Co wykrywa
 
 Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód osobisty, IBAN, karty
@@ -598,6 +654,7 @@ wpisy z denylisty i wartości zamaskowane już wcześniej w rozmowie pozostają 
 | `pseudonyms.py` | oblicza stałe tokeny z tajnego klucza, takie same w każdym dokumencie i procesie |
 | `index.py` | maskuje dokumenty i pytania dla indeksu wyszukiwania, z magazynem tego, co kryją tokeny |
 | `integrations/haystack.py` | komponenty Haystacka, które maskują dokumenty i pytania i przywracają odpowiedzi |
+| `gateway/` | bramka zgodna z API OpenAI, uruchamiana na własnym komputerze |
 | `output_sweep.py` | oznacza wymyślone tokeny i dane osobowe, które wprowadziła odpowiedź |
 
 ## Dodawanie detektora
