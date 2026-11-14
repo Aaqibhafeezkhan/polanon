@@ -479,6 +479,17 @@ def _inside_a_word(text: str, span: Span) -> bool:
     return before == "_" or after == "_" or before.isalnum() or after.isalnum()
 
 
+def _lowercase_place(span: Span, fragment: str) -> bool:
+    """Return whether a span is a place or a company of one word written in lowercase.
+
+    Polish writes both with a capital letter. In lowercase the Polish model found English words of
+    manuals instead, "text", "context", "service", masked dozens of times in one agent's call once
+    known. The price is a place typed in lowercase in a chat, "jadę do gdyni", which goes out as
+    written; a person in lowercase is kept, and the rules find a Polish first name too.
+    """
+    return span.entity_type in ("LOCATION", "ORG") and " " not in fragment and fragment.islower()
+
+
 def _named_without_language(fragment: str) -> bool:
     """Return whether a span on a line that shows no language reads as a name.
 
@@ -500,7 +511,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
     kept = []
     for span in spans:
         fragment = text[span.start : span.end]
-        if _is_code(fragment) or _inside_a_word(text, span):
+        if _is_code(fragment) or _inside_a_word(text, span) or _lowercase_place(span, fragment):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
         if line_start not in languages:

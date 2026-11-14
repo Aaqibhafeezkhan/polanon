@@ -236,6 +236,23 @@ def test_a_span_opening_with_an_english_small_word_is_no_name_on_a_short_line():
     assert _found(NerGuard(), text, entities) == ["Ola Kowalska"]
 
 
+def test_a_place_or_a_company_in_lowercase_is_no_name_even_on_a_polish_line():
+    """Polish manuals in an agent's tool results gave the places "text" and "context" and the
+    company "service", masked 54, 25 and 38 times in one call once known. A place or a company of
+    one word written in lowercase is dropped on every line now: "gdyni" in a chat goes out as
+    written, while a person in lowercase, "kasi", is still the rules' and the model's to mask.
+    """
+    text = "Jadę do gdyni, potem do Sopotu; pole text i service są puste, daj znać kasi."
+    entities = [
+        _Entity(text, "gdyni"),
+        _Entity(text, "Sopotu"),
+        _Entity(text, "text"),
+        _Entity(text, "service", "orgName"),
+        _Entity(text, "kasi", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Sopotu", "kasi"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

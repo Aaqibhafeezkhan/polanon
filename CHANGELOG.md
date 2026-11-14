@@ -75,6 +75,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 - **A span that opens with an English small word** is no name on a line that shows no language
   either: a tool's description "That's the limit" gave the person "That's", masked 64 times in
   one agent's call once it was known; "This Week" was a company. The benchmark is unchanged.
+- **A place or a company of one word in lowercase** is no longer masked, on any line. Polish
+  writes both with a capital letter, and in lowercase the Polish model found English words of
+  the manuals in an agent's tool results instead: "text", "context" and "service", masked 54, 25
+  and 38 times in one call once known. The price is a place or a company typed in lowercase in a
+  chat, "jadę do gdyni" or "pracuję w orlenie", which now goes out as written; a person in
+  lowercase is still masked. The benchmark masks what it did, with one stray span fewer.
 
 ## [0.3.5] - 2026-11-14
 
