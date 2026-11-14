@@ -253,6 +253,37 @@ def test_a_place_or_a_company_in_lowercase_is_no_name_even_on_a_polish_line():
     assert _found(NerGuard(), text, entities) == ["Sopotu", "kasi"]
 
 
+def test_a_span_opening_with_or_holding_an_english_small_word_is_no_name_on_any_line():
+    """In an agent's call "That's" stood mid-sentence on an English line, after a dash, and was
+    masked 76 times once known. A Polish manual quoting English gave "Before" opening a sentence,
+    "the model" and "tokens and passwords". A small word inside a span ends a name, so "Maria
+    Lindqvist at Northwind Traders" gives two. "Will" and "May" are first names too, so a span
+    they open is still read as the line's language says.
+    """
+    text = (
+        "Retries stop after five attempts — That's what the manual says about it.\n"
+        "Send the report to Maria Lindqvist at Northwind Traders before the review.\n"
+        "Zapisz plik, a przed tym sprawdź ustawienia. Before, wyślij to do the model, potem "
+        "tokens and passwords usuń z pliku.\n"
+        "Zadzwoń do Will Nowak w sprawie umowy, a potem do Ola Kowalska."
+    )
+    entities = [
+        _Entity(text, "That's", "persName"),
+        _Entity(text, "Maria Lindqvist at Northwind Traders", "orgName"),
+        _Entity(text, "Before", "persName"),
+        _Entity(text, "the model", "orgName"),
+        _Entity(text, "tokens and passwords", "orgName"),
+        _Entity(text, "Will Nowak", "persName"),
+        _Entity(text, "Ola Kowalska", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == [
+        "Maria Lindqvist",
+        "Northwind Traders",
+        "Will Nowak",
+        "Ola Kowalska",
+    ]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

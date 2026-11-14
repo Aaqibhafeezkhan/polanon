@@ -345,6 +345,9 @@ _POLISH_WORDS = frozenset(
     }
 )  # fmt: skip
 
+#: English small words that are first names too: "Will Nowak" opens with one, and is a person.
+_FIRST_NAMES_TOO = frozenset({"will", "may"})
+
 #: The literals of Python, JSON and YAML, which tool results print where a value is missing.
 _CODE_LITERALS = frozenset({"None", "True", "False", "null", "true", "false", "nil", "NaN"})
 
@@ -436,7 +439,6 @@ def _named_in_english(text: str, span: Span) -> bool:
     words = text[span.start : span.end].split()
     return (
         bool(words)
-        and words[0].lower() not in _ENGLISH_WORDS
         and _capitalised(words[0])
         and _capitalised(words[-1])
         and not _opens_a_sentence(text, span.start)
@@ -454,16 +456,74 @@ def _is_code(fragment: str) -> bool:
     A backtick, a double quote and a "_" with no Polish first name mark code: "replace_all",
     "volume_level", `File "` of a Python traceback; "jan_kowalski" is somebody's login. A span of
     digits alone, such as "2026", is a number, and the rules find numbers that matter; "None",
-    "True" or "null" is a literal of code. One English function word in lowercase, "has" or
-    "before", is no name even on a Polish line.
+    "True" or "null" is a literal of code.
     """
     if "`" in fragment or '"' in fragment:
         return True
     if "_" in fragment and not _holds_a_first_name(fragment):
         return True
-    if fragment.replace(" ", "").isdigit() or fragment in _CODE_LITERALS:
-        return True
-    return fragment.islower() and fragment in _ENGLISH_WORDS
+    return fragment.replace(" ", "").isdigit() or fragment in _CODE_LITERALS
+
+
+def _bare(word: str) -> str:
+    return word.strip(".,;:!?()[]")
+
+
+def _opens_with_an_english_word(fragment: str) -> bool:
+    """Return whether a span opens with an English small word, and so is no name on any line.
+
+    In an agent's call "That's" opened a span in mid-sentence on an English line, and was masked
+    76 times once known; a Polish manual quoting English gave "Before" and "the model". "Will" and
+    "May" are first names too, so a span they open with a capital letter is left to its line.
+    """
+    first = _bare(fragment.split()[0]).split("'")[0]
+    folded = first.lower()
+    return folded in _ENGLISH_WORDS and (first.islower() or folded not in _FIRST_NAMES_TOO)
+
+
+def _reads_as_a_name(fragment: str) -> bool:
+    """Return whether a piece of a span cut at an English word is a name on its own.
+
+    Next to English words one capitalised word is mostly English too, "Skills" of "Skills for";
+    a piece is kept with two capitalised words or more, or with a Polish first name.
+    """
+    words = fragment.split()
+    return _holds_a_first_name(fragment) or (
+        len(words) >= 2 and all(_capitalised(word) for word in words)
+    )
+
+
+def _cut_at_english_words(text: str, span: Span) -> list[Span]:
+    """Cut a span at the English small words it holds in lowercase, keeping what reads as a name.
+
+    No name holds "and", "at" or "the" in lowercase, so such a word ends one. The Polish model
+    read "Maria Lindqvist at Northwind Traders" as one span, and "tokens and passwords" of a
+    Polish manual as a company: the first gives two names, the second none.
+    """
+    fragment = text[span.start : span.end]
+    words = [(m.start(), m.end()) for m in re.finditer(r"\S+", fragment)]
+    if not any(_bare(fragment[a:b]) in _ENGLISH_WORDS for a, b in words[1:]):
+        return [span]
+    pieces: list[list[tuple[int, int]]] = [[]]
+    for start, end in words:
+        if _bare(fragment[start:end]) in _ENGLISH_WORDS:
+            pieces.append([])
+        else:
+            pieces[-1].append((start, end))
+    kept = []
+    for piece in pieces:
+        if not piece:
+            continue
+        first, last = piece[0][0], piece[-1][1]
+        while last > first and fragment[last - 1] in ".,;:!?":
+            last -= 1
+        if last > first and _reads_as_a_name(fragment[first:last]):
+            kept.append(
+                Span(
+                    span.start + first, span.start + last, span.entity_type, span.score, span.source
+                )
+            )
+    return kept
 
 
 def _inside_a_word(text: str, span: Span) -> bool:
@@ -495,12 +555,9 @@ def _named_without_language(fragment: str) -> bool:
 
     A parameter described as "Max results" or a heading such as "Skills for" shows neither
     language, and the Polish model tagged such words too. A span with a word in lowercase is kept
-    only when it holds a Polish first name, as "anna nowak" does; one that opens with an English
-    small word, "That's" or "This Week", is no name.
+    only when it holds a Polish first name, as "anna nowak" does.
     """
     words = fragment.split()
-    if words[0].lower().split("'")[0] in _ENGLISH_WORDS:
-        return False
     return all(not word[0].islower() for word in words) or _holds_a_first_name(fragment)
 
 
@@ -509,7 +566,13 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
     languages: dict[int, str] = {}
     english_text: bool | None = None
     kept = []
-    for span in spans:
+    pieces = (
+        piece
+        for span in spans
+        if not _opens_with_an_english_word(text[span.start : span.end])
+        for piece in _cut_at_english_words(text, span)
+    )
+    for span in pieces:
         fragment = text[span.start : span.end]
         if _is_code(fragment) or _inside_a_word(text, span) or _lowercase_place(span, fragment):
             continue

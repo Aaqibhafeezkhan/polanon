@@ -81,6 +81,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   and 38 times in one call once known. The price is a place or a company typed in lowercase in a
   chat, "jadę do gdyni" or "pracuję w orlenie", which now goes out as written; a person in
   lowercase is still masked. The benchmark masks what it did, with one stray span fewer.
+- **An English small word ends a name on every line.** A span that opens with one is dropped on
+  an English or a Polish line too: "That's" stood after a dash in mid-sentence on an English line
+  and was masked 76 times in one agent's call once known, and a Polish manual quoting English gave
+  "Before" and "the model". A span that holds one in lowercase is cut there, and a piece stays
+  when it has two capitalised words or a Polish first name: "Maria Lindqvist at Northwind
+  Traders" gives both names, "tokens and passwords" none. "Will" and "May" are first names too,
+  so a span they open with a capital letter is read as before.
 
 ## [0.3.5] - 2026-11-14
 
