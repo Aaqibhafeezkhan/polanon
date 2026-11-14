@@ -177,7 +177,12 @@ async def test_the_list_of_models_passes_through():
 
 @pytest.mark.parametrize(
     ("method", "path"),
-    [("POST", "/v1/responses"), ("POST", "/v1/files"), ("GET", "/v1/chat/completions")],
+    [
+        ("POST", "/v1/files"),
+        ("POST", "/v1/audio/speech"),
+        ("GET", "/v1/responses/resp_1"),
+        ("GET", "/v1/chat/completions"),
+    ],
 )
 async def test_an_endpoint_the_gateway_cannot_mask_is_refused_and_nothing_is_sent(method, path):
     provider = Provider()
@@ -410,3 +415,133 @@ async def test_a_connection_that_is_not_http_is_ignored():
         raise AssertionError("nothing should be read")
 
     await gateway({"type": "websocket"}, never, never)
+
+
+# --- the Responses API -------------------------------------------------------------------------
+
+
+def _responses_provider(received):
+    """A /responses provider: echoes the input's last text, streamed as named events when asked."""
+
+    def answer(request):
+        body = json.loads(request.content)
+        received.append(body)
+        last = body["input"] if isinstance(body["input"], str) else body["input"][-1]["content"]
+        text = f"Echo: {last}"
+        message = {"type": "output_text", "text": text}
+        output = [{"type": "message", "id": "m1", "role": "assistant", "content": [message]}]
+        response = {"id": "resp_1", "object": "response", "output": output}
+        if not body.get("stream"):
+            return httpx.Response(200, json=response)
+        where = {"item_id": "m1", "output_index": 0, "content_index": 0}
+        events = [{"type": "response.created", "response": {**response, "output": []}}]
+        events += [
+            {"type": "response.output_text.delta", "delta": text[start : start + 3], **where}
+            for start in range(0, len(text), 3)
+        ]
+        events.append({"type": "response.output_text.done", "text": text, **where})
+        events.append({"type": "response.completed", "response": response})
+        lines = "".join(
+            f"event: {event['type']}\ndata: {json.dumps({**event, 'sequence_number': n})}\n\n"
+            for n, event in enumerate(events)
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=lines)
+
+    return answer
+
+
+def responses_body(text, **fields):
+    return {
+        "model": "gpt-test",
+        "store": False,
+        "input": [{"role": "user", "content": text}],
+        **fields,
+    }
+
+
+async def test_a_responses_call_reaches_the_provider_masked_and_comes_back_restored():
+    received = []
+    async with client(_responses_provider(received)) as gw:
+        response = await gw.post(
+            "/v1/responses", json=responses_body(f"Jan Kowalski, PESEL {PESEL}.")
+        )
+    assert response.status_code == 200
+    text = response.json()["output"][0]["content"][0]["text"]
+    assert text == f"Echo: Jan Kowalski, PESEL {PESEL}."
+    sent = json.dumps(received[0], ensure_ascii=False)
+    assert "Kowalski" not in sent
+    assert PESEL not in sent
+    assert received[0]["instructions"]  # the note about tokens
+
+
+async def test_a_streamed_responses_answer_comes_back_restored_as_named_events():
+    received = []
+    async with client(_responses_provider(received)) as gw:
+        response = await gw.post(
+            "/v1/responses", json=responses_body("Jan Kowalski dzwonił.", stream=True)
+        )
+    lines = response.text.splitlines()
+    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ")]
+    names = [line[7:] for line in lines if line.startswith("event: ")]
+    assert names == [event["type"] for event in events]
+    deltas = "".join(e["delta"] for e in events if e["type"] == "response.output_text.delta")
+    assert deltas == "Echo: Jan Kowalski dzwonił."
+    done = next(e for e in events if e["type"] == "response.output_text.done")
+    assert done["text"] == "Echo: Jan Kowalski dzwonił."
+    completed = events[-1]["response"]["output"][0]["content"][0]["text"]
+    assert completed == "Echo: Jan Kowalski dzwonił."
+    assert [e["sequence_number"] for e in events] == list(range(len(events)))
+    assert "Kowalski" not in json.dumps(received[0], ensure_ascii=False)
+
+
+async def test_a_responses_stream_cut_short_still_gives_back_the_held_text():
+    lines = [
+        "event: response.output_text.delta\n",
+        'data: {"type": "response.output_text.delta", "item_id": "m1", "delta": "Tak, <OSOBA"}\n',
+        "\n",
+        "event: ping\n",
+        "\n",
+        "data: {broken\n\n",
+    ]
+    async with client(_stream_provider(lines)) as gw:
+        response = await gw.post("/v1/responses", json=responses_body("Hej?", stream=True))
+    assert "event: ping" in response.text
+    assert "data: {broken" in response.text
+    deltas = [
+        json.loads(line[6:])["delta"]
+        for line in response.text.splitlines()
+        if line.startswith('data: {"type"')
+    ]
+    assert "".join(deltas) == "Tak, <OSOBA"
+
+
+async def test_a_responses_call_that_keeps_state_at_the_provider_is_refused():
+    received = []
+    async with client(_responses_provider(received)) as gw:
+        response = await gw.post(
+            "/v1/responses", json=responses_body("Hej.", previous_response_id="resp_0")
+        )
+    assert response.status_code == 400
+    assert "previous_response_id" in response.json()["error"]["message"]
+    assert received == []
+
+
+async def test_an_image_in_a_responses_call_is_refused_or_left_out():
+    image = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+    body = {"input": [{"role": "user", "content": [image]}, {"role": "user", "content": "Hej."}]}
+    received = []
+    async with client(_responses_provider(received)) as gw:
+        refused = await gw.post("/v1/responses", json=body)
+    assert refused.status_code == 400
+    assert refused.json()["error"]["code"] == "unsupported_content"
+    assert received == []
+    async with client(_responses_provider(received), unsupported="drop") as gw:
+        dropped = await gw.post("/v1/responses", json=body)
+    assert dropped.status_code == 200
+    assert received[0]["input"][0]["content"] == []
+
+
+async def test_the_provider_s_error_on_a_responses_call_passes_through():
+    async with client(Provider(status=429)) as gw:
+        response = await gw.post("/v1/responses", json=responses_body("Hej."))
+    assert response.status_code == 429

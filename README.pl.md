@@ -438,16 +438,21 @@ http://localhost:11434/v1`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |
 |---|---|
-| Hermes Agent | nazwany dostawca w `config.yaml`, z `base_url` i `api_mode: chat_completions` |
+| Hermes Agent | `base_url` modelu albo nazwanego dostawcy w `config.yaml` |
 | n8n | Base URL w poświadczeniach OpenAI |
 | Open WebUI | adres połączenia z API OpenAI |
 | LibreChat | `baseURL` własnego endpointu w `librechat.yaml` |
 
 Co robi z jednym wywołaniem:
 
-- Obsługuje `/v1/chat/completions`, strumieniowo albo nie, `/v1/embeddings` i `/v1/models`, a
-  każdy inny endpoint odrzuca, więc nic, czego nie umie zamaskować, nie wychodzi w postaci, w
-  jakiej przyszło.
+- Obsługuje `/v1/chat/completions` i Responses API, `/v1/responses`, strumieniowo albo nie,
+  oraz `/v1/embeddings` i `/v1/models`, a każdy inny endpoint odrzuca, więc nic, czego nie umie
+  zamaskować, nie wychodzi w postaci, w jakiej przyszło.
+- Przy Responses API cała rozmowa przychodzi z każdym wywołaniem, tak jak wysyła ją Hermes Agent
+  ze `store: false`. Wywołanie, które zostawia ją u dostawcy, przez `previous_response_id` albo
+  `conversation`, albo prosi o odpowiedź `background` do odebrania później, przyniosłoby tokeny,
+  których nikt nie umie przywrócić, więc jest odrzucane. Zaszyfrowane rozumowanie przechodzi bez
+  zmian: dostawca zapieczętował je z zamaskowanego tekstu.
 - Maskuje każdą wiadomość, wynik narzędzia i wcześniejsze wywołanie narzędzia, a pole `name`
   uczestnika pomija; schematy narzędzi przechodzą bez zmian.
 - Obrazu, pliku ani dźwięku nie da się zamaskować, więc takie wywołanie jest odrzucane;
@@ -469,8 +474,7 @@ wartość.
 
 Nie ma żadnej usługi w chmurze: bramka działa tam, gdzie ją zainstalowano, a kto ją uruchamia,
 odpowiada za ten komputer, swoje klucze i dostawcę, do którego idą wywołania. Na razie bez
-obsługi: Responses API (`/v1/responses`), które Hermes Agent wybiera dla modeli GPT-5, jeśli nie
-ustawi się `api_mode: chat_completions`, oraz Messages API Anthropic.
+obsługi: Messages API Anthropic.
 [Model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#the-gateway)
 opisuje, przed czym bramka chroni, a przed czym nie.
 

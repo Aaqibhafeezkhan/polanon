@@ -423,15 +423,21 @@ http://localhost:11434/v1` for Ollama.
 
 | Tool | Where the base URL goes |
 |---|---|
-| Hermes Agent | a named provider in `config.yaml`, with `base_url` and `api_mode: chat_completions` |
+| Hermes Agent | `base_url` of the model or of a named provider in `config.yaml` |
 | n8n | the Base URL of the OpenAI credential |
 | Open WebUI | the URL of an OpenAI API connection |
 | LibreChat | the `baseURL` of a custom endpoint in `librechat.yaml` |
 
 What it does with a call:
 
-- It serves `/v1/chat/completions`, streamed or not, `/v1/embeddings` and `/v1/models`, and
-  refuses every other endpoint, so nothing it cannot mask leaves as it came.
+- It serves `/v1/chat/completions` and the Responses API, `/v1/responses`, streamed or not,
+  `/v1/embeddings` and `/v1/models`, and refuses every other endpoint, so nothing it cannot mask
+  leaves as it came.
+- With the Responses API the whole conversation comes with every call, as Hermes Agent sends it
+  with `store: false`. A call that leaves it at the provider, with `previous_response_id` or
+  `conversation`, or asks for a `background` response to fetch later, would bring back tokens no
+  one can restore, and is refused. Encrypted reasoning passes as it is: the provider sealed it from
+  masked text.
 - Every message, tool result and earlier tool call is masked, and a participant's `name` is left
   out; tool schemas pass as they are.
 - An image, a file or audio cannot be masked, so the call is refused; `--drop-unsupported` leaves
@@ -451,9 +457,8 @@ every client must then send: without the key it refuses to start. The log names 
 status, the time and how many values of each type were masked, never a value.
 
 There is no hosted service: the gateway runs where it is installed, and whoever runs it answers
-for that machine, its keys and the provider the calls go to. Not yet supported: the Responses API
-(`/v1/responses`), which Hermes Agent picks for GPT-5 models unless `api_mode: chat_completions`
-is set, and Anthropic's Messages API. The
+for that machine, its keys and the provider the calls go to. Not supported yet: Anthropic's
+Messages API. The
 [threat model](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#the-gateway) says
 what the gateway protects and what it does not.
 

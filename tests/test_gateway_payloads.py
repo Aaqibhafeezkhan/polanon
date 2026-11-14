@@ -9,10 +9,13 @@ from polanon import Anonymizer, MaskedTurn, MaskingUnavailableError, default_gua
 from polanon.gateway.payloads import (
     ChatStream,
     GatewayRequestError,
+    ResponsesStream,
     leaked_tokens,
     mask_chat_request,
     mask_embeddings_request,
+    mask_responses_request,
     restore_chat_response,
+    restore_responses_response,
 )
 
 ANONYMIZER = Anonymizer(default_guards(with_ner=False))
@@ -367,3 +370,237 @@ def test_a_value_hidden_in_a_key_of_the_payload_is_found():
     assert leaked_tokens(
         {"meta": {1: "x", "Jan Kowalski": "y"}}, {"<OSOBA_1>": "Jan Kowalski"}
     ) == ["<OSOBA_1>"]
+
+
+# --- the Responses API -------------------------------------------------------------------------
+
+
+def hermes_request():
+    """A /responses request shaped the way Hermes Agent sends one, with store off."""
+    first = {"type": "input_text", "text": "Znajdź umowę: Jan Kowalski."}
+    summary = {"type": "summary_text", "text": "Szukam: Jan Kowalski."}
+    answer = {
+        "type": "output_text",
+        "text": "Jan Kowalski ma umowę.",
+        "annotations": [{"type": "url_citation", "title": "Jan Kowalski"}],
+    }
+    return {
+        "model": "gpt-test",
+        "store": False,
+        "instructions": "Pomagasz działowi kadr. Kierownik: Anna Nowak.",
+        "include": ["reasoning.encrypted_content"],
+        "input": [
+            {"role": "user", "content": [first]},
+            {"type": "reasoning", "encrypted_content": "gAAAA-sealed", "summary": [summary]},
+            {
+                "type": "function_call",
+                "call_id": "c1",
+                "name": "find",
+                "arguments": '{"who": "Jan Kowalski"}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "c1",
+                "output": json.dumps({"pesel": PESEL}),
+            },
+            {"type": "message", "role": "assistant", "content": [answer]},
+            {"type": "compaction", "encrypted_content": "gAAAA-compacted"},
+            {"role": "user", "content": "Dziękuję."},
+        ],
+        "tools": [{"type": "function", "name": "find", "parameters": {"type": "object"}}],
+    }
+
+
+def test_every_item_of_a_responses_request_is_masked_and_sealed_ones_pass():
+    body = hermes_request()
+    original = copy.deepcopy(body)
+    one = turn()
+    masked = mask_responses_request(one, body, instructions="NOTE")
+    assert body == original
+    sent = json.dumps(masked, ensure_ascii=False)
+    assert "Kowalski" not in sent
+    assert "Nowak" not in sent
+    assert PESEL not in sent
+    items = masked["input"]
+    assert items[0]["content"][0]["text"] == "Znajdź umowę: <OSOBA_2>."
+    assert items[1]["encrypted_content"] == "gAAAA-sealed"
+    assert items[1]["summary"][0]["text"] == "Szukam: <OSOBA_2>."
+    assert json.loads(items[2]["arguments"]) == {"who": "<OSOBA_2>"}
+    assert json.loads(items[3]["output"]) == {"pesel": "<PESEL_1>"}
+    assert items[4]["content"] == [{"type": "output_text", "text": "<OSOBA_2> ma umowę."}]
+    assert items[5] == {"type": "compaction", "encrypted_content": "gAAAA-compacted"}
+    assert masked["instructions"] == "Pomagasz działowi kadr. Kierownik: <OSOBA_1>.\n\nNOTE"
+    assert masked["tools"] == body["tools"]
+    assert leaked_tokens(masked, one.mapping) == []
+
+
+def test_a_value_first_found_in_a_later_item_is_masked_in_the_earlier_ones():
+    body = {
+        "input": [
+            {"role": "user", "content": "Kowalski dzwonił."},
+            {"role": "user", "content": "To Jan Kowalski."},
+        ]
+    }
+    masked = mask_responses_request(turn(), body)
+    assert "Kowalski" not in json.dumps(masked, ensure_ascii=False)
+
+
+def test_a_text_input_the_instructions_and_the_end_user_are_masked():
+    body = {
+        "input": f"PESEL {PESEL}",
+        "user": "jan.kowalski@example.com",
+        "metadata": {"klient": "Jan Kowalski"},
+        "prompt": {"id": "p1", "variables": {"klient": "Jan Kowalski"}},
+    }
+    masked = mask_responses_request(turn(), body, instructions="NOTE")
+    assert masked["input"] == "PESEL <PESEL_1>"
+    assert masked["instructions"] == "NOTE"
+    assert masked["user"] == "<EMAIL_1>"
+    assert masked["metadata"] == {"klient": "<OSOBA_1>"}
+    assert masked["prompt"] == {"id": "p1", "variables": {"klient": "<OSOBA_1>"}}
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"previous_response_id": "resp_1"},
+        {"conversation": "conv_1"},
+        {"background": True},
+        {"modalities": ["audio"]},
+        {"input": 5},
+    ],
+)
+def test_a_responses_request_the_gateway_could_not_restore_is_refused(fields):
+    with pytest.raises(GatewayRequestError):
+        mask_responses_request(turn(), {"model": "m", "input": "Hej.", **fields})
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {
+            "role": "user",
+            "content": [{"type": "input_image", "image_url": "data:image/png;base64,AA"}],
+        },
+        {"type": "web_search_call", "id": "ws1"},
+    ],
+)
+def test_an_image_or_an_item_the_gateway_does_not_know_is_refused_or_left_out(item):
+    body = {"input": [item, {"role": "user", "content": "Jan Kowalski?"}]}
+    with pytest.raises(MaskingUnavailableError):
+        mask_responses_request(turn(), body)
+    masked = mask_responses_request(turn(), body, drop_unsupported=True)
+    assert masked["input"][-1]["content"] == "<OSOBA_1>?"
+    assert "image_url" not in json.dumps(masked)
+    assert "web_search_call" not in json.dumps(masked)
+
+
+def test_tool_outputs_and_custom_tools_are_masked():
+    body = {
+        "input": [
+            {"type": "custom_tool_call", "call_id": "c2", "name": "sql", "input": "Jan Kowalski"},
+            {"type": "custom_tool_call_output", "call_id": "c2", "output": "Kowalski"},
+            {
+                "type": "function_call_output",
+                "call_id": "c3",
+                "output": [{"type": "input_text", "text": f"PESEL {PESEL}"}],
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "refusal", "refusal": "Nie, Jan Kowalski."}],
+            },
+            {"type": "reasoning", "content": [{"type": "reasoning_text", "text": "Jan Kowalski"}]},
+        ]
+    }
+    sent = json.dumps(mask_responses_request(turn(), body), ensure_ascii=False)
+    assert "Kowalski" not in sent
+    assert PESEL not in sent
+
+
+def test_an_input_item_or_part_that_is_not_a_dictionary_is_refused():
+    with pytest.raises(TypeError):
+        mask_responses_request(turn(), {"input": ["Jan Kowalski"]})
+    with pytest.raises(TypeError):
+        mask_responses_request(turn(), {"input": [{"role": "user", "content": ["Jan"]}]})
+
+
+def test_a_responses_answer_is_restored_with_valid_arguments():
+    one = turn()
+    mask_responses_request(one, {"input": 'Firma "Kot & Syn" Sp. z o.o. i Jan Kowalski.'})
+    company, person = list(one.mapping)
+    message = {"type": "output_text", "text": f"{person} pracuje w {company}."}
+    response = {
+        "id": "resp_1",
+        "object": "response",
+        "output": [
+            {"type": "reasoning", "summary": [{"type": "summary_text", "text": f"Pyta {person}."}]},
+            {
+                "type": "function_call",
+                "call_id": "c1",
+                "name": "f",
+                "arguments": json.dumps({"firma": company}),
+            },
+            {"type": "message", "role": "assistant", "content": [message]},
+        ],
+    }
+    restored = restore_responses_response(one, response)
+    output = restored["output"]
+    assert output[0]["summary"][0]["text"] == "Pyta Jan Kowalski."
+    assert json.loads(output[1]["arguments"]) == {"firma": one.mapping[company]}
+    assert output[2]["content"][0]["text"] == f"Jan Kowalski pracuje w {one.mapping[company]}."
+
+
+def _delta(kind, delta, number, **where):
+    return {"type": f"response.{kind}.delta", "sequence_number": number, "delta": delta, **where}
+
+
+def test_a_streamed_responses_answer_is_restored_and_numbered_anew():
+    one = turn()
+    mask_responses_request(one, {"input": f"Jan Kowalski, PESEL {PESEL}."})
+    stream = ResponsesStream(one.mapping)
+    where = {"item_id": "m1", "output_index": 0, "content_index": 0}
+    text = "Tak, <OSOBA_1> ma PESEL <PESEL_1>"
+    created = {"instructions": "<OSOBA_1>"}
+    events = [{"type": "response.created", "sequence_number": 0, "response": created}]
+    events += [_delta("output_text", piece, n + 1, **where) for n, piece in enumerate(_cut(text))]
+    events.append(
+        {"type": "response.output_text.done", "sequence_number": 99, "text": text, **where}
+    )
+    out = [sent for event in events for sent in stream.events(event)]
+    deltas = "".join(e["delta"] for e in out if e["type"] == "response.output_text.delta")
+    assert deltas == f"Tak, Jan Kowalski ma PESEL {PESEL}"
+    assert out[-1]["text"] == f"Tak, Jan Kowalski ma PESEL {PESEL}"
+    assert out[0]["response"]["instructions"] == "Jan Kowalski"
+    assert [e["sequence_number"] for e in out] == list(range(len(out)))
+    assert stream.rest() == []
+
+
+def test_the_arguments_of_a_streamed_function_call_come_back_as_valid_json():
+    one = turn()
+    mask_responses_request(one, {"input": 'Firma "Kot & Syn" Sp. z o.o.'})
+    token = next(iter(one.mapping))
+    arguments = json.dumps({"firma": token})
+    stream = ResponsesStream(one.mapping)
+    where = {"item_id": "fc1", "output_index": 1}
+    out = []
+    for piece in _cut(arguments, 4):
+        out += stream.events(_delta("function_call_arguments", piece, 0, **where))
+    done = {"type": "response.function_call_arguments.done", "arguments": arguments, **where}
+    out += stream.events(done)
+    joined = "".join(e["delta"] for e in out if e["type"].endswith(".delta"))
+    assert json.loads(joined) == {"firma": one.mapping[token]}
+    assert json.loads(out[-1]["arguments"]) == {"firma": one.mapping[token]}
+
+
+def test_a_responses_stream_cut_short_gives_back_what_it_held():
+    stream = ResponsesStream({"<OSOBA_1>": "Jan"})
+    where = {"item_id": "m1", "output_index": 0, "content_index": 0}
+    assert stream.events(_delta("output_text", "To <OSOBA", 0, **where))[0]["delta"] == "To "
+    assert stream.events("ping") == ["ping"]
+    done = {"type": "response.refusal.done", "refusal": "", "item_id": "x", "output_index": 3}
+    assert stream.events(done) == [done]
+    (rest,) = stream.rest()
+    assert rest["delta"] == "<OSOBA"
+    assert rest["item_id"] == "m1"
+    assert stream.rest() == []

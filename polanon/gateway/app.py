@@ -1,9 +1,9 @@
 """The gateway served over HTTP: a plain ASGI application in front of an OpenAI-compatible API.
 
-It serves three endpoints, ``/v1/chat/completions``, ``/v1/embeddings`` and ``/v1/models``, and
-refuses every other one: a request the gateway cannot mask is never forwarded as it came. Each call
-is masked by its own :class:`~polanon.MaskedTurn`, checked once more for any original value, sent to
-the provider and restored on the way back, streamed or not.
+It serves ``/v1/chat/completions``, ``/v1/responses``, ``/v1/embeddings`` and ``/v1/models``,
+and refuses every other endpoint: a request the gateway cannot mask is never forwarded as it came.
+Each call is masked by its own :class:`~polanon.MaskedTurn`, checked once more for any original
+value, sent to the provider and restored on the way back, streamed or not.
 
 The application keeps nothing between calls and writes nothing to disk. It logs the path, the
 status, the time taken and how many values of each type were masked, never a value.
@@ -26,10 +26,13 @@ from polanon import Anonymizer, MaskedTurn, MaskingUnavailableError, token_instr
 from polanon.gateway.payloads import (
     ChatStream,
     GatewayRequestError,
+    ResponsesStream,
     leaked_tokens,
     mask_chat_request,
     mask_embeddings_request,
+    mask_responses_request,
     restore_chat_response,
+    restore_responses_response,
 )
 
 logger = logging.getLogger("polanon.gateway")
@@ -139,6 +142,8 @@ class Gateway:
                 raise _RefusalError(401, "the gateway key is missing or wrong", "invalid_api_key")
             elif path == "/chat/completions" and method == "POST":
                 status, counts = await self._chat(scope, receive, send)
+            elif path == "/responses" and method == "POST":
+                status, counts = await self._responses(scope, receive, send)
             elif path == "/embeddings" and method == "POST":
                 status, counts = await self._embeddings(scope, receive, send)
             elif method == "GET" and (path == "/models" or path.startswith("/models/")):
@@ -147,7 +152,7 @@ class Gateway:
                 raise _RefusalError(
                     404,
                     f"the polanon gateway does not serve {method} {path}: it masks "
-                    "/v1/chat/completions and /v1/embeddings only",
+                    "/v1/chat/completions, /v1/responses and /v1/embeddings only",
                     "unsupported_endpoint",
                 )
         except _RefusalError as refusal:
@@ -171,10 +176,37 @@ class Gateway:
         self._check(masked, turn)
         headers = self._upstream_headers(scope)
         if body.get("stream"):
-            return await self._stream(masked, turn, headers, send), turn.counts()
+            lines = _ChatLines(turn.mapping)
+            status = await self._stream("chat/completions", masked, headers, send, lines)
+            return status, turn.counts()
         response = await self._post("chat/completions", masked, headers)
         if response.is_success:
             restored = restore_chat_response(turn, _json_of(response))
+            await _send_json(send, response.status_code, restored, response.headers)
+        else:
+            await _send_raw(send, response)
+        return response.status_code, turn.counts()
+
+    async def _responses(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> tuple[int, dict[str, int]]:
+        body = await self._body(receive)
+        turn = self._turn()
+        drop = self._config.unsupported == "drop"
+        masked = await self._mask(
+            lambda: mask_responses_request(
+                turn, body, instructions=self._instructions, drop_unsupported=drop
+            )
+        )
+        self._check(masked, turn)
+        headers = self._upstream_headers(scope)
+        if body.get("stream"):
+            lines = _ResponsesLines(turn.mapping)
+            status = await self._stream("responses", masked, headers, send, lines)
+            return status, turn.counts()
+        response = await self._post("responses", masked, headers)
+        if response.is_success:
+            restored = restore_responses_response(turn, _json_of(response))
             await _send_json(send, response.status_code, restored, response.headers)
         else:
             await _send_raw(send, response)
@@ -202,7 +234,12 @@ class Gateway:
         return response.status_code
 
     async def _stream(
-        self, masked: dict[str, Any], turn: MaskedTurn, headers: dict[str, str], send: Send
+        self,
+        path: str,
+        masked: dict[str, Any],
+        headers: dict[str, str],
+        send: Send,
+        lines: _ChatLines | _ResponsesLines,
     ) -> int:
         """Stream the answer back, restored chunk by chunk.
 
@@ -211,9 +248,7 @@ class Gateway:
         """
         started = False
         try:
-            async with self._client.stream(
-                "POST", "chat/completions", json=masked, headers=headers
-            ) as response:
+            async with self._client.stream("POST", path, json=masked, headers=headers) as response:
                 if not response.is_success:
                     await response.aread()
                     await _send_raw(send, response)
@@ -229,15 +264,11 @@ class Gateway:
                         ],
                     }
                 )
-                chat = ChatStream(turn.mapping)
                 async for line in response.aiter_lines():
-                    for out in _restored_lines(line, chat):
+                    for out in lines.line(line):
                         await send({"type": "http.response.body", "body": out, "more_body": True})
-                rest = chat.rest()
-                if rest is not None:
-                    await send(
-                        {"type": "http.response.body", "body": _event(rest), "more_body": True}
-                    )
+                for out in lines.end():
+                    await send({"type": "http.response.body", "body": out, "more_body": True})
                 await send({"type": "http.response.body", "body": b""})
                 return response.status_code
         except httpx.HTTPError as exc:
@@ -386,23 +417,74 @@ def _unreachable(exc: httpx.HTTPError) -> _RefusalError:
     )
 
 
-def _restored_lines(line: str, chat: ChatStream) -> list[bytes]:
-    """One line of the provider's event stream, restored, as the lines to send for it."""
-    if not line.startswith("data:"):
-        return [f"{line}\n".encode()]
-    data = line[5:].strip()
-    if data == "[DONE]":
-        rest = chat.rest()
-        return [*([_event(rest)] if rest is not None else []), b"data: [DONE]\n"]
-    try:
-        chunk = json.loads(data)
-    except ValueError:
-        return [f"{line}\n".encode()]
-    return [f"data: {json.dumps(chat.chunk(chunk), ensure_ascii=False)}\n".encode()]
+class _ChatLines:
+    """The event stream of a chat completion, restored line by line."""
+
+    def __init__(self, mapping: Mapping[str, str]) -> None:
+        self._chat = ChatStream(mapping)
+
+    def line(self, line: str) -> list[bytes]:
+        """One line of the provider's stream, as the lines to send for it."""
+        if not line.startswith("data:"):
+            return [f"{line}\n".encode()]
+        data = line[5:].strip()
+        if data == "[DONE]":
+            return [*self.end(), b"data: [DONE]\n"]
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            return [f"{line}\n".encode()]
+        return [f"data: {_dumps(self._chat.chunk(chunk))}\n".encode()]
+
+    def end(self) -> list[bytes]:
+        """What the stream still holds back, as one more event."""
+        rest = self._chat.rest()
+        return [] if rest is None else [f"data: {_dumps(rest)}\n\n".encode()]
 
 
-def _event(chunk: Mapping[str, Any]) -> bytes:
-    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode()
+class _ResponsesLines:
+    """The event stream of a Responses API answer, restored event by event.
+
+    An ``event:`` line waits for the ``data:`` line under it, since the restored event may have
+    to be preceded by a delta of what was held back, which needs lines of its own.
+    """
+
+    def __init__(self, mapping: Mapping[str, str]) -> None:
+        self._stream = ResponsesStream(mapping)
+        self._name: str | None = None
+        self._named = False
+
+    def line(self, line: str) -> list[bytes]:
+        """One line of the provider's stream, as the lines to send for it."""
+        if line.startswith("event:"):
+            self._name, self._named = line[6:].strip(), True
+            return []
+        event: Any = None
+        if line.startswith("data:"):
+            try:
+                event = json.loads(line[5:].strip())
+            except ValueError:
+                event = None
+        if event is None:
+            pending, self._name = self._name, None
+            head = [] if pending is None else [f"event: {pending}\n".encode()]
+            return [*head, f"{line}\n".encode()]
+        events = self._stream.events(event)
+        self._name = None
+        return [*(self._event(item) + b"\n" for item in events[:-1]), self._event(events[-1])]
+
+    def end(self) -> list[bytes]:
+        """What the stream still holds back, as one more delta for each text cut short."""
+        return [self._event(item) + b"\n" for item in self._stream.rest()]
+
+    def _event(self, event: Any) -> bytes:
+        name = event.get("type") if isinstance(event, dict) else None
+        head = f"event: {name}\n" if self._named and name else ""
+        return f"{head}data: {_dumps(event)}\n".encode()
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
 async def _send_json(

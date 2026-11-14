@@ -17,8 +17,18 @@ from polanon.pipeline import mask_known_values
 from polanon.policy import TOKEN_PATTERN
 from polanon.stream_restore import StreamRestorer
 from polanon.turn import MaskedTurn
+from polanon.types import MaskingUnavailableError
 
 _TOKEN_RE = re.compile(TOKEN_PATTERN)
+
+#: Items of a Responses API input that carry nothing to mask: blobs the provider sealed from text
+#: it got masked, which no one else can read or change.
+_SEALED_ITEMS = frozenset({"compaction"})
+#: Content parts of a Responses API message whose text is masked.
+_TEXT_PARTS = frozenset({"input_text", "output_text", "text", "summary_text", "reasoning_text"})
+#: Fields of a Responses API request that keep the conversation at the provider, so the next call
+#: would bring back tokens of values the gateway no longer holds.
+_PROVIDER_STATE = ("previous_response_id", "conversation")
 
 #: Roles whose ``name`` field names a participant, which may be a person; for a ``tool`` or a
 #: ``function`` message it names the function and stays.
@@ -99,12 +109,113 @@ def mask_embeddings_request(turn: MaskedTurn, body: Mapping[str, Any]) -> dict[s
     return out
 
 
+def mask_responses_request(
+    turn: MaskedTurn,
+    body: Mapping[str, Any],
+    *,
+    instructions: str | None = None,
+    drop_unsupported: bool = False,
+) -> dict[str, Any]:
+    """Return a ``/responses`` request with everything that carries data masked.
+
+    The instructions and every item of the input are masked: the text of messages, the arguments
+    and the output of tool calls, and the summary of a model's reasoning, which the gateway
+    restored on the way back. Encrypted reasoning and compaction pass as they are: the provider
+    sealed them from text it got masked. A value first recognised in a later item is also masked
+    in the earlier ones, as :meth:`MaskedTurn.mask_messages` does for chat messages.
+
+    The gateway keeps nothing between calls, so the client sends the whole conversation, as
+    Hermes Agent does with ``store: false``. A request that leaves it at the provider, with
+    ``previous_response_id`` or ``conversation``, or asks for a ``background`` response to fetch
+    later, would bring back tokens nobody can restore, and is refused.
+
+    Args:
+        turn: the turn of this call; its mapping restores the answer afterwards.
+        body: the request as the client sent it; it is not modified.
+        instructions: a note telling the model what the tokens are, added to the instructions;
+            None leaves them as they are.
+        drop_unsupported: leave out content that cannot be masked, such as an image, rather than
+            refuse the call.
+
+    Raises:
+        GatewayRequestError: for a request that keeps state at the provider, asks for audio, or
+            has an input that is neither text nor a list of items.
+        MaskingUnavailableError: when masking fails, or for content that cannot be masked while
+            `drop_unsupported` is off.
+    """
+    for field in _PROVIDER_STATE:
+        if body.get(field):
+            raise GatewayRequestError(
+                f"the polanon gateway keeps nothing between calls, so it cannot restore a "
+                f"conversation kept by {field}: send the whole conversation in input instead"
+            )
+    if body.get("background"):
+        raise GatewayRequestError(
+            "the polanon gateway cannot restore a response fetched later: background is not "
+            "supported"
+        )
+    modalities = body.get("modalities")
+    if isinstance(modalities, list) and any(item != "text" for item in modalities):
+        raise GatewayRequestError("the polanon gateway can restore text answers only, not audio")
+    value = body.get("input")
+    if value is not None and not isinstance(value, str | list):
+        raise GatewayRequestError("input is a string or a list of items")
+    pieces: list[tuple[str, Any]] = []
+    if isinstance(body.get("instructions"), str):
+        pieces.append(("instructions", body["instructions"]))
+    if isinstance(value, str):
+        pieces.append(("text", value))
+    elif isinstance(value, list):
+        pieces.extend(("item", item) for item in value)
+
+    def mask(kind: str, original: Any) -> Any:
+        if kind == "item":
+            return _item(turn, original, drop_unsupported)
+        return turn.mask(original)
+
+    masked, sizes = [], []
+    for kind, original in pieces:
+        masked.append(mask(kind, original))
+        sizes.append(len(turn.mapping))
+    final = len(turn.mapping)
+    done = [
+        mask(kind, original) if size < final else result
+        for (kind, original), size, result in zip(pieces, sizes, masked, strict=True)
+    ]
+    out = dict(body)
+    if pieces and pieces[0][0] == "instructions":
+        out["instructions"] = done.pop(0)
+    if isinstance(value, str):
+        out["input"] = done[0]
+    elif isinstance(value, list):
+        out["input"] = [item for item in done if item is not None]
+    for field in ("user", "safety_identifier", "metadata"):
+        if body.get(field) is not None:
+            out[field] = turn.mask_data(body[field])
+    prompt = body.get("prompt")
+    if isinstance(prompt, Mapping) and prompt.get("variables") is not None:
+        out["prompt"] = {**prompt, "variables": turn.mask_data(prompt["variables"])}
+    if instructions:
+        given = out.get("instructions")
+        out["instructions"] = f"{given}\n\n{instructions}" if given else instructions
+    return out
+
+
 def restore_chat_response(turn: MaskedTurn, body: Any) -> Any:
     """Put the original values back into a ``/chat/completions`` response.
 
     Every text in it is restored: the content, a refusal, a provider's reasoning text. The
     arguments of a tool call are JSON, so a value is written into them escaped, and they stay
     valid JSON whatever quotes or backslashes the value holds.
+    """
+    return _restored(body, turn.mapping)
+
+
+def restore_responses_response(turn: MaskedTurn, body: Any) -> Any:
+    """Put the original values back into a ``/responses`` response.
+
+    Every text of every output item is restored, a reasoning summary included, and so is the
+    echo of the instructions; the arguments of a function call stay valid JSON.
     """
     return _restored(body, turn.mapping)
 
@@ -206,6 +317,163 @@ class ChatStream:
 
     def _argument(self, index: int, call: int) -> StreamRestorer:
         return self._arguments.setdefault((index, call), StreamRestorer(self._escaped))
+
+
+class ResponsesStream:
+    """Restores the events of one streamed ``/responses`` answer.
+
+    Text arrives in ``.delta`` events, each text of each output item in its own sequence, so each
+    has its own restorer; the ``.done`` event that closes a sequence carries the whole text, and
+    what the restorer still holds goes out first, as one more delta. Every other event, such as
+    ``response.completed`` with the whole response, is restored as it is. The events the client
+    gets are numbered anew, since a held-back delta adds one.
+    """
+
+    def __init__(self, mapping: Mapping[str, str]) -> None:
+        """Start a stream restored with the mapping its request was masked with."""
+        self._mapping = dict(mapping)
+        self._escaped = {token: _json_escaped(value) for token, value in self._mapping.items()}
+        self._texts: dict[tuple[Any, ...], tuple[dict[str, Any], StreamRestorer]] = {}
+        self._sequence = 0
+
+    def events(self, event: Any) -> list[Any]:
+        """Return the events to send for one event of the provider, restored and numbered."""
+        if not isinstance(event, dict):
+            return [event]
+        kind = str(event.get("type", ""))
+        out: list[dict[str, Any]] = []
+        if kind.endswith(".delta") and isinstance(event.get("delta"), str):
+            restorer = self._restorer(event)
+            out.append({**event, "delta": restorer.feed(event["delta"])})
+        else:
+            if kind.endswith(".done"):
+                held = self._held(event)
+                if held is not None:
+                    out.append(held)
+            out.append(_restored(event, self._mapping))
+        return [self._numbered(item) for item in out]
+
+    def rest(self) -> list[dict[str, Any]]:
+        """Return a delta for every text the stream still holds back, for a stream cut short."""
+        out = []
+        for template, restorer in self._texts.values():
+            held = restorer.flush()
+            if held:
+                out.append(self._numbered({**template, "delta": held}))
+        self._texts.clear()
+        return out
+
+    def _restorer(self, event: dict[str, Any]) -> StreamRestorer:
+        key = _sequence_key(event, ".delta")
+        if key not in self._texts:
+            mapping = self._escaped if "arguments" in key[0] else self._mapping
+            template = {name: value for name, value in event.items() if name != "delta"}
+            self._texts[key] = (template, StreamRestorer(mapping))
+        return self._texts[key][1]
+
+    def _held(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        """One more delta with what the sequence `event` closes still holds, or None."""
+        found = self._texts.pop(_sequence_key(event, ".done"), None)
+        if found is None:
+            return None
+        template, restorer = found
+        held = restorer.flush()
+        return {**template, "delta": held} if held else None
+
+    def _numbered(self, event: dict[str, Any]) -> dict[str, Any]:
+        if "sequence_number" in event:
+            event = {**event, "sequence_number": self._sequence}
+            self._sequence += 1
+        return event
+
+
+def _sequence_key(event: Mapping[str, Any], suffix: str) -> tuple[Any, ...]:
+    """What tells one text's sequence of deltas from another: its kind and where it stands."""
+    kind = str(event.get("type", ""))[: -len(suffix)]
+    return (
+        kind,
+        event.get("item_id"),
+        event.get("output_index"),
+        event.get("content_index"),
+        event.get("summary_index"),
+    )
+
+
+def _item(turn: MaskedTurn, item: Any, drop: bool) -> dict[str, Any] | None:
+    """One item of a Responses API input, masked, or None when it is left out."""
+    if not isinstance(item, Mapping):
+        raise TypeError(f"an input item is a dictionary, not {type(item).__name__}")
+    kind = item.get("type")
+    out = dict(item)
+    if kind in (None, "message"):
+        content = item.get("content")
+        if isinstance(content, str):
+            out["content"] = turn.mask(content)
+        elif isinstance(content, list):
+            parts = (_part(turn, part, drop) for part in content)
+            out["content"] = [part for part in parts if part is not None]
+        return out
+    if kind in ("function_call", "custom_tool_call"):
+        field = "arguments" if kind == "function_call" else "input"
+        if isinstance(item.get(field), str):
+            out[field] = _json_masked(turn, item[field])
+        return out
+    if kind in ("function_call_output", "custom_tool_call_output"):
+        output = item.get("output")
+        if isinstance(output, str):
+            out["output"] = _json_masked(turn, output)
+        elif isinstance(output, list):
+            parts = (_part(turn, part, drop) for part in output)
+            out["output"] = [part for part in parts if part is not None]
+        return out
+    if kind == "reasoning":
+        for field in ("summary", "content"):
+            if isinstance(item.get(field), list):
+                parts = (_part(turn, part, drop) for part in item[field])
+                out[field] = [part for part in parts if part is not None]
+        return out
+    if kind in _SEALED_ITEMS:
+        return out
+    _unsupported(f"a {kind!r} item", drop)
+    return None
+
+
+def _part(turn: MaskedTurn, part: Any, drop: bool) -> dict[str, Any] | None:
+    """One content part, masked, or None when it is left out.
+
+    The annotations of an output text are left out: they point into the text by position, and
+    what they quote may be personal data.
+    """
+    if not isinstance(part, Mapping):
+        raise TypeError(f"a content part is a dictionary, not {type(part).__name__}")
+    kind = part.get("type")
+    if kind in _TEXT_PARTS:
+        out = {key: value for key, value in part.items() if key != "annotations"}
+        out["text"] = turn.mask(part.get("text") or "")
+        return out
+    if kind == "refusal":
+        return {**part, "refusal": turn.mask(part.get("refusal") or "")}
+    _unsupported(f"a {kind!r} part", drop)
+    return None
+
+
+def _unsupported(what: str, drop: bool) -> None:
+    """Refuse content that cannot be masked, unless the gateway was told to leave it out."""
+    if not drop:
+        raise MaskingUnavailableError(
+            f"{what} cannot be masked; pass unknown_blocks='drop' to leave such blocks out"
+        )
+
+
+def _json_masked(turn: MaskedTurn, text: str) -> str:
+    """Mask a text that may be a JSON object or array, keeping the JSON valid."""
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return turn.mask(text)
+    if isinstance(parsed, dict | list):
+        return json.dumps(turn.mask_data(parsed), ensure_ascii=False)
+    return turn.mask(text)
 
 
 def _without_participant(message: dict[str, Any]) -> dict[str, Any]:

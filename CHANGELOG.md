@@ -12,8 +12,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 - **A masking gateway for tools that speak the OpenAI API**, run by whoever needs it on their own
   machine: `pip install "polanon[gateway]"`, then `polanon-gateway --upstream
   https://api.openai.com/v1`, and Hermes Agent, n8n, Open WebUI or LibreChat point their base URL at
-  `http://127.0.0.1:8787/v1`. It serves `/v1/chat/completions`, streamed or not and with tool calls,
-  `/v1/embeddings` and `/v1/models`, and refuses every other endpoint, images and audio. Every call
+  `http://127.0.0.1:8787/v1`. It serves `/v1/chat/completions` and the Responses API,
+  `/v1/responses`, streamed or not and with tool calls, `/v1/embeddings` and `/v1/models`, and
+  refuses every other endpoint, images and audio. With the Responses API the whole conversation
+  comes with every call, as Hermes Agent sends it with `store: false`, and encrypted reasoning
+  passes as it is; a call that leaves the conversation at the provider is refused. Every call
   is masked, checked once more for any original value before it leaves, and restored on the way
   back, a tool call's arguments as valid JSON. It keeps nothing on disk, listens on 127.0.0.1 and
   needs a key every client sends to listen anywhere else, takes keys from the environment only, and

@@ -192,8 +192,12 @@ calls, the keys or the logs. What it protects:
 - **What reaches the provider.** Every message, tool result and earlier tool call is masked, a
   participant's `name` is left out, and before a call leaves its whole payload is searched once more
   for every original value, by the rules the masking follows; a call that still holds one is not
-  sent. Endpoints other than chat completions, embeddings and the list of models are refused rather
-  than passed on, and so are images, files and audio, unless `--drop-unsupported` leaves them out.
+  sent. Endpoints other than chat completions, the Responses API, embeddings and the list of
+  models are refused rather than passed on, and so are images, files and audio, unless
+  `--drop-unsupported` leaves them out. A Responses API call that keeps the conversation at the
+  provider, with `previous_response_id` or `conversation`, is refused: the gateway holds no mapping
+  between calls to restore it with. Encrypted reasoning and compaction pass unread; the provider
+  sealed them from masked text, so they hold tokens, not values.
 - **Who can use it.** It listens on `127.0.0.1`. On any other address it refuses to start without
   `POLANON_GATEWAY_KEY`, which every client must then send, compared in constant time.
 - **What it keeps.** Nothing on disk: each call is masked and restored with a mapping that lives as
