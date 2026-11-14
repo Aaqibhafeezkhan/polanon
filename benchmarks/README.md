@@ -84,6 +84,43 @@ the hospital's company name are all masked by rules.
 [`tests/test_benchmark.py`](../tests/test_benchmark.py) turns these numbers into floors so they
 cannot quietly get worse.
 
+## An AI agent's calls
+
+The documents above are what a person writes. An AI agent sends something else, and
+[`agent_corpus.py`](agent_corpus.py) holds four calls of an invented one, a personal assistant
+on a home server, as its client sends them to a model: an English system prompt with a Polish
+memory of its user, thirteen tool definitions, Polish questions and Markdown answers, and the
+JSON its tools return from a smart home, a web search, a shell and a mailbox. English stands next
+to Polish on one line, there is code, a traceback, a configuration file with keys in it,
+identifiers such as `notify.mobile_app_pixel_7_tomka`, and every call sends the history again.
+The 52 values that must not reach the model are marked where they are written, and stand 122
+times in the four calls; 18 more, such as a first name alone or the byline of a published review,
+may be masked or not.
+
+[`run_agent.py`](run_agent.py) masks each call as the gateway does and counts two things: the
+marked values that still reach the model, and the tokens that hide nothing, with the number of
+times the masked calls use them. The second number is what over-masking costs the model: a
+button's "Uncheck" or a chip's "Max" made a token is a word it cannot read, and a value masked
+once is masked wherever it stands.
+
+| Configuration | Leaked | Tokens that hide nothing | Their uses |
+|---|---:|---:|---:|
+| polanon, guards only, no model | 20 of 122 | 0 | 0 of 143 |
+| polanon 0.3.5, guards + `pl_core_news_md` | 1 of 122 | 20 | 68 of 233 |
+| polanon, guards + `pl_core_news_md` | **2 of 122** | 12 | **54 of 218** |
+| the same, without the model's filters for English and code | 0 of 122 | 129 | 224 of 390 |
+
+Without a model the places, the companies without a legal form and the foreign names leak, and
+nothing is masked for nothing. With the model, two values leak by design: "sopotu", a place typed
+in lowercase in a chat, dropped since a place in lowercase stopped being one, so that "text" and
+"service" of a manual are not, and "Erik Holm" opening an English sentence, where a capitalised
+word is read as English. Taking every
+name the model finds leaks nothing and wastes more than half of the token uses, on "return",
+"message", "notify" and "That's". What the default still masks for nothing is mostly "Max", of
+the chip, the vacuum's fan speed and "Max results" in the tools, and "Dell".
+[`tests/test_agent_benchmark.py`](../tests/test_agent_benchmark.py) holds these numbers as
+bounds both ways.
+
 ## Running it
 
 ```bash
@@ -91,6 +128,7 @@ python benchmarks/run.py                 # the rules alone
 python benchmarks/run.py --ner           # with pl_core_news_md
 python benchmarks/run.py --ner --markdown
 python benchmarks/demo.py --ner          # print the masked documents
+python benchmarks/run_agent.py --ner --show 20   # an agent's calls, and what hides nothing
 ```
 
 The Presidio comparison needs Presidio, which is not a dependency of this project:

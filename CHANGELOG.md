@@ -9,6 +9,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **A benchmark of an AI agent's calls.** `benchmarks/agent_corpus.py` holds four invented calls
+  of a personal assistant as its client sends them to a model: an English system prompt with a
+  Polish memory of its user, thirteen tool definitions, and the JSON its tools return from a
+  smart home, a web search, a shell and a mailbox, with code, a traceback and keys among it. The
+  52 values that must not reach the model are marked where they are written.
+  `benchmarks/run_agent.py` masks each call as the gateway does and counts what still reaches the
+  model and the tokens that hide nothing, with their uses: with `pl_core_news_md`, 2 of 122
+  occurrences and 54 of 218 uses, against 1 and 68 of 233 in 0.3.5, and 0 and 224 of 390 when
+  every name the model finds is taken. `tests/test_agent_benchmark.py` holds both as bounds, and
+  CI prints the table.
+
 - **The gateway can send what it cannot mask, when told to.** `polanon-gateway
   --pass-unsupported` sends an image, a file or another part it cannot mask to the provider as it
   is, unmasked, and masks the text around it, for an operator who wants the model to see a photo

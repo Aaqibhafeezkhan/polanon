@@ -488,7 +488,10 @@ values and the rules with `pl_core_news_md` mask 98%, with nothing left half-mas
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
 missed and why, and for Presidio on the first eleven of them with the same model: 66% fully
-masked, 76% at its most lenient.
+masked, 76% at its most lenient. Four invented calls of an AI agent, with its English prompt, its
+tools and their JSON, code and logs, measure what an agent's traffic costs: with
+`pl_core_news_md`, 2 of the 122 marked occurrences reach the model, and 54 of 218 uses of a token
+hide nothing, a word such as "Max" the model could not read.
 
 ## Worth knowing
 

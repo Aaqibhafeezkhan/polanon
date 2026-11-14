@@ -48,7 +48,9 @@ jobs:
       # Printed rather than asserted: tests/test_benchmark.py already holds the floors, and the
       # table is what a reviewer wants to see in the log when a guard changes.
       - name: Detection scores
-        run: python benchmarks/run.py --ner --markdown
+        run: |
+          python benchmarks/run.py --ner --markdown
+          python benchmarks/run_agent.py --ner --markdown
 
   haystack:
     name: The Haystack components

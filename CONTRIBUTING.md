@@ -26,9 +26,11 @@ checks it with mypy and measures its coverage. Add `pip install anthropic openai
 - Type hints on every signature, Google-style docstrings on the public API.
 - Tests for every behaviour change, and no network in them: the judges are tested with
   `httpx.MockTransport`. Coverage stays at 90% or above.
-- A change to detection is measured, not asserted: run `python benchmarks/run.py --ner` before and
-  after, and add a case worth keeping to `benchmarks/samples/` and `benchmarks/gold/`.
-  `tests/test_benchmark.py` holds the current numbers as floors.
+- A change to detection is measured, not asserted: run `python benchmarks/run.py --ner` and
+  `python benchmarks/run_agent.py --ner` before and after, and add a case worth keeping to
+  `benchmarks/samples/` and `benchmarks/gold/`, or to the agent's calls in
+  `benchmarks/agent_corpus.py`. `tests/test_benchmark.py` holds the current numbers as floors,
+  `tests/test_agent_benchmark.py` what leaks and what is masked for nothing as bounds.
 - Conventional Commits in the imperative mood, one logical change each:
   `feat(guards): recognise Czech VAT numbers`, `fix(pipeline): ...`, `docs: ...`, `test: ...`.
 - Synthetic data only. No real person's name, identifier, document or log belongs in an issue, a
