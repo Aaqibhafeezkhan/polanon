@@ -53,6 +53,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   span of digits alone, one with a double quote, a literal such as "None", "True" or "null", and
   one English function word in lowercase are now dropped on a line of any language; the rules
   still find the numbers that matter. The benchmark is unchanged.
+- **A model's English with a Polish quote in it** is read as English. An agent's model reasons in
+  English and quotes the user in Polish, and one Polish letter in the quote made the whole line
+  Polish, so "The user asks" and "the model" went out as tokens. A line is now Polish by its
+  Polish words, a word with a Polish letter counting as one, and what stands in quotation marks
+  is left out of the count. In a text that is plainly English as a whole, a model's reasoning or a
+  manual, a line too short to show a language, such as "Possible causes" or "Max", is read as
+  English too; in a Polish text it stays as it was. The benchmark is unchanged.
 
 ## [0.3.5] - 2026-11-14
 

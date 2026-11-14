@@ -158,6 +158,34 @@ def test_on_a_line_with_no_language_a_lowercase_word_is_no_name():
     ]
 
 
+def test_an_english_line_quoting_polish_is_english_and_so_are_short_lines_of_an_english_text():
+    """An agent's model reasons in English and quotes the user in Polish: "The user asks" and
+    "the model" stood on lines a Polish letter in the quote made Polish. Its headings, "Possible
+    causes" or "Max", stood on lines too short to show a language.
+
+    A line is now Polish by its Polish words, letters included, not by one letter; and in a text
+    that is plainly English as a whole, a line that shows no language is English too. A Polish
+    text keeps such a line as it was.
+    """
+    english = (
+        "Possible causes\n"
+        "The user asks „czy światło w kuchni jest włączone” and the model has to check it.\n"
+        "The service may be down, or the token is no longer valid for this account.\n"
+        "Look at the last error from Anna Lindqvist before you restart the whole server.\n"
+        "Max"
+    )
+    entities = [
+        _Entity(english, "Possible causes", "persName"),
+        _Entity(english, "The user asks", "orgName"),
+        _Entity(english, "the model", "orgName"),
+        _Entity(english, "Anna Lindqvist", "persName"),
+        _Entity(english, "Max", "persName"),
+    ]
+    assert _found(NerGuard(), english, entities) == ["Anna Lindqvist"]
+    polish = "Jutro spotkanie z zespołem o dziesiątej w biurze.\nMarek\nProszę o potwierdzenie."
+    assert _found(NerGuard(), polish, [_Entity(polish, "Marek", "persName")]) == ["Marek"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

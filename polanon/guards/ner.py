@@ -355,6 +355,11 @@ _NAME_PARTS = re.compile(r"[\W\d_]+")
 #: outnumber.
 _ENGLISH_EVIDENCE = 3
 _ENGLISH_MARGIN = 3
+#: The same for a whole text, whose lines that show no language are then read as English.
+_TEXT_ENGLISH_EVIDENCE = 12
+_TEXT_ENGLISH_MARGIN = 4
+#: A quotation: the words of somebody else, maybe in another language.
+_QUOTED = re.compile(r'„[^”\n]*”|“[^”\n]*”|«[^»\n]*»|»[^«\n]*«|"[^"\n]*"')
 
 #: What may stand between the start of a sentence and its first word: spaces, quotes, brackets and
 #: the marks of a Markdown list or heading. A colon is no end: "Contact: John Smith" names him.
@@ -364,22 +369,38 @@ _SENTENCE_ENDS = frozenset("\n.!?")
 _ENGLISH, _POLISH, _UNKNOWN = "en", "pl", ""
 
 
+def _evidence(text: str) -> tuple[int, int]:
+    """Count the English words and the Polish ones, a word with a Polish letter among them.
+
+    What stands in quotation marks is left out: a model reasoning in English quotes the user in
+    Polish, and the quote is the user's language, not the line's.
+    """
+    english = polish = 0
+    for word in _WORD.findall(_QUOTED.sub(" ", text)):
+        folded = word.lower()
+        english += folded in _ENGLISH_WORDS
+        polish += folded in _POLISH_WORDS or _POLISH_LETTERS.search(word) is not None
+    return english, polish
+
+
 def _language(line: str) -> str:
     """Return whether a line is plainly English, Polish, or shows no language at all.
 
-    A line with one Polish letter is Polish, and so is one with more Polish words than English
-    ones, so a Polish sentence typed without diacritics stays Polish. English needs three English
-    words and three times as many as Polish ones. Any other line, such as a short heading, a
-    parameter's description or a name from code, shows none.
+    A line with more Polish words than English ones is Polish, a word with a Polish letter
+    counting as Polish, so a Polish sentence typed without diacritics stays Polish. English needs
+    three English words and three times as many as Polish ones. Any other line, such as a short
+    heading, a parameter's description or a name from code, shows none.
     """
-    if _POLISH_LETTERS.search(line):
-        return _POLISH
-    words = [word.lower() for word in _WORD.findall(line)]
-    english = sum(word in _ENGLISH_WORDS for word in words)
-    polish = sum(word in _POLISH_WORDS for word in words)
+    english, polish = _evidence(line)
     if english >= _ENGLISH_EVIDENCE and english > _ENGLISH_MARGIN * polish:
         return _ENGLISH
     return _POLISH if polish > english else _UNKNOWN
+
+
+def _is_english_text(text: str) -> bool:
+    """Return whether a whole text is plainly English, as a model's reasoning or a manual is."""
+    english, polish = _evidence(text)
+    return english >= _TEXT_ENGLISH_EVIDENCE and english > _TEXT_ENGLISH_MARGIN * polish
 
 
 def _capitalised(word: str) -> bool:
@@ -452,6 +473,7 @@ def _named_without_language(fragment: str) -> bool:
 def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
     """Drop what the Polish model read as a name where the text is not Polish, unless it is one."""
     languages: dict[int, str] = {}
+    english_text: bool | None = None
     kept = []
     for span in spans:
         fragment = text[span.start : span.end]
@@ -462,6 +484,11 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
             line_end = text.find("\n", span.start)
             languages[line_start] = _language(text[line_start : None if line_end < 0 else line_end])
         language = languages[line_start]
+        if language == _UNKNOWN:
+            if english_text is None:
+                english_text = _is_english_text(text)
+            if english_text:
+                language = _ENGLISH
         if (
             language == _POLISH
             or (language == _ENGLISH and _named_in_english(text, span))
