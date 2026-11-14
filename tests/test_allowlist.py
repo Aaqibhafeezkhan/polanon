@@ -290,3 +290,24 @@ def test_platform_written_with_invisible_or_fullwidth_characters_is_allowed(frag
 
 def test_name_with_polish_letters_in_decomposed_form_is_allowed():
     assert Allowlist(["Żabka"]).allows(unicodedata.normalize("NFD", "Żabka"))
+
+
+async def test_the_platforms_of_an_agent_s_own_stack_go_out_as_written():
+    """An agent driving a smart home named "HA" 117 times in one call: masked as a place, the model
+    saw a token in every tool description and every result instead of Home Assistant."""
+    text = "Sprawdź w HA i w Home Assistant, co mówi OpenRouter o DeepSeek; pyta Jan Kowalski."
+    result = await anonymize(
+        text,
+        enabled=ALL,
+        guards=[
+            WordGuard("LOCATION", "HA", "Home Assistant"),
+            WordGuard("ORG", "OpenRouter", "DeepSeek"),
+            WordGuard("PERSON", "Jan Kowalski"),
+        ],
+        judge=None,
+        existing_mapping={},
+        allowlist=PLATFORMS,
+    )
+    assert result.anonymized == (
+        "Sprawdź w HA i w Home Assistant, co mówi OpenRouter o DeepSeek; pyta <OSOBA_1>."
+    )

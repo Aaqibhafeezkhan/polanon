@@ -19,6 +19,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Changed
 
+- **`WELL_KNOWN_NAMES` holds the platforms an AI agent names**: OpenRouter, DeepSeek, Hugging
+  Face, Ollama, LM Studio, Claude Code, Hermes Agent, Nous Research, Home Assistant and its "HA",
+  GitHub, GitLab, Docker, Linux and Ubuntu. An agent driving a smart home named "HA" 117 times in
+  one call, and the Polish model took it for a place each time: the model saw a token in every
+  tool description and result in place of Home Assistant. With the list, as the gateway uses it,
+  they go out as written.
+
 - **spaCy reads a text once.** A chat sends its whole history with every call, and an agent its
   system prompt and the descriptions of its tools too: masking an agent's call of 105 messages
   took 28 seconds, 20 of them in spaCy reading some two thousand texts it had read in the call

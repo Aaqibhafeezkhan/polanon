@@ -40,10 +40,11 @@ PROTECTED_SOURCES = frozenset({"denylist", "mapping_store"})
 #: brand a statistical model mistakes for a person is still released.
 _PERSON_EVIDENCE_SOURCES = frozenset({"names_pl"})
 
-#: Platforms and tools an office or marketing team in Poland names every day, and the public
-#: institutions and filing programs its staff name as often. Nothing here is also a first name
-#: ("Claude", "Miro") or an ordinary word ("Word", "Teams", "Make"), but for "Płatnik", the
-#: program ZUS contributions are filed with: a person of that name the name guard finds, "pani
+#: Platforms and tools an office or marketing team in Poland names every day, the public
+#: institutions and filing programs its staff name as often, and the models, tools and smart home
+#: an AI agent names in every prompt, "HA" for Home Assistant among them. Nothing here is also a
+#: first name ("Claude", "Miro") or an ordinary word ("Word", "Teams", "Make"), but for "Płatnik",
+#: the program ZUS contributions are filed with: a person of that name the name guard finds, "pani
 #: Płatnik", stays masked whatever the list holds.
 WELL_KNOWN_NAMES: tuple[str, ...] = (
     "Facebook",
@@ -144,6 +145,21 @@ WELL_KNOWN_NAMES: tuple[str, ...] = (
     "DALL-E",
     "Stable Diffusion",
     "DeepL",
+    "OpenRouter",
+    "DeepSeek",
+    "Hugging Face",
+    "Ollama",
+    "LM Studio",
+    "Claude Code",
+    "Hermes Agent",
+    "Nous Research",
+    "Home Assistant",
+    "HA",
+    "GitHub",
+    "GitLab",
+    "Docker",
+    "Linux",
+    "Ubuntu",
     "ZUS",
     "PUE ZUS",
     "eZUS",
