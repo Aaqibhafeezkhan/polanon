@@ -100,16 +100,20 @@ def test_the_public_facade_does_not_reach_the_optional_judges():
     assert "polanon.guards.ner" not in imported
 
 
-def test_no_part_of_the_core_imports_an_integration():
-    """An integration needs its framework; `import polanon` must not reach it, at any depth."""
+def test_no_part_of_the_core_imports_an_integration_or_the_gateway():
+    """An integration needs its framework and the gateway its server; `import polanon` must reach
+    neither, at any depth."""
     offenders = []
     for path in sorted(LIBRARY.rglob("*.py")):
         relative = path.relative_to(LIBRARY).as_posix()
-        if relative.startswith("integrations/"):
+        if relative.startswith(("integrations/", "gateway/")):
             continue
         for line in path.read_text(encoding="utf-8").splitlines():
-            if "polanon.integrations" in line and line.strip().startswith(("import ", "from ")):
-                offenders.append(f"{relative}: {line.strip()}")
+            statement = line.strip()
+            if statement.startswith(("import ", "from ")) and any(
+                name in statement for name in ("polanon.integrations", "polanon.gateway")
+            ):
+                offenders.append(f"{relative}: {statement}")
     assert not offenders, "\n".join(offenders)
 
 
