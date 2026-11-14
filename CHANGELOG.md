@@ -96,6 +96,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   Polish model took the carets for companies and places, a Markdown heading's "####" for a
   company and the offset of a timestamp, "808+00:00", for a place. What used to be dropped for
   digits alone is now dropped for having no letter at all.
+- **The English name of a language is no place.** A Polish manual in an agent's tool results
+  spoke of "Polish" and "English" texts, and the Polish model took both for places, "Polish
+  names" and "Polish-first" for companies, masked 33 times in one call once known. A place or a
+  company that opens with the English name of a language or a nation is now dropped; a real one,
+  "British Airways" or "Czech Republic", is no secret either. A person is left alone: "German" is
+  a Polish first name too.
 
 ## [0.3.5] - 2026-11-14
 

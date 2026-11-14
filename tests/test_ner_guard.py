@@ -325,6 +325,27 @@ def test_a_span_without_a_letter_is_no_name():
     assert _found(NerGuard(), text, entities) == ["Gdańsku", "Sopocie"]
 
 
+def test_the_english_name_of_a_language_is_no_place_or_company():
+    """A Polish manual in an agent's tool results spoke of "Polish" and "English" texts, and the
+    Polish model took both for places, "Polish names" and "Polish-first" for companies. "German"
+    is a Polish first name too, so a person it opens is kept."""
+    text = (
+        "Wersja 0.3 dodaje tryb English, a Polish zostaje domyślny dla biura w Gdańsku.\n"
+        "Lista Polish names obejmuje też nazwiska; dokument jest Polish-first.\n"
+        "Spotkanie z German Nowak w Krakowie."
+    )
+    entities = [
+        _Entity(text, "English"),
+        _Entity(text, "Polish"),
+        _Entity(text, "Gdańsku"),
+        _Entity(text, "Polish names", "orgName"),
+        _Entity(text, "Polish-first", "orgName"),
+        _Entity(text, "German Nowak", "persName"),
+        _Entity(text, "Krakowie"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Gdańsku", "German Nowak", "Krakowie"]
+
+
 def test_a_number_a_quote_and_an_english_word_are_no_names():
     """In an agent's tool results the Polish model tagged "2026" as a company, `File "` of a
     Python traceback, Python's "None" as a person, and "has" and "before" on lines it read as

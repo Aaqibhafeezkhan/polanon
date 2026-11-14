@@ -345,6 +345,18 @@ _POLISH_WORDS = frozenset(
     }
 )  # fmt: skip
 
+#: The English names of languages and nations, which the Polish model reads as places.
+_LANGUAGES_IN_ENGLISH = frozenset(
+    {
+        "polish", "english", "german", "french", "spanish", "italian", "portuguese", "dutch",
+        "russian", "ukrainian", "belarusian", "czech", "slovak", "hungarian", "romanian",
+        "bulgarian", "croatian", "serbian", "slovenian", "lithuanian", "latvian", "estonian",
+        "finnish", "swedish", "norwegian", "danish", "icelandic", "greek", "turkish", "arabic",
+        "hebrew", "persian", "hindi", "chinese", "japanese", "korean", "vietnamese", "thai",
+        "indonesian", "latin", "european", "american", "british", "canadian", "australian",
+    }
+)  # fmt: skip
+
 #: English small words that are first names too: "Will Nowak" opens with one, and is a person.
 _FIRST_NAMES_TOO = frozenset({"will", "may"})
 
@@ -570,6 +582,18 @@ def _lowercase_place(span: Span, fragment: str) -> bool:
     return span.entity_type in ("LOCATION", "ORG") and " " not in fragment and fragment.islower()
 
 
+def _language_named_in_english(span: Span, fragment: str) -> bool:
+    """Return whether a place or a company opens with the English name of a language or nation.
+
+    A Polish manual in an agent's tool results spoke of "Polish" and "English" texts, and the
+    Polish model took both for places, "Polish names" and "Polish-first" for companies. A real
+    one, "British Airways" or "Czech Republic", is no secret either. A person is left alone:
+    "German" is a Polish first name too.
+    """
+    first = fragment.split()[0].split("-")[0]
+    return span.entity_type in ("LOCATION", "ORG") and first.lower() in _LANGUAGES_IN_ENGLISH
+
+
 def _named_without_language(fragment: str) -> bool:
     """Return whether a span on a line that shows no language reads as a name.
 
@@ -599,6 +623,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
             or _in_inline_code(text, span)
             or _inside_a_word(text, span)
             or _lowercase_place(span, fragment)
+            or _language_named_in_english(span, fragment)
         ):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
