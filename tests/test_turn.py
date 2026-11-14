@@ -24,6 +24,7 @@ from polanon import (
     token_instructions,
 )
 from polanon.guards.base import Guard
+from polanon.types import Span
 
 anonymizer = Anonymizer(default_guards(with_ner=False), allowlist=Allowlist(WELL_KNOWN_NAMES))
 
@@ -424,6 +425,69 @@ def test_a_value_found_in_a_later_message_is_masked_in_an_earlier_one(earlier, l
         [{"role": "user", "content": earlier}, {"role": "user", "content": later}]
     )
     assert first["content"] == masked
+
+
+class SecondLookGuard(Guard):
+    """Finds the model code "Q12" in a text only when it reads that text a second time.
+
+    It stands in for what makes the mapping grow while earlier messages are masked once more:
+    in an agent's history of 115 messages a piece left over from a losing detection became a new
+    value then, and a message re-masked just before kept it in the clear.
+    """
+
+    name = "second_look"
+
+    def __init__(self):
+        self.seen = set()
+
+    def detect(self, text, enabled):
+        again = text in self.seen
+        self.seen.add(text)
+        start = text.find("Q12")
+        if not again or "Jan Kowalski" not in text or start < 0:
+            return []
+        return [Span(start, start + 3, "ORG", 0.95, self.name)]
+
+
+def test_a_value_found_while_messages_are_masked_once_more_is_masked_in_all_of_them():
+    second_look = Anonymizer([*default_guards(with_ner=False), SecondLookGuard()])
+    messages = [
+        {"role": "user", "content": "Mam drukarkę Q12."},
+        {"role": "user", "content": "Jan Kowalski ma drukarkę Q12."},
+        {"role": "user", "content": "Anna Nowak też."},
+    ]
+    masked = second_look.turn().mask_messages(messages)
+    assert "Q12" not in json.dumps(masked, ensure_ascii=False)
+
+
+class EveryLookGuard(Guard):
+    """Finds one more code in a text each time it reads it again, so the mapping never settles."""
+
+    name = "every_look"
+
+    def __init__(self):
+        self.reads = 0
+
+    def detect(self, text, enabled):
+        if not text.startswith("Kody"):
+            return []
+        self.reads += 1
+        start = text.find(f"K{self.reads}0")
+        return [] if start < 0 else [Span(start, start + 3, "ORG", 0.95, self.name)]
+
+
+def test_masking_stops_after_its_passes_when_the_mapping_keeps_growing():
+    from polanon.turn import MASKING_PASSES
+
+    guard = EveryLookGuard()
+    every_look = Anonymizer([*default_guards(with_ner=False), guard])
+    messages = [
+        {"role": "user", "content": "Kody K10 K30 K50 K70"},
+        {"role": "user", "content": "Kody K20 K40 K60 K80"},
+    ]
+    every_look.turn().mask_messages(messages)
+    # Both read in the first pass, then one of them in each later pass, each time growing again.
+    assert guard.reads == MASKING_PASSES + 1
 
 
 def test_messages_that_are_not_chat_messages_are_refused():

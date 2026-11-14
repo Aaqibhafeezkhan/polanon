@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from polanon._matching import type_of
 from polanon.guards.denylist import DenylistGuard
@@ -29,6 +29,40 @@ if TYPE_CHECKING:
 UnknownBlocks = Literal["raise", "drop", "keep"]
 
 _Text = Callable[[str], str]
+
+#: How many times, at most, the items of one call are masked. Masking an item again with a grown
+#: mapping can make it grow once more: a piece left over from a losing detection becomes a value
+#: of its own. Each pass masks again only what was masked before the mapping last grew.
+MASKING_PASSES = 4
+
+_Item = TypeVar("_Item")
+_Masked = TypeVar("_Masked")
+
+
+def settled(
+    originals: list[_Item], mask: Callable[[_Item], _Masked], size: Callable[[], int]
+) -> list[_Masked]:
+    """Mask every item, then mask again each one masked before the mapping last grew.
+
+    Args:
+        originals: the items, oldest first; they are not modified.
+        mask: masks one item from its original with the turn's whole mapping as it is now.
+        size: how many values the turn's mapping holds now.
+    """
+    masked, sizes = [], []
+    for original in originals:
+        masked.append(mask(original))
+        sizes.append(size())
+    for _ in range(MASKING_PASSES - 1):
+        final = size()
+        stale = [index for index, grown in enumerate(sizes) if grown < final]
+        if not stale:
+            break
+        for index in stale:
+            masked[index] = mask(originals[index])
+            sizes[index] = size()
+    return masked
+
 
 #: What the model is told about the tokens, in the language it is asked to answer in.
 _INSTRUCTIONS = {
@@ -186,7 +220,8 @@ class MaskedTurn:
 
         A value first recognised in a later message, such as the question, is also masked in the
         earlier ones, where nothing recognised it on its own: a message masked before the mapping
-        last grew is masked once more, from its original, with the whole mapping.
+        last grew is masked once more, from its original, with the whole mapping, until the mapping
+        stops growing or :data:`MASKING_PASSES` passes are done.
 
         Args:
             messages: plain dictionaries, oldest first. They are not modified.
@@ -196,15 +231,10 @@ class MaskedTurn:
                 while `unknown_blocks` is "raise". Nothing of the list may be sent then.
         """
         originals = list(messages)
-        masked, sizes = [], []
-        for message in originals:
-            masked.append(self._message(message, self.mask))
-            sizes.append(len(self._mapping))
-        final = len(self._mapping)
-        return [
-            self._message(original, self.mask) if size < final else done
-            for original, size, done in zip(originals, sizes, masked, strict=True)
-        ]
+        return settled(originals, lambda message: self._message(message, self.mask), self._size)
+
+    def _size(self) -> int:
+        return len(self._mapping)
 
     def restore(self, text: str) -> str:
         """Put the original values back in place of the turn's tokens; unknown tokens stay.

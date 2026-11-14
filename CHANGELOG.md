@@ -26,6 +26,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   call was refused. The check now reads the payload as the masking does: a JSON text value by
   value, and those names from code, written without a space, not at all. Every other text, every
   value and a key with a space in it are searched as before.
+- **A value found while earlier messages are masked once more** is masked in all of them. A
+  message masked before the mapping last grew is masked again with the whole mapping, and doing
+  so can make the mapping grow once more: in an agent's history of 115 messages a piece left over
+  from a losing detection became a new value then, a message re-masked just before kept it, and
+  the gateway's last check refused the call. `MaskedTurn.mask_messages` and the gateway's
+  Responses API masking now repeat the pass until the mapping stops growing, at most four times
+  (`polanon.turn.MASKING_PASSES`).
 
 ## [0.3.5] - 2026-11-14
 

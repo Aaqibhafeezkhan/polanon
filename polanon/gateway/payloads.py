@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from polanon.pipeline import mask_known_values
 from polanon.stream_restore import StreamRestorer, restored
-from polanon.turn import MaskedTurn
+from polanon.turn import MaskedTurn, settled
 from polanon.types import MaskingUnavailableError
 
 #: Items of a Responses API input that carry nothing to mask: blobs the provider sealed from text
@@ -221,15 +221,7 @@ def mask_responses_request(
             return _item(turn, original, unsupported)
         return turn.mask(original)
 
-    masked, sizes = [], []
-    for kind, original in pieces:
-        masked.append(mask(kind, original))
-        sizes.append(len(turn.mapping))
-    final = len(turn.mapping)
-    done = [
-        mask(kind, original) if size < final else result
-        for (kind, original), size, result in zip(pieces, sizes, masked, strict=True)
-    ]
+    done = settled(pieces, lambda piece: mask(*piece), lambda: len(turn.mapping))
     out = {**body, **defined}
     if pieces and pieces[0][0] == "instructions":
         out["instructions"] = done.pop(0)
