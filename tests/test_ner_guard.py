@@ -442,6 +442,25 @@ def test_chinese_text_is_no_name_and_its_punctuation_is_not_part_of_one():
     ]
 
 
+def test_the_parties_of_a_contract_are_no_names():
+    """A lease read by an agent writes its parties with a capital letter, as defined terms, and
+    the Polish model took "Najemcy" for a company. A party named by its role alone is dropped;
+    the person who is it is kept."""
+    text = (
+        "Najemca zapłaci Wynajmującemu czynsz do 10. dnia miesiąca.\n"
+        "Zleceniobiorca, pani Ola Kowalska, odda dzieło Zamawiającemu, a Strony podpiszą protokół."
+    )
+    entities = [
+        _Entity(text, "Najemca", "orgName"),
+        _Entity(text, "Wynajmującemu", "persName"),
+        _Entity(text, "Zleceniobiorca", "orgName"),
+        _Entity(text, "Ola Kowalska", "persName"),
+        _Entity(text, "Zamawiającemu", "orgName"),
+        _Entity(text, "Strony", "orgName"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Ola Kowalska"]
+
+
 def test_in_paranoid_mode_every_name_the_model_finds_is_kept():
     """The filters for English and code let a little through by design: a name opening an English
     sentence, a word in inline code, a place typed in lowercase. With `mode="paranoid"` every

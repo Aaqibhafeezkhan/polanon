@@ -156,6 +156,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   Assistant。" with the full stop, which the list of well-known names no longer matched. A span
   whose every letter is Chinese, Japanese or Korean is now dropped, and the punctuation of those
   languages is trimmed off the ends of every span, in either mode, as a space is.
+- **The parties of a contract are no names.** A Polish contract writes its parties with a
+  capital letter, as defined terms, and in the lease of the benchmark the Polish model took
+  "Najemcy" for a company. Najemca, Wynajmujący, Zleceniodawca, Zleceniobiorca, Zamawiający,
+  Wykonawca, Sprzedający, Kupujący, Pracodawca, Pracownik, Strony and the like, in their cases,
+  join the form words a span made only of is dropped; the person who is a party is still masked.
 
 ## [0.3.5] - 2026-11-14
 

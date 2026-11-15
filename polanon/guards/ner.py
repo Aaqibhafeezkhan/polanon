@@ -64,6 +64,24 @@ _LOAD_LOCK = threading.Lock()
 CACHE_TEXTS = 20_000
 _CACHE_LOCK = threading.Lock()
 
+#: The parties of a Polish contract in their cases, which it writes with a capital letter.
+_CONTRACT_PARTIES = """
+    najemca najemcy najemcę najemcą najemców najemcom najemcami
+    wynajmujący wynajmującego wynajmującemu wynajmującym wynajmująca wynajmującej wynajmującą
+    zleceniodawca zleceniodawcy zleceniodawcę zleceniodawcą
+    zleceniobiorca zleceniobiorcy zleceniobiorcę zleceniobiorcą
+    zamawiający zamawiającego zamawiającemu zamawiającym zamawiająca zamawiającej zamawiającą
+    wykonawca wykonawcy wykonawcę wykonawcą
+    sprzedający sprzedającego sprzedającemu sprzedającym sprzedawca sprzedawcy sprzedawcę
+    sprzedawcą kupujący kupującego kupującemu kupującym nabywca nabywcy nabywcę nabywcą
+    pracodawca pracodawcy pracodawcę pracodawcą pracownik pracownika pracownikowi pracownikiem
+    dzierżawca dzierżawcy dzierżawcę dzierżawcą
+    wydzierżawiający wydzierżawiającego wydzierżawiającemu wydzierżawiającym
+    pożyczkodawca pożyczkodawcy pożyczkodawcę pożyczkodawcą
+    pożyczkobiorca pożyczkobiorcy pożyczkobiorcę pożyczkobiorcą
+    strona strony stronie stronę stroną stron stronom stronami
+"""
+
 #: Form and document labels the Polish models sometimes tag as names. Masking them only makes the
 #: text harder to read, and they identify nobody. A span is dropped when *every* word in it is on
 #: this list, which is what catches a heading like "NOTATKA WEWNĘTRZNA" without needing the phrase.
@@ -315,6 +333,9 @@ LABEL_STOPWORDS = frozenset(
         "momsreg.nr",
         "org.nr",
         "geschäftsführer",
+        # The parties of a Polish contract, which it writes with a capital letter as defined
+        # terms: in a lease read by an agent the model took "Najemcy" for a company.
+        *_CONTRACT_PARTIES.split(),
     }
 )
 
