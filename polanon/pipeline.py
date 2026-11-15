@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from polanon._detection import detect
-from polanon._known_parts import known_parts
+from polanon._known_parts import known_parts, logins_of
 from polanon._matching import (
     TOKEN_RE,
     Haystack,
@@ -405,6 +405,8 @@ def _mask_stage1(
     for span in merged:
         value = text[span.start : span.end]
         _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
+    for login in logins_of(text, known.values()):
+        known.setdefault((login, folds("PERSON")), (login, "PERSON"))
     occupied = [(span.start, span.end) for span in merged] + tokens
     placement = place_known_values(
         text, haystack, known.values(), occupied, absorb=True, cross_occupied=True

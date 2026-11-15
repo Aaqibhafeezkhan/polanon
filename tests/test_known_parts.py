@@ -173,3 +173,19 @@ def test_a_name_from_the_callers_own_guard_gives_its_surname_even_with_an_unknow
     profile = FixedGuard("Bożydar Gąsiorek", "PERSON")
     result = Anonymizer([profile]).anonymize_sync("Bożydar Gąsiorek. Gąsiorek ma prawo jazdy.")
     assert result.anonymized == "<OSOBA_1>. <OSOBA_2> ma prawo jazdy."
+
+
+def test_a_login_made_of_a_known_surname_is_the_person_too():
+    """A backup's settings an agent read held "user.name=Tomasz Malinowski" and the directory
+    /home/tmalinowski: the surname was masked, the login made of it went out. A word in lowercase
+    that is the surname with an initial, a dot, an underscore or digits around it is the person
+    too; the surname alone in lowercase is not, since Zima or Kot are ordinary words as well."""
+    text = (
+        "user.name=Tomasz Malinowski\n"
+        "RESTIC_CACHE_DIR=/home/tmalinowski/.cache\n"
+        "ssh t.malinowski@nas, konto malinowski85 i malinowski_t, a malinowski sam nie."
+    )
+    masked = mask(text).anonymized
+    for login in ("tmalinowski", "t.malinowski", "malinowski85", "malinowski_t"):
+        assert login not in masked, login
+    assert " malinowski sam " in masked

@@ -178,6 +178,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   did. `MaskedTurn.mask_data`, `mask_messages` and the gateway now read a value under such a
   key, "birthday", "birth_date", "dateOfBirth", "dob" or "data_urodzenia", after the label of a
   birth date. A date under any other key stays readable.
+- **A login made of a known surname is the person.** A backup's settings in the agent's calls of
+  the benchmark held "user.name=Tomasz Malinowski" and the directory "/home/tmalinowski": the
+  name was masked, the login went out. A word in lowercase that is a known surname of six
+  letters or more with an initial, a dot, "_", "-" or digits around it, "tmalinowski",
+  "t.malinowski" or "malinowski85", is now masked with the name. The surname alone in
+  lowercase is still left as it is, since Zima, Kot or Wilk are ordinary words too.
 
 ## [0.3.5] - 2026-11-14
 

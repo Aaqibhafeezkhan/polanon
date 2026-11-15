@@ -9,6 +9,9 @@ same type, so it is masked wherever it stands, by the rules every known value fo
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
+
 from polanon.allowlist import WELL_KNOWN_NAMES
 from polanon.guards.names_pl import fold, person_name_parts
 from polanon.guards.recognizers_pl import profile_handle
@@ -44,3 +47,52 @@ def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
         ):
             return [handle]
     return []
+
+
+#: A surname shorter than this gives no login: "nowak" or "kot" stand in too many other words.
+MIN_LOGIN_SURNAME = 6
+
+#: A word written as a login or a handle is: small letters and digits, with dots, "_" or "-".
+_LOGIN = re.compile(r"(?<![\w.-])[a-z0-9ąćęłńóśźż][a-z0-9ąćęłńóśźż._-]*[a-z0-9ąćęłńóśźż](?![\w-])")
+#: What a login adds to a surname: an initial or two before it, then maybe a dot, "_" or "-";
+#: after it, maybe one of those and an initial or two, then maybe digits.
+_LOGIN_BEFORE = re.compile(r"(?:[a-z]{1,2}[._-]?)?")
+_LOGIN_AFTER = re.compile(r"(?:[._-]?[a-z]{1,2})?\d*")
+
+
+def logins_of(text: str, values: Iterable[tuple[str, str]]) -> list[str]:
+    """Return the words of `text` that are logins made of the surname of a known person.
+
+    A backup's settings an agent read held "user.name=Tomasz Malinowski" and the directory
+    "/home/tmalinowski": the surname was masked, the login made of it went out. A word in
+    lowercase that is a known surname of six letters or more with an initial, a dot, "_", "-" or
+    digits around it, "tmalinowski", "t.malinowski", "malinowski85", is the person too. The
+    surname alone in lowercase is left as it is, since Zima, Kot or Wilk are ordinary words.
+
+    Args:
+        text: the text being masked.
+        values: the known values as ``(value, entity_type)``, the parts of names among them.
+    """
+    surnames = {
+        fold(value.lower())
+        for value, entity_type in values
+        if entity_type == "PERSON" and value.isalpha() and len(value) >= MIN_LOGIN_SURNAME
+    }
+    if not surnames:
+        return []
+    found: list[str] = []
+    for match in _LOGIN.finditer(text):
+        word = fold(match[0])
+        for surname in surnames:
+            at = word.find(surname)
+            if at < 0:
+                continue
+            before, after = word[:at], word[at + len(surname) :]
+            if (
+                (before or after)
+                and _LOGIN_BEFORE.fullmatch(before)
+                and _LOGIN_AFTER.fullmatch(after)
+            ):
+                found.append(match[0])
+                break
+    return found
