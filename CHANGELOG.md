@@ -24,16 +24,20 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   documents it masks the same 184 values, with 8 over-masked spans instead of 6. The rules are
   the same in both modes. `benchmarks/run.py` and `benchmarks/run_agent.py` take `--paranoid`.
 
-- **A benchmark of an AI agent's calls.** `benchmarks/agent_corpus.py` holds four invented calls
-  of a personal assistant as its client sends them to a model: an English system prompt with a
-  Polish memory of its user, thirteen tool definitions, and the JSON its tools return from a
-  smart home, a web search, a shell and a mailbox, with code, a traceback and keys among it. The
-  52 values that must not reach the model are marked where they are written.
-  `benchmarks/run_agent.py` masks each call as the gateway does and counts what still reaches the
-  model and the tokens that hide nothing, with their uses: with `pl_core_news_md`, 2 of 122
-  occurrences and 54 of 218 uses, against 1 and 68 of 233 in 0.3.5, and 0 and 223 of 389 in
-  the new `mode="paranoid"`. `tests/test_agent_benchmark.py` holds both as bounds, and
-  CI prints the table.
+- **A benchmark of an AI agent's calls, and of what comes back.** `benchmarks/agent_corpus.py`
+  holds eight invented calls of a personal assistant as its client sends them to a model, seven
+  to Chat Completions and one to the Responses API: an English system prompt with a Polish memory
+  of its user, sixteen tool definitions, and the JSON its tools return from a smart home, a web
+  search, a shell, a mailbox, a contact book and a file, with code, a traceback, a system log,
+  keys, a lease with two PESEL numbers, and mail in German and Ukrainian among it. The 103 values
+  that must not reach the model are marked where they are written. `benchmarks/run_agent.py`
+  masks each call as the gateway does and counts what still reaches the model and the tokens
+  that hide nothing, with their uses. It then restores the model's answer to each call, written
+  with the call's tokens and the cases the Polish note asks for, as text, as a whole response and
+  as a stream cut at every place, and scores each line and argument against what a reader should
+  get back. With `pl_core_news_md`, 6 of 243 occurrences reach the model and 83 of 382 uses hide
+  nothing, against 5 and 110 of 410 in 0.3.5; 39 of 40 lines come back exact and none wrong.
+  `tests/test_agent_benchmark.py` holds all of it as bounds, and CI prints the tables.
 
 - **The gateway can send what it cannot mask, when told to.** `polanon-gateway
   --pass-unsupported` sends an image, a file or another part it cannot mask to the provider as it

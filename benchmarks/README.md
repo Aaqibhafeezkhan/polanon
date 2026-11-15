@@ -87,38 +87,61 @@ cannot quietly get worse.
 ## An AI agent's calls
 
 The documents above are what a person writes. An AI agent sends something else, and
-[`agent_corpus.py`](agent_corpus.py) holds four calls of an invented one, a personal assistant
+[`agent_corpus.py`](agent_corpus.py) holds eight calls of an invented one, a personal assistant
 on a home server, as its client sends them to a model: an English system prompt with a Polish
-memory of its user, thirteen tool definitions, Polish questions and Markdown answers, and the
-JSON its tools return from a smart home, a web search, a shell and a mailbox. English stands next
-to Polish on one line, there is code, a traceback, a configuration file with keys in it,
-identifiers such as `notify.mobile_app_pixel_7_tomka`, and every call sends the history again.
-The 52 values that must not reach the model are marked where they are written, and stand 122
-times in the four calls; 18 more, such as a first name alone or the byline of a published review,
-may be masked or not.
+memory of its user, sixteen tool definitions, Polish questions and Markdown answers, and the JSON
+its tools return from a smart home, a web search, a shell, a mailbox, a contact book and a file.
+English stands next to Polish on one line, there is code, a traceback, a system log, a
+configuration file with keys in it, a lease with two PESEL numbers, mail in German and Ukrainian,
+a page in Chinese, identifiers such as `notify.mobile_app_pixel_7_tomka`, and every call sends
+the history again. Seven calls use Chat Completions, one the Responses API. The 103 values that
+must not reach the model are marked where they are written, and stand 243 times in the eight
+calls; 27 more, such as a first name alone or the byline of a published review, may be masked or
+not.
 
-[`run_agent.py`](run_agent.py) masks each call as the gateway does and counts two things: the
-marked values that still reach the model, and the tokens that hide nothing, with the number of
-times the masked calls use them. The second number is what over-masking costs the model: a
-button's "Uncheck" or a chip's "Max" made a token is a word it cannot read, and a value masked
-once is masked wherever it stands.
+[`run_agent.py`](run_agent.py) masks each call as the gateway does and counts what still reaches
+the model and the tokens that hide nothing, with the number of times the masked calls use them.
+The second number is what over-masking costs the model: a button's "Uncheck" or a chip's "Max"
+made a token is a word it cannot read, and a value masked once is masked wherever it stands.
 
 | Configuration | Leaked | Tokens that hide nothing | Their uses |
 |---|---:|---:|---:|
-| polanon, guards only, no model | 20 of 122 | 0 | 0 of 143 |
-| polanon 0.3.5, guards + `pl_core_news_md` | 1 of 122 | 20 | 68 of 233 |
-| polanon, guards + `pl_core_news_md` | **2 of 122** | 12 | **54 of 218** |
-| the same, `mode="paranoid"` | 0 of 122 | 128 | 223 of 389 |
+| polanon, guards only, no model | 40 of 243 | 0 | 0 of 260 |
+| polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
+| polanon, guards + `pl_core_news_md` | **6 of 243** | 23 | **83 of 382** |
+| the same, `mode="paranoid"` | 3 of 243 | 243 | 398 of 706 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
-nothing is masked for nothing. With the model, two values leak by design: "sopotu", a place typed
+nothing is masked for nothing. With the model two values leak by design: "sopotu", a place typed
 in lowercase in a chat, dropped since a place in lowercase stopped being one, so that "text" and
 "service" of a manual are not, and "Erik Holm" opening an English sentence, where a capitalised
-word is read as English. `mode="paranoid"` takes every
-name the model finds: it leaks nothing and wastes more than half of the token uses, on "return",
-"message", "notify" and "That's". On the twelve documents it masks the same 184 values as the
-default, with 8 over-masked spans instead of 6. What the default still masks for nothing is mostly "Max", of
-the chip, the vacuum's fan speed and "Max results" in the tools, and "Dell".
+word is read as English. Four more no guard finds in any mode: two birthdays under a contact's
+`birthday` key with no label before them, a name written in Cyrillic, and, in the default mode, a
+login made of a surname in a path, `/home/tmalinowski`. `mode="paranoid"` takes every name the
+model finds and wastes more than half of the token uses, on "return", "message", "notify" and
+"That's". On the twelve documents it masks the same 184 values as the default, with 8
+over-masked spans instead of 6. What the default still masks for nothing is mostly "Max", of the
+chip, the vacuum's fan speed and "Max results" in the tools, "Dell" and German nouns.
+
+Each call also has the model's answer, in
+[`agent_corpus.ANSWERS`](agent_corpus.py): Polish lines and a tool call written with the call's
+tokens, many with the case the Polish note of `token_instructions` asks for,
+`<OSOBA_3:wołacz>`, and with the text a reader should get back written by hand, "Szanowna Pani
+Renato Kubiak". The answer is put back three ways: as text, as a whole response, and as a stream
+cut into pieces of 1 to 21 characters, so a token arrives cut at every place. Each of its 40
+lines and arguments is exact, comes back as the call wrote it instead of in the case asked for,
+or is wrong:
+
+| Configuration | Text | Response | Stream (35, Chat Completions) |
+|---|---:|---:|---:|
+| polanon 0.3.5, guards + `pl_core_news_md` | 38 / 2 / 0 | 38 / 2 / 0 | 34 / 1 / 0 |
+| polanon, guards + `pl_core_news_md` | **39 / 1 / 0** | **39 / 1 / 0** | **35 / 0 / 0** |
+| the same, `mode="paranoid"` | 38 / 2 / 0 | 38 / 2 / 0 | 34 / 1 / 0 |
+
+Nothing comes back wrong, and no token is left in an answer. What comes back as written is a
+name polanon cannot decline for sure, "Olena Kovalenko" asked for in the genitive. A value that
+leaked reached the model as it is, so the model writes its case itself and the line counts as
+exact: the rules alone score 40 of 40, which says little.
 [`tests/test_agent_benchmark.py`](../tests/test_agent_benchmark.py) holds these numbers as
 bounds both ways.
 

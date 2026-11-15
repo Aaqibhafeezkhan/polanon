@@ -135,12 +135,12 @@ SYSTEM = (
 
 TOOLS = [
     _tool(
-        "ha_get_state",
+        "home_state",
         "Get the current state and attributes of one Home Assistant entity.",
         entity_id=_text("The entity, such as light.kitchen or person.anna."),
     ),
     _tool(
-        "ha_call_service",
+        "home_service",
         "Call a Home Assistant service, such as light.turn_on. That's the only way to change a "
         "device.",
         domain=_text("The service domain, such as light or vacuum."),
@@ -148,7 +148,7 @@ TOOLS = [
         service_data={"type": "object", "description": "The data of the call, as JSON."},
     ),
     _tool(
-        "ha_list_entities",
+        "home_entities",
         "List the entities of one domain. Max 200 entities per call.",
         domain=_text("The domain to list, such as notify or sensor."),
         include_disabled={
@@ -157,52 +157,70 @@ TOOLS = [
         },
     ),
     _tool(
-        "web_search",
+        "search_web",
         "Search the web and return titles, links and snippets.",
         query=_text("What to search for."),
         max_results={"type": "integer", "description": "Max results to return, 1 to 10."},
     ),
     _tool(
-        "web_extract",
+        "fetch_page",
         "Fetch a page and return its main text as Markdown, without menus and cookie banners.",
         url=_text("The address of the page."),
     ),
     _tool(
-        "terminal",
+        "shell",
         "Run a shell command on the server. Before a command that changes files, say what it "
         "will do.",
         command=_text("The command, run with bash."),
     ),
-    _tool("read_file", "Read a text file from the workspace.", path=_text("The file's path.")),
+    _tool("open_file", "Read a text file from the workspace.", path=_text("The file's path.")),
     _tool(
-        "execute_code",
+        "run_python",
         "Run Python in a sandbox and return stdout, stderr and the exit code.",
         code=_text("The program."),
     ),
     _tool(
-        "skill_view",
+        "show_skill",
         "Show the instructions of a skill.",
         name=_text("The skill, as the system prompt lists it."),
     ),
     _tool(
-        "email_search",
+        "mail_search",
         "Search the mailbox. Authorization is handled by the server.",
         query=_text("A Gmail-style query, such as is:unread."),
         max_results={"type": "integer", "description": "Max messages to return."},
     ),
-    _tool("email_read", "Read one message with its body.", id=_text("The message id.")),
+    _tool("mail_read", "Read one message with its body.", id=_text("The message id.")),
     _tool(
-        "calendar_create",
+        "calendar_add",
         "Create an event in the user's calendar.",
         summary=_text("The title."),
         start=_text("The start, as ISO 8601."),
         location=_text("Where, written as the user would."),
     ),
     _tool(
-        "send_message",
+        "notify",
         "Send a chat message or a phone notification. Never use it without the user's yes.",
         target=_text("The notify entity or the chat."),
         message=_text("The text."),
+    ),
+    _tool(
+        "contacts_search",
+        "Search the user's contacts by name, company or birthday month.",
+        query=_text("What to look for, such as birthday:11 or a surname."),
+    ),
+    _tool(
+        "contacts_add",
+        "Add a contact or a phone number to an existing one.",
+        name=_text("The contact's name."),
+        phone=_text("The phone number, as written."),
+    ),
+    _tool(
+        "mail_send",
+        "Send an e-mail from the user's mailbox. Never use it without the user's yes.",
+        to=_text("The address."),
+        subject=_text("The subject."),
+        body=_text("The text of the message."),
     ),
 ]
 
@@ -211,7 +229,7 @@ def _home() -> list[dict[str, Any]]:
     """The smart home: a person's whereabouts, the lights, notifications, the vacuum."""
     return [
         _user("Zgaś światło w salonie i sprawdź, czy Tomek już wrócił."),
-        _assistant(None, _call("call_h1", "ha_get_state", entity_id="person.tomek")),
+        _assistant(None, _call("call_h1", "home_state", entity_id="person.tomek")),
         _result(
             "call_h1",
             {
@@ -234,7 +252,7 @@ def _home() -> list[dict[str, Any]]:
             None,
             _call(
                 "call_h2",
-                "ha_call_service",
+                "home_service",
                 domain="light",
                 service="turn_off",
                 service_data={"entity_id": "light.salon"},
@@ -265,7 +283,7 @@ def _home() -> list[dict[str, Any]]:
             "Dobra. Wyślij mu, żeby kupił mleko, i wpisz mi wizytę u dr [[PERSON:Beaty Sowy]] "
             "w czwartek o 10."
         ),
-        _assistant(None, _call("call_h3", "ha_list_entities", domain="notify")),
+        _assistant(None, _call("call_h3", "home_entities", domain="notify")),
         _result(
             "call_h3",
             {
@@ -296,13 +314,13 @@ def _home() -> list[dict[str, Any]]:
             None,
             _call(
                 "call_h4",
-                "send_message",
+                "notify",
                 target="notify.mobile_app_pixel_7_tomka",
                 message="Kup proszę mleko w drodze do domu.",
             ),
             _call(
                 "call_h5",
-                "calendar_create",
+                "calendar_add",
                 summary="Wizyta: dr [[PERSON:Beata Sowa]]",
                 start="2026-11-19T10:00:00+01:00",
                 location="Przychodnia Morska, [[ADDRESS:ul. Morska 21]], [[POSTAL_CODE:81-225]] "
@@ -324,9 +342,7 @@ def _home() -> list[dict[str, Any]]:
             "Morska, ul. Morska 21."
         ),
         _user("Odkurzacz niech posprząta kuchnię, ale bez mopowania."),
-        _assistant(
-            None, _call("call_h6", "ha_get_state", entity_id="vacuum.roborock_s8_pro_ultra")
-        ),
+        _assistant(None, _call("call_h6", "home_state", entity_id="vacuum.roborock_s8_pro_ultra")),
         _result(
             "call_h6",
             {
@@ -352,7 +368,7 @@ def _home() -> list[dict[str, Any]]:
             None,
             _call(
                 "call_h7",
-                "ha_call_service",
+                "home_service",
                 domain="vacuum",
                 service="send_command",
                 service_data={
@@ -413,7 +429,7 @@ def _shopping() -> list[dict[str, Any]]:
             None,
             _call(
                 "call_s1",
-                "web_search",
+                "search_web",
                 query="MacBook Pro M4 Max vs Dell XPS 14 review",
                 max_results=3,
             ),
@@ -449,7 +465,7 @@ def _shopping() -> list[dict[str, Any]]:
         ),
         _assistant(
             None,
-            _call("call_s2", "web_extract", url="https://reviews.example/macbook-pro-m4-max"),
+            _call("call_s2", "fetch_page", url="https://reviews.example/macbook-pro-m4-max"),
         ),
         _result(
             "call_s2", {"url": "https://reviews.example/macbook-pro-m4-max", "content": review}
@@ -537,7 +553,7 @@ def _code() -> list[dict[str, Any]]:
             None,
             _call(
                 "call_c1",
-                "terminal",
+                "shell",
                 command="cd ~/faktury && git log -3 --format='%h %an <%ae> %s'",
             ),
         ),
@@ -558,18 +574,18 @@ def _code() -> list[dict[str, Any]]:
             None,
             _call(
                 "call_c2",
-                "terminal",
+                "shell",
                 command="cd ~/faktury && python3 generuj.py --miesiac 2026-10",
             ),
         ),
         _result("call_c2", {"output": traceback, "exit_code": 1, "error": None}),
-        _assistant(None, _call("call_c3", "read_file", path="~/faktury/config.yaml")),
+        _assistant(None, _call("call_c3", "open_file", path="~/faktury/config.yaml")),
         _result("call_c3", {"path": "/home/agnieszka/faktury/config.yaml", "content": config}),
         _assistant(
             None,
             _call(
                 "call_c4",
-                "execute_code",
+                "run_python",
                 code="import requests\n"
                 "r = requests.get('https://crm.example/api/klienci', timeout=10)\n"
                 "print(r.status_code)\n"
@@ -590,10 +606,10 @@ def _code() -> list[dict[str, Any]]:
         ),
         _assistant(
             None,
-            _call("call_c5", "terminal", command="cd ~/faktury && python3 -m pytest -q"),
+            _call("call_c5", "shell", command="cd ~/faktury && python3 -m pytest -q"),
             _call(
                 "call_c6",
-                "execute_code",
+                "run_python",
                 code="print(open('/home/agnieszka/faktury/wyjscie/2026-10.csv').read())",
             ),
         ),
@@ -663,9 +679,9 @@ def _mail() -> list[dict[str, Any]]:
     )
     return [
         _user("Przejrzyj nowe maile i powiedz, co pilne."),
-        _assistant(None, _call("call_m1", "skill_view", name="mail-triage")),
+        _assistant(None, _call("call_m1", "show_skill", name="mail-triage")),
         _result("call_m1", {"name": "mail-triage", "content": skill}),
-        _assistant(None, _call("call_m2", "email_search", query="is:unread", max_results=10)),
+        _assistant(None, _call("call_m2", "mail_search", query="is:unread", max_results=10)),
         _result(
             "call_m2",
             {
@@ -695,9 +711,9 @@ def _mail() -> list[dict[str, Any]]:
         ),
         _assistant(
             None,
-            _call("call_m3", "email_read", id="18c2f1a9"),
-            _call("call_m4", "email_read", id="18c2f3b0"),
-            _call("call_m5", "email_read", id="18c2f5d2"),
+            _call("call_m3", "mail_read", id="18c2f1a9"),
+            _call("call_m4", "mail_read", id="18c2f3b0"),
+            _call("call_m5", "mail_read", id="18c2f5d2"),
         ),
         _result("call_m3", {"id": "18c2f1a9", "body": accountant}),
         _result("call_m4", {"id": "18c2f3b0", "body": client}),
@@ -723,6 +739,306 @@ def _mail() -> list[dict[str, Any]]:
     ]
 
 
+def _contacts() -> list[dict[str, Any]]:
+    """A contact book and a calendar: names in their cases, birthdays, phones written three ways."""
+    return [
+        _user(
+            "Kto ma urodziny w tym miesiącu? I dodaj spotkanie z [[PERSON:Ireną Nowicką]] na "
+            "piątek w południe."
+        ),
+        _assistant(None, _call("call_k1", "contacts_search", query="birthday:11")),
+        _result(
+            "call_k1",
+            {
+                "contacts": [
+                    {
+                        "name": "[[PERSON:Irena Nowicka]]",
+                        "phone": "[[PHONE:+48 693 418 207]]",
+                        "email": "[[EMAIL:irena.nowicka@poczta.example]]",
+                        "birthday": "[[BIRTH_DATE:1961-11-21]]",
+                        "notes": "architektka, poleciła ją [[?PERSON:Ola]]",
+                    },
+                    {
+                        "name": "[[PERSON:Wiesława Bąk]]",
+                        "phone": "[[PHONE:58 621 44 09]]",
+                        "address": "[[ADDRESS:ul. Kasztanowa 3/12]], [[POSTAL_CODE:81-506]] Gdynia",
+                        "birthday": "[[BIRTH_DATE:1957-11-03]]",
+                        "notes": "mama Tomka",
+                    },
+                    {
+                        "name": "[[PERSON:Krzysztof Dudek]]",
+                        "company": "[[ORG:Dudek Instalacje]]",
+                        "phone": "[[PHONE:604112958]]",
+                        "birthday": None,
+                        "notes": "hydraulik, polecił go [[?PERSON:Jerzy]]; faktury na NIP "
+                        "[[NIP:6762309816]]",
+                    },
+                ],
+                "total": 3,
+            },
+        ),
+        _assistant(
+            "W listopadzie urodziny mają **Wiesława Bąk** ([[?BIRTH_DATE:3.11]]) i **Irena "
+            "Nowicka** ([[?BIRTH_DATE:21.11]])."
+        ),
+        _assistant(
+            None,
+            _call(
+                "call_k2",
+                "calendar_add",
+                summary="Spotkanie z Ireną Nowicką",
+                start="2026-11-20T12:00:00+01:00",
+                location="Pracownia, ul. Wrzosowa 14",
+            ),
+        ),
+        _result(
+            "call_k2",
+            {
+                "id": "evt_2b81d0",
+                "status": "confirmed",
+                "attendees": [
+                    {"email": "irena.nowicka@poczta.example", "responseStatus": "needsAction"}
+                ],
+            },
+        ),
+        _user("Super. Napisz [[?PERSON:Wiesławie]] życzenia, ale jeszcze nie wysyłaj."),
+    ]
+
+
+def _lease() -> list[dict[str, Any]]:
+    """A Polish lease read from a file: two people, PESEL, an ID card, addresses, an account."""
+    lease = (
+        "UMOWA NAJMU LOKALU MIESZKALNEGO\n"
+        "\n"
+        "zawarta w dniu 1 marca 2026 r. w [[LOCATION:Gdańsku]] pomiędzy:\n"
+        "\n"
+        "1. Panem [[PERSON:Grzegorzem Lisem]], PESEL [[PESEL:03510213755]], legitymującym się "
+        "dowodem osobistym nr [[PL_ID:ABC412345]], zamieszkałym przy "
+        "[[ADDRESS:ul. Grunwaldzkiej 88/5]], [[POSTAL_CODE:80-244]] [[LOCATION:Gdańsk]], zwanym "
+        "dalej Wynajmującym,\n"
+        "\n"
+        "a\n"
+        "\n"
+        "2. Panią [[PERSON:Martą Zając]], PESEL [[PESEL:52892730268]], zamieszkałą przy "
+        "[[ADDRESS:ul. Morenowej 7]], [[POSTAL_CODE:80-279]] Gdańsk, zwaną dalej Najemcą.\n"
+        "\n"
+        "§ 1. Wynajmujący oddaje Najemcy w najem lokal przy [[ADDRESS:ul. Chlebnickiej 12/4]] "
+        "w Gdańsku, o powierzchni 48 m².\n"
+        "\n"
+        "§ 4. Czynsz wynosi 2 800 zł miesięcznie i jest płatny do 10. dnia miesiąca na rachunek "
+        "[[IBAN:PL43249000050000460072214503]].\n"
+        "\n"
+        "§ 9. Każda ze stron może wypowiedzieć umowę z zachowaniem trzymiesięcznego okresu "
+        "wypowiedzenia, ze skutkiem na koniec miesiąca kalendarzowego.\n"
+        "\n"
+        "Strona 2 z 3\n"
+        "\n"
+        "Wynajmujący: [[PERSON:Grzegorz Lis]]          Najemca: [[PERSON:Marta Zając]]\n"
+    )
+    return [
+        _user(
+            "Klientka przysłała umowę najmu. Przeczytaj i powiedz, do kiedy może ją wypowiedzieć, "
+            "żeby wyprowadzić się z końcem lutego."
+        ),
+        _assistant(None, _call("call_u1", "open_file", path="/srv/dokumenty/umowa_najmu_2026.pdf")),
+        _result(
+            "call_u1", {"path": "/srv/dokumenty/umowa_najmu_2026.pdf", "pages": 3, "text": lease}
+        ),
+        _assistant(
+            "Umowę zawarli **Grzegorz Lis** (wynajmujący) i **Marta Zając** (najemczyni). Okres "
+            "wypowiedzenia to **3 miesiące** ze skutkiem na koniec miesiąca (§ 9), więc "
+            "wypowiedzenie musi dotrzeć do wynajmującego **do 30 listopada**."
+        ),
+        _user("Napisz jej wzór wypowiedzenia."),
+    ]
+
+
+def _backup() -> list[dict[str, Any]]:
+    """A failed backup: a system log, an environment file with a password, git's config, a LAN."""
+    log = (
+        "Nov 15 03:00:01 nas-backup systemd[1]: Starting restic-backup.service...\n"
+        "Nov 15 03:00:02 nas-backup restic[48211]: repository 7c1e9a3f opened (version 2)\n"
+        "Nov 15 03:00:04 nas-backup restic[48211]: Fatal: unable to open repository at "
+        "sftp:backup@[[IP_ADDRESS:192.168.1.20]]:/volume1/restic: ssh: handshake failed: host "
+        "key mismatch\n"
+        "Nov 15 03:00:04 nas-backup systemd[1]: restic-backup.service: Main process exited, "
+        "code=exited, status=1/FAILURE\n"
+        "Nov 15 03:00:04 nas-backup systemd[1]: Failed to start restic-backup.service.\n"
+    )
+    settings = (
+        "RESTIC_REPOSITORY=sftp:backup@192.168.1.20:/volume1/restic\n"
+        "RESTIC_PASSWORD=[[SECRET:Kasztan-Wrzos-Lipa-2026]]\n"
+        "RESTIC_CACHE_DIR=/home/[[PERSON:tmalinowski]]/.cache/restic\n"
+        "user.name=Tomasz Malinowski\n"
+        "user.email=[[EMAIL:tomasz@malinowscy.example]]\n"
+        "core.editor=vim\n"
+        "init.defaultbranch=main\n"
+    )
+    return [
+        _user("Backup na NAS-a znowu nie poszedł w nocy. Sprawdź czemu."),
+        _assistant(
+            None,
+            _call(
+                "call_b1", "shell", command="journalctl -u restic-backup --since today --no-pager"
+            ),
+        ),
+        _result("call_b1", {"output": log, "exit_code": 0, "error": None}),
+        _assistant(
+            None,
+            _call(
+                "call_b2", "shell", command="cat /etc/restic/backup.env; git config --global --list"
+            ),
+        ),
+        _result("call_b2", {"output": settings, "exit_code": 0, "error": None}),
+        _assistant(
+            None,
+            _call("call_b3", "home_entities", domain="device_tracker", include_disabled=False),
+        ),
+        _result(
+            "call_b3",
+            {
+                "count": 3,
+                "entities": [
+                    {
+                        "entity_id": "device_tracker.nas",
+                        "friendly_name": "NAS",
+                        "ip": "192.168.1.20",
+                        "mac": "[[MAC_ADDRESS:3C:52:82:1F:9A:04]]",
+                        "last_seen": 1763175604,
+                    },
+                    {
+                        "entity_id": "device_tracker.pixel_7_tomka",
+                        "friendly_name": "Pixel 7 Tomka",
+                        "ip": "[[IP_ADDRESS:192.168.1.34]]",
+                        "mac": "[[MAC_ADDRESS:A4:C3:F0:5E:21:7B]]",
+                        "last_seen": 1763208011,
+                    },
+                    {
+                        "entity_id": "device_tracker.drukarka",
+                        "friendly_name": "Drukarka",
+                        "ip": "[[IP_ADDRESS:192.168.1.51]]",
+                        "mac": "[[MAC_ADDRESS:00:1B:A9:4C:77:10]]",
+                        "last_seen": 1763207420,
+                    },
+                ],
+            },
+        ),
+        _assistant(
+            "Repozytorium na NAS-ie (`192.168.1.20`) odrzuca połączenie: **host key mismatch**. "
+            "NAS zmienił klucz SSH, pewnie po aktualizacji systemu. Wystarczy usunąć stary wpis z "
+            "`~/.ssh/known_hosts` i połączyć się raz ręcznie, żeby zapisać nowy."
+        ),
+        _user("Ok, zrób to i odpal backup jeszcze raz."),
+    ]
+
+
+def _abroad() -> dict[str, Any]:
+    """Mail in German and in Ukrainian and a page in Chinese, as a Responses API request."""
+    german = (
+        "Sehr geehrte Frau Malinowska,\n"
+        "\n"
+        "vielen Dank für Ihr Angebot. Unser Geschäftsführer, Herr [[PERSON:Jürgen Weiß]], möchte "
+        "die Ausstellung in unserem Laden in der [[ADDRESS:Bergmannstraße 42]], "
+        "[[POSTAL_CODE:10961]] [[LOCATION:Berlin]] persönlich besprechen. Passt Ihnen Donnerstag "
+        "um 15 Uhr?\n"
+        "\n"
+        "Mit freundlichen Grüßen\n"
+        "[[PERSON:Sabine Krüger]]\n"
+        "[[ORG:Krüger & Weiß Raumdesign GmbH]]\n"
+        "Tel. [[PHONE:+49 30 6981 4402]]"
+    )
+    ukrainian = (
+        "Добрий день, пані [[?PERSON:Агнешко]]!\n"
+        "\n"
+        "Це [[PERSON:Олена Коваленко]] з бригади оздоблення. Ми закінчимо фарбування на вулиці "
+        "Морській у четвер. Мій новий номер: [[PHONE:+48 731 205 649]].\n"  # noqa: RUF001
+        "\n"
+        "Дякую!"
+    )
+    page = (
+        "# Mop Assistant\n"
+        "\n"
+        "## 安装\n"
+        "\n"
+        "1. 在 HACS 中搜索 Mop Assistant 并安装。\n"
+        "2. 重启 Home Assistant。\n"
+        "\n"
+        "## 配置\n"
+        "\n"
+        "在 设置 → 设备与服务 中添加集成，然后输入设备的 IP 地址。\n"  # noqa: RUF001
+        "\n"
+        "Max 3 devices per account. Before you update, back up the integration's settings."
+    )
+
+    def message(role: str, text: str) -> dict[str, Any]:
+        kind = "input_text" if role == "user" else "output_text"
+        return {"type": "message", "role": role, "content": [{"type": kind, "text": text}]}
+
+    def call(call_id: str, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        arguments_text = json.dumps(arguments, ensure_ascii=False)
+        return {
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": arguments_text,
+        }
+
+    def output(call_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        text = json.dumps(payload, ensure_ascii=False)
+        return {"type": "function_call_output", "call_id": call_id, "output": text}
+
+    return {
+        "model": "deepseek/deepseek-chat",
+        "instructions": SYSTEM,
+        "input": [
+            message(
+                "user",
+                "Mam dwie nowe wiadomości, po niemiecku i po ukraińsku. Przetłumacz i powiedz, co "
+                "odpisać. I sprawdź tę integrację do mopa.",
+            ),
+            call("call_f1", "mail_read", {"id": "18c3a0e1"}),
+            output(
+                "call_f1",
+                {
+                    "id": "18c3a0e1",
+                    "from": "[[EMAIL:s.krueger@kw-raumdesign.example]]",
+                    "body": german,
+                },
+            ),
+            call("call_f2", "mail_read", {"id": "18c3a0f4"}),
+            output(
+                "call_f2",
+                {
+                    "id": "18c3a0f4",
+                    "from": "[[EMAIL:olena.kovalenko@poczta.example]]",
+                    "body": ukrainian,
+                },
+            ),
+            call("call_f3", "fetch_page", {"url": "https://integrations.example/mop-assistant"}),
+            output(
+                "call_f3", {"url": "https://integrations.example/mop-assistant", "content": page}
+            ),
+            message(
+                "assistant",
+                "**Po niemiecku**: Sabine Krüger z Krüger & Weiß Raumdesign GmbH pisze, że ich "
+                "szef, Jürgen Weiß, chce omówić wystawę w sklepie przy Bergmannstraße 42 w "
+                "[[LOCATION:Berlinie]], w czwartek o 15:00.\n"
+                "**Po ukraińsku**: [[PERSON:Olena Kovalenko]] z ekipy wykończeniowej skończy "
+                "malowanie na [[?LOCATION:Morskiej]] w czwartek i podaje nowy numer.\n"
+                "**Integracja**: Mop Assistant instaluje się przez HACS, najwyżej 3 urządzenia na "
+                "konto.",
+            ),
+            message(
+                "user",
+                "Odpisz [[?PERSON:Sabine]] po niemiecku, że czwartek pasuje, i zapisz nowy numer "
+                "[[?PERSON:Oleny]] w kontaktach.",
+            ),
+        ],
+        "tools": [{"type": "function", **tool["function"]} for tool in TOOLS],
+        "store": False,
+    }
+
+
 def _request(messages: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "model": "deepseek/deepseek-chat",
@@ -733,12 +1049,129 @@ def _request(messages: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-#: The calls by name, each the whole request the agent's client sends, marks still in it.
+#: The calls by name, each the whole request the agent's client sends, marks still in it. A
+#: request with "input" is one of the Responses API, every other one of Chat Completions.
 MARKED_CALLS: dict[str, dict[str, Any]] = {
     "dom": _request(_home()),
     "zakupy": _request(_shopping()),
     "kod": _request(_code()),
     "poczta": _request(_mail()),
+    "kontakty": _request(_contacts()),
+    "umowa": _request(_lease()),
+    "backup": _request(_backup()),
+    "zagranica": _abroad(),
+}
+
+
+@dataclass(frozen=True)
+class Answer:
+    """What the model answers to a call, written with the values it was sent.
+
+    ``{{value}}`` stands for the token of a value the call holds as written, and
+    ``{{value|case=form}}`` for the token with a case after it, as the Polish note of
+    :func:`polanon.token_instructions` asks for: ``form`` is the value in that case, written by
+    hand, the text a reader should get back. A value the masking left in the clear reached the
+    model as it is, and the model writes it in the right form itself.
+    """
+
+    lines: tuple[str, ...]
+    tool: str | None = None
+    arguments: dict[str, str] | None = None
+
+
+#: The answer to each call. Every line holds what should come back, so a line is scored whole.
+ANSWERS: dict[str, Answer] = {
+    "dom": Answer(
+        (
+            "W pokoju {{Zosi}} jest 21,5°C.",
+            "Ustawiłam ogrzewanie na 17°C na jutro, kiedy będziecie w "
+            "{{sopotu|miejscownik=Sopocie}}.",
+            "Przypomnę też {{Tomasz Malinowski|celownik=Tomaszowi Malinowskiemu}} o mleku.",
+            "Nie wiem, kto to jest <OSOBA_999>, nie mam go w kontaktach.",
+        ),
+        tool="notify",
+        arguments={
+            "target": "notify.mobile_app_pixel_7_tomka",
+            "message": "Pamiętaj o mleku. {{Agnieszka Malinowska}}",
+        },
+    ),
+    "zakupy": Answer(
+        (
+            "Zamówione na {{Pracownia Malinowska Sp. z o.o.}}, NIP {{5843012764}}.",
+            "Dostawa do {{Agnieszka Malinowska|dopełniacz=Agnieszki Malinowskiej}}, "
+            "{{ul. Wrzosowa 14}}, {{81-577}} {{Gdynia}}.",
+            "Kurier zadzwoni pod {{+48 512 307 846}}.",
+        ),
+    ),
+    "kod": Answer(
+        (
+            "Testy: jeden pada, `test_kwota_brutto`, przez zaokrąglenie w `brutto()`.",
+            "Faktury z października: {{Studio Lumen Sp. z o.o.}}, {{Marek Wójcik}} i "
+            "{{Kawiarnia Pod Lipą s.c.}}.",
+            "Wyślę je {{Paweł Zieliński|celownik=Pawłowi Zielińskiemu}} na "
+            "{{pawel.zielinski@devhouse.example}}.",
+        ),
+        tool="mail_send",
+        arguments={
+            "to": "{{pawel.zielinski@devhouse.example}}",
+            "subject": "Faktury za październik",
+            "body": "Cześć {{Paweł Zieliński|wołacz=Pawle Zieliński}}, import z KSeF działa. "
+            "Faktura dla {{Marek Wójcik|dopełniacz=Marka Wójcika}} jest w załączniku.",
+        },
+    ),
+    "poczta": Answer(
+        (
+            "Szanowna Pani {{Renata Kubiak|wołacz=Renato Kubiak}},",
+            "w załączniku przesyłam faktury kosztowe za październik i umowę ze "
+            "{{Studio Lumen Sp. z o.o.}}.",
+            "Pozdrawiam, {{Agnieszka Malinowska}}",
+            "Dear {{Oskar Lindgren}}, I confirm the lighting for {{Hamngatan 18}}.",
+        ),
+        tool="mail_send",
+        arguments={
+            "to": "{{biuro@kubiak-ksiegowosc.example}}",
+            "subject": "Faktury za październik",
+            "body": "Szanowna Pani {{Renata Kubiak|wołacz=Renato Kubiak}}, przesyłam faktury.",
+        },
+    ),
+    "kontakty": Answer(
+        (
+            "Spotkanie z {{Ireną Nowicką}} w piątek 20.11 o 12:00, zaproszenie poszło na "
+            "{{irena.nowicka@poczta.example}}.",
+            "Życzenia dla {{Wiesława Bąk|dopełniacz=Wiesławy Bąk}}:",
+            "Droga {{Wiesława Bąk|wołacz=Wiesławo Bąk}}, wszystkiego najlepszego!",
+            "Mogę też zaprosić {{Krzysztof Dudek|biernik=Krzysztofa Dudka}}.",
+        ),
+    ),
+    "umowa": Answer(
+        (
+            "Adresat: {{Grzegorzem Lisem|mianownik=Grzegorz Lis}}, {{ul. Grunwaldzkiej 88/5}}.",
+            "Szanowny Panie {{Grzegorzem Lisem|wołacz=Grzegorzu Lisie}},",
+            "wypowiadam umowę najmu lokalu przy {{ul. Chlebnickiej 12/4}} w {{Gdańsku}}.",
+            "Z poważaniem, {{Martą Zając|mianownik=Marta Zając}}",
+            "Pismo musi dotrzeć do {{Grzegorzem Lisem|dopełniacz=Grzegorza Lisa}} do 30 listopada.",
+        ),
+    ),
+    "backup": Answer(
+        (
+            "Usunęłam stary klucz {{192.168.1.20}} z `known_hosts` i zapisałam nowy.",
+            "Backup ruszył: `restic backup /home/{{tmalinowski}}`.",
+            "Raport wyślę na {{tomasz@malinowscy.example}}, jak się skończy.",
+        ),
+        tool="shell",
+        arguments={
+            "command": "ssh-keygen -R {{192.168.1.20}} && systemctl start restic-backup",
+        },
+    ),
+    "zagranica": Answer(
+        (
+            "Antwort an {{Sabine Krüger}}:",
+            "Sehr geehrte Frau {{Sabine Krüger}}, Donnerstag um 15 Uhr passt mir gut.",
+            "Zapisałam numer {{Olena Kovalenko|dopełniacz=Oleny Kovalenko}}: {{+48 731 205 649}}.",
+        ),
+        tool="contacts_add",
+        arguments={"name": "{{Olena Kovalenko}}", "phone": "{{+48 731 205 649}}"},
+    ),
 }
 
 
