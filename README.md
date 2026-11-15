@@ -496,10 +496,12 @@ values and the rules with `pl_core_news_md` mask 98%, with nothing left half-mas
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
 missed and why, and for Presidio on the first eleven of them with the same model: 66% fully
-masked, 76% at its most lenient. Four invented calls of an AI agent, with its English prompt, its
-tools and their JSON, code and logs, measure what an agent's traffic costs: with
-`pl_core_news_md`, 2 of the 122 marked occurrences reach the model, and 54 of 218 uses of a token
-hide nothing, a word such as "Max" the model could not read.
+masked, 76% at its most lenient. Eight invented calls of an AI agent, with its English prompt,
+its tools and their JSON, code, logs, a lease and mail in three languages, measure what an
+agent's traffic costs: with `pl_core_news_md`, 6 of the 243 marked occurrences reach the model,
+and 5 of 304 uses of a token hide nothing, a word the model could not read. The model's answers
+to them come back with every token restored, as text, as a response and as a stream, and 39 of
+their 40 lines read exactly as a person would write them.
 
 ## Worth knowing
 
@@ -594,9 +596,10 @@ which go out as written. `mode="paranoid"` masks all of it:
 guards = default_guards(mode="paranoid")
 ```
 
-On the calls of an AI agent in `benchmarks/`, "normal" lets 2 of 122 marked values through and a
-quarter of the token uses hide nothing; "paranoid" lets none through, and more than half hide
-nothing. The rules are the same in both, so without the model the mode changes nothing.
+On the calls of an AI agent in `benchmarks/`, "normal" lets 6 of 243 marked occurrences through,
+and 2% of the token uses hide nothing; "paranoid" lets 3 through, those no guard finds, and more
+than half of the token uses hide nothing. The rules are the same in both, so without the model
+the mode changes nothing.
 
 ## A second opinion: the judge
 

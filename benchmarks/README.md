@@ -108,8 +108,8 @@ made a token is a word it cannot read, and a value masked once is masked whereve
 |---|---:|---:|---:|
 | polanon, guards only, no model | 40 of 243 | 0 | 0 of 260 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
-| polanon, guards + `pl_core_news_md` | **6 of 243** | 23 | **83 of 382** |
-| the same, `mode="paranoid"` | 3 of 243 | 243 | 398 of 706 |
+| polanon, guards + `pl_core_news_md` | **6 of 243** | 5 | **5 of 304** |
+| the same, `mode="paranoid"` | 3 of 243 | 240 | 386 of 694 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
 nothing is masked for nothing. With the model two values leak by design: "sopotu", a place typed
@@ -120,8 +120,10 @@ word is read as English. Four more no guard finds in any mode: two birthdays und
 login made of a surname in a path, `/home/tmalinowski`. `mode="paranoid"` takes every name the
 model finds and wastes more than half of the token uses, on "return", "message", "notify" and
 "That's". On the twelve documents it masks the same 184 values as the default, with 8
-over-masked spans instead of 6. What the default still masks for nothing is mostly "Max", of the
-chip, the vacuum's fan speed and "Max results" in the tools, "Dell" and German nouns.
+over-masked spans instead of 6. What the default still masks for nothing, five uses in all, is
+three German nouns, the name of a speaker in a smart home and "thanks" in Ukrainian; before the
+filters for products, code, the English of software, Chinese and the parties of a contract it
+was 83 uses, 57 of them "Max".
 
 Each call also has the model's answer, in
 [`agent_corpus.ANSWERS`](agent_corpus.py): Polish lines and a tool call written with the call's

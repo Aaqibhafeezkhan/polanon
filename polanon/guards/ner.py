@@ -888,8 +888,8 @@ class NerGuard(Guard):
                 in code, in identifiers and in a place written in lowercase, where nearly all of
                 it is ordinary words; a name opening an English sentence and "jadę do gdyni" go
                 out as written. "paranoid" keeps every span with a letter in it. In the calls of
-                an AI agent in ``benchmarks/run_agent.py``, "normal" lets 2 of 122 values through
-                and a quarter of the token uses hide nothing, "paranoid" none and more than half.
+                an AI agent in ``benchmarks/run_agent.py``, "normal" lets 6 of 243 values
+                through and 2% of the token uses hide nothing, "paranoid" 3 and more than half.
 
         Raises:
             ValueError: for a mode that is neither "normal" nor "paranoid".

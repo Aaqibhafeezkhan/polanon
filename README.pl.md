@@ -513,11 +513,13 @@ a reguły z `pl_core_news_md` 98%, przy czym nic nie zostaje zamaskowane tylko w
 krótkich dokumentów to test regresji, a nie benchmark badawczy:
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) opisują,
 co zostaje przeoczone i dlaczego, i podają wynik Presidio na pierwszych jedenastu z nich z tym
-samym modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie liczenia. Cztery
-wymyślone wywołania agenta AI, z jego angielskim promptem, narzędziami i ich JSON-em, kodem
-i logami, mierzą, ile kosztuje ruch agenta: z `pl_core_news_md` do modelu trafiają 2 ze 122
-oznaczonych wystąpień, a 54 z 218 użyć tokenów nic nie ukrywa, tylko zasłania słowo, takie jak
-„Max”, którego model nie może przeczytać.
+samym modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie liczenia. Osiem
+wymyślonych wywołań agenta AI, z jego angielskim promptem, narzędziami i ich JSON-em, kodem,
+logami, umową najmu i pocztą w trzech językach, mierzy, ile kosztuje ruch agenta:
+z `pl_core_news_md` do modelu trafia 6 z 243 oznaczonych wystąpień, a 5 z 304 użyć tokenów nic
+nie ukrywa, tylko zasłania słowo, którego model nie może przeczytać. Odpowiedzi modelu wracają ze
+wszystkimi tokenami przywróconymi, jako tekst, jako odpowiedź i jako strumień, a 39 z ich 40 linii
+brzmi dokładnie tak, jak napisałby je człowiek.
 
 ## Warto wiedzieć
 
@@ -620,9 +622,10 @@ zdanie albo „jadę do gdyni”, które wychodzą bez zmian. `mode="paranoid"` 
 guards = default_guards(mode="paranoid")
 ```
 
-Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 2 ze 122 oznaczonych wartości,
-a ćwierć użyć tokenów nic nie ukrywa; „paranoid” nie przepuszcza żadnej, ale nic nie ukrywa ponad
-połowa użyć. Reguły są w obu trybach te same, więc bez modelu tryb niczego nie zmienia.
+Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 6 z 243 oznaczonych wystąpień,
+a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 3, te, których nie znajduje żaden
+strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
+tryb niczego nie zmienia.
 
 ## Druga opinia: sędzia
 

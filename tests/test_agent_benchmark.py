@@ -124,16 +124,16 @@ def test_with_the_polish_model_little_leaks_and_little_is_masked_for_nothing():
     Two values leak by design: a place typed in lowercase in a chat, "sopotu", and a foreign name
     opening an English sentence, read as a capitalised English word. Four more no guard finds: a
     birthday in a contact's JSON, with no label before it, a login made of a surname in a path,
-    and a name written in Cyrillic. Masked for nothing are mostly "Max", of a chip, a vacuum's
-    fan speed and "Max results" in the tools, and "Dell".
+    and a name written in Cyrillic. Masked for nothing are a few German nouns, a speaker's name
+    in a smart home and "thanks" in Ukrainian.
     """
     scores = run(anonymizer_for(with_ner=True))
     leaked = {value for score in scores.values() for _, value in score.leaked_values}
     assert leaked <= KNOWN_LEAKS
     wasted = sum(score.wasted_uses for score in scores.values())
     used = sum(score.uses for score in scores.values())
-    assert wasted <= 83
-    assert wasted / used <= 0.22
+    assert wasted <= 5
+    assert wasted / used <= 0.02
 
 
 @needs_model
@@ -147,7 +147,7 @@ def test_in_paranoid_mode_nothing_leaks_and_more_than_half_the_tokens_hide_nothi
     assert leaked <= KNOWN_LEAKS - {"sopotu", "Erik Holm", "tmalinowski"}
     wasted = sum(score.wasted_uses for score in scores.values())
     used = sum(score.uses for score in scores.values())
-    assert wasted <= 401
+    assert wasted <= 386
     assert wasted / used > 0.5
 
 
