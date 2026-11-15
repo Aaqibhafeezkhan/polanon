@@ -703,11 +703,44 @@ def test_shortest_registered_iban_is_masked():
     assert masked("Konto NO93 8601 1117 947 w banku.", {"IBAN"}) == "Konto <IBAN_1> w banku."
 
 
-def test_iban_with_wrong_check_digits_is_not_masked():
+def test_iban_with_wrong_check_digits_is_not_masked_without_an_account_label():
     """PL61... is valid; PL60... leaves remainder 0, which no real IBAN has."""
     assert not is_valid_iban("PL60109010140000071219812874")
-    text = "Konto PL60 1090 1014 0000 0712 1981 2874 w banku."
+    text = "Numer PL60 1090 1014 0000 0712 1981 2874 jest w umowie."
     assert masked(text, {"IBAN"}) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "account"),
+    [
+        (
+            "Proszę o korektę, konto PL61 1090 1014 0000 0712 1921 2974. Dziękuję.",
+            "PL61 1090 1014 0000 0712 1921 2974",
+        ),
+        ("Nr konta: 61 1090 1014 0000 0712 1921 2974.", "61 1090 1014 0000 0712 1921 2974"),
+        ("IBAN PL60 1090 1014 0000 0712 1981 2874 w banku.", "PL60 1090 1014 0000 0712 1981 2874"),
+    ],
+)
+def test_an_account_number_with_a_typo_after_its_label_is_still_an_account(text, account):
+    """A request typed "konto PL61 1090 1014 0000 0712 1921 2974", a digit or two off a real
+    account: the IBAN failed its checksum, and a card number read out of its middle was masked
+    instead, with the country, the check digits and the last eight digits in the clear. After an
+    account label the number is masked whole as an IBAN, as eleven digits after "PESEL" are."""
+    spans = merge_spans(RegexGuard().detect(text, ALL), text)
+    assert [(s.entity_type, text[s.start : s.end]) for s in spans] == [("IBAN", account)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Numer PL61 1090 1014 0000 0712 1921 2974 jest w umowie.",
+        "Numer 61 1090 1014 0000 0712 1921 2974 jest w umowie.",
+    ],
+)
+def test_no_card_is_read_out_of_an_account_number(text):
+    """Without a label a number shaped as an account but failing its checksum is no IBAN, and it
+    is no card either: a card is never a slice of an account number."""
+    assert RegexGuard().detect(text, {"CREDIT_CARD", "IBAN"}) == []
 
 
 @pytest.mark.parametrize("card", ["4000123412341235005", "4000 1234 1234 1235 005"])

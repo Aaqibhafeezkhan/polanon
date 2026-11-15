@@ -539,13 +539,33 @@ PATTERNS: list[Rule] = [
 
 
 def _locate_iban(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
-    """Return the IBAN at the start of the match, cut to its registered length."""
+    """Return the IBAN at the start of the match, cut to its registered length.
+
+    The checksum decides, but not after an account label: "konto PL61 1090 1014 0000 0712 1921
+    2974", a digit or two off a real account, is still somebody's account, as eleven digits
+    after "PESEL" are somebody's number. Such a number is masked whole when it has the length its
+    country registers, or the 26 digits of a Polish account.
+    """
     candidate = match.group()
+    labelled = _follows(_ACCOUNT_LABEL, text, match)
     if candidate[0].isdigit():  # a Polish account number written without the PL prefix
         compact = re.sub(r"[\s-]", "", candidate)
-        return [match.span()] if is_valid_iban("PL" + compact) else []
+        return [match.span()] if labelled or is_valid_iban("PL" + compact) else []
     end = _iban_end(candidate)
+    if end is None and labelled:
+        end = _registered_end(candidate)
     return [] if end is None else [(match.start(), match.start() + end)]
+
+
+def _registered_end(candidate: str) -> int | None:
+    """Return where an IBAN of its country's registered length ends in `candidate`, valid or not."""
+    length = IBAN_LENGTHS.get(candidate[:2].upper())
+    if length is None:
+        return None
+    end = _end_of_nth_character(candidate, length)
+    if end is None or candidate[end : end + 1] not in ("", " ", "-", "\r", "\n"):
+        return None
+    return end
 
 
 def _iban_end(candidate: str) -> int | None:
@@ -584,6 +604,8 @@ def _locate_cards(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     """
     run = match.group()
     groups = [m.span() for m in re.finditer(r"\d+", run)]
+    if _account_shaped(text, match.start(), groups):
+        return []
     found: list[tuple[int, int]] = []
     first = 0
     while first < len(groups):
@@ -604,6 +626,21 @@ def _locate_cards(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
         ):
             first += 1
     return found
+
+
+def _account_shaped(text: str, start: int, groups: list[tuple[int, int]]) -> bool:
+    """Return whether a run of digit groups is an account number, which holds no card.
+
+    "PL61 1090 1014 0000 0712 1921 2974" failed the IBAN checksum by a typo, and sixteen digits
+    from its middle passed Luhn: masked as a card, they left the rest of the account in the
+    clear. Two check digits right after a country's letters, or the 2 and six times 4 digits of
+    a Polish account, make the run an account number, valid or not.
+    """
+    widths = [end - begin for begin, end in groups]
+    if widths == [2, 4, 4, 4, 4, 4, 4]:
+        return True
+    after_letters = start >= 2 and text[start - 2 : start].isalpha()
+    return after_letters and len(widths) >= 4 and widths[0] == 2 and set(widths[1:-1]) == {4}
 
 
 def _card_after_one_number(groups: list[tuple[int, int]], index: int) -> bool:
@@ -692,6 +729,13 @@ def _locate_pesel(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     if _follows(_PESEL_LABEL, text, match):
         return [match.span()]
     return [match.span()] if match.group().isdigit() and is_valid_pesel(match.group()) else []
+
+
+#: Words that introduce a bank account: "konto", "nr konta", "rachunek bankowy", "IBAN".
+_ACCOUNT_LABEL = re.compile(
+    r"(?i)\b(?:kont[aou]?|koncie|kontem|rachun\w*|iban|account|acct)"
+    r"(?:\s+(?:bankow\w*|bank|number|no\.?|nr\.?|numer))*\s*[:-]?\s*$"
+)
 
 
 def _follows(label: re.Pattern[str], text: str, match: re.Match[str]) -> bool:

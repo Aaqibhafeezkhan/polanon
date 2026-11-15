@@ -5,6 +5,19 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Fixed
+
+- **An account number with a typo is masked whole as an IBAN, and never as a card.** A request
+  typed "konto PL61 1090 1014 0000 0712 1921 2974", a digit or two off a real account: the IBAN
+  failed its checksum, and sixteen digits from its middle passed Luhn, so they were masked as a
+  card while the country, the check digits and the last eight digits went out in the clear.
+  After an account label, "konto", "nr konta", "rachunek bankowy", "IBAN" or "account", a
+  number of its country's registered length, or the 26 digits of a Polish account, is now an
+  IBAN whatever its checksum, as eleven digits after "PESEL" are a PESEL. Without a label the
+  checksum still decides, but a card is no longer read out of a number shaped as an account.
+
 ## [0.3.6] - 2026-11-15
 
 Two modes for the language model, a benchmark of an AI agent's calls, and far fewer words masked
