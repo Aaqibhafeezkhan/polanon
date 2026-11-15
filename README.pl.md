@@ -516,7 +516,7 @@ co zostaje przeoczone i dlaczego, i podają wynik Presidio na pierwszych jedenas
 samym modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie liczenia. Osiem
 wymyślonych wywołań agenta AI, z jego angielskim promptem, narzędziami i ich JSON-em, kodem,
 logami, umową najmu i pocztą w trzech językach, mierzy, ile kosztuje ruch agenta:
-z `pl_core_news_md` do modelu trafia 6 z 243 oznaczonych wystąpień, a 5 z 304 użyć tokenów nic
+z `pl_core_news_md` do modelu trafiają 3 z 243 oznaczonych wystąpień, a 5 z 307 użyć tokenów nic
 nie ukrywa, tylko zasłania słowo, którego model nie może przeczytać. Odpowiedzi modelu wracają ze
 wszystkimi tokenami przywróconymi, jako tekst, jako odpowiedź i jako strumień, a 39 z ich 40 linii
 brzmi dokładnie tak, jak napisałby je człowiek.
@@ -622,9 +622,9 @@ zdanie albo „jadę do gdyni”, które wychodzą bez zmian. `mode="paranoid"` 
 guards = default_guards(mode="paranoid")
 ```
 
-Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 6 z 243 oznaczonych wystąpień,
-a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 3, te, których nie znajduje żaden
-strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
+Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 3 z 243 oznaczonych wystąpień,
+a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 1, imię zapisane cyrylicą, którego nie
+znajduje żaden strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
 tryb niczego nie zmienia.
 
 ## Druga opinia: sędzia

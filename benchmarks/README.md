@@ -106,18 +106,19 @@ made a token is a word it cannot read, and a value masked once is masked whereve
 
 | Configuration | Leaked | Tokens that hide nothing | Their uses |
 |---|---:|---:|---:|
-| polanon, guards only, no model | 40 of 243 | 0 | 0 of 260 |
+| polanon, guards only, no model | 37 of 243 | 0 | 0 of 263 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
-| polanon, guards + `pl_core_news_md` | **6 of 243** | 5 | **5 of 304** |
-| the same, `mode="paranoid"` | 3 of 243 | 240 | 386 of 694 |
+| polanon, guards + `pl_core_news_md` | **3 of 243** | 5 | **5 of 307** |
+| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 696 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
 nothing is masked for nothing. With the model two values leak by design: "sopotu", a place typed
 in lowercase in a chat, dropped since a place in lowercase stopped being one, so that "text" and
 "service" of a manual are not, and "Erik Holm" opening an English sentence, where a capitalised
-word is read as English. Four more no guard finds in any mode: two birthdays under a contact's
-`birthday` key with no label before them, a name written in Cyrillic, and, in the default mode, a
-login made of a surname in a path, `/home/tmalinowski`. `mode="paranoid"` takes every name the
+word is read as English. No guard finds the third in any mode, a name written in Cyrillic.
+Two birthdays under a contact's `birthday` key and a login made of a surname in a path,
+`/home/tmalinowski`, leaked too until a key that names a birthday was read as its label and a
+login made of a known surname was masked with the person. `mode="paranoid"` takes every name the
 model finds and wastes more than half of the token uses, on "return", "message", "notify" and
 "That's". On the twelve documents it masks the same 184 values as the default, with 8
 over-masked spans instead of 6. What the default still masks for nothing, five uses in all, is

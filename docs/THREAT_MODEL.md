@@ -86,9 +86,9 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   of manuals and code. A person in lowercase still is. A word in inline code and a span that
   opens with an English small word are dropped too. `mode="paranoid"` turns all of this off and
   masks every span the model finds with a letter in it: on the calls of an AI agent in
-  `benchmarks/`, only what no guard finds leaks, 3 of 243 marked occurrences against 6, and more
-  than half of the token uses hide an ordinary word, against 2%. Nothing finds a birthday under a
-  JSON key with no label before it, or a name written in Cyrillic.
+  `benchmarks/`, only what no guard finds leaks, 1 of 243 marked occurrences against 3, and more
+  than half of the token uses hide an ordinary word, against 2%. Nothing finds a name written in
+  Cyrillic.
 - **Identification by context.** "The finance director of the only steelworks in Stalowa Wola" names
   a person without naming them. The judge is asked to catch exactly this; a small local model will
   not catch all of it.

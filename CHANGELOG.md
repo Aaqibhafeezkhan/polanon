@@ -19,9 +19,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   agent's English, code and identifiers readable let a little through by design: a name opening
   an English sentence, a word in inline code, a place typed in lowercase. `default_guards(mode=
   "paranoid")` and `NerGuard(mode="paranoid")` keep every span with a letter in it instead. On
-  the agent's calls of the benchmark only what no guard finds leaks, 3 of 243 marked
-  occurrences against 6 in the default `mode="normal"`, and 386 of 694 token uses hide nothing,
-  against 5 of 304. On the twelve
+  the agent's calls of the benchmark only what no guard finds leaks, 1 of 243 marked
+  occurrences against 3 in the default `mode="normal"`, and 386 of 696 token uses hide nothing,
+  against 5 of 307. On the twelve
   documents it masks the same 184 values, with 8 over-masked spans instead of 6. The rules are
   the same in both modes. `benchmarks/run.py` and `benchmarks/run_agent.py` take `--paranoid`.
 
@@ -36,7 +36,7 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   that hide nothing, with their uses. It then restores the model's answer to each call, written
   with the call's tokens and the cases the Polish note asks for, as text, as a whole response and
   as a stream cut at every place, and scores each line and argument against what a reader should
-  get back. With `pl_core_news_md`, 6 of 243 occurrences reach the model and 5 of 304 uses hide
+  get back. With `pl_core_news_md`, 3 of 243 occurrences reach the model and 5 of 307 uses hide
   nothing, against 5 and 110 of 410 in 0.3.5; 39 of 40 lines come back exact and none wrong.
   `tests/test_agent_benchmark.py` holds all of it as bounds, and CI prints the tables.
 
