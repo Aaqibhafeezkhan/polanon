@@ -5,7 +5,16 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
-## [Unreleased]
+## [0.3.6] - 2026-11-15
+
+Two modes for the language model, a benchmark of an AI agent's calls, and far fewer words masked
+for nothing; nothing that worked before stops working, so this is a patch release, as
+CONTRIBUTING.md describes. The spaCy guard now leaves out what it reads as a name in English
+prose, code and identifiers, a place typed in lowercase among them, so an agent's prompt, tools
+and results stay readable: in the benchmark's calls 5 of 307 token uses hide nothing, against 110
+of 410 in 0.3.5. `mode="paranoid"`, `polanon-gateway --paranoid` and `polanon --ner --paranoid`
+mask all of it instead. A birthday under a JSON key and a login made of a known surname are now
+masked, and the gateway can send images and files on unmasked when told to.
 
 ### Added
 
