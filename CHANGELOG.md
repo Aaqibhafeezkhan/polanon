@@ -151,6 +151,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   whose every word is a word of menus, settings and manuals, on a list of some 670 written for
   this library, is dropped unless it holds a Polish first name. Words that are also first names
   or surnames, such as Price, Grant or Page, are left off the list, so Hugh Grant is a person.
+- **Chinese, Japanese and Korean text is no name.** A page in Chinese in the agent's calls of
+  the benchmark gave the Polish model a "person" of six Chinese characters, and "Home
+  Assistant。" with the full stop, which the list of well-known names no longer matched. A span
+  whose every letter is Chinese, Japanese or Korean is now dropped, and the punctuation of those
+  languages is trimmed off the ends of every span, in either mode, as a space is.
 
 ## [0.3.5] - 2026-11-14
 

@@ -422,6 +422,26 @@ def test_the_english_of_software_is_no_name():
     assert {"Uncheck", "Privacy Policy", "Scheduling", "Switch"} <= set(paranoid)
 
 
+def test_chinese_text_is_no_name_and_its_punctuation_is_not_part_of_one():
+    """A page in Chinese in an agent's results gave the Polish model a "person" of Chinese
+    characters, and "Home Assistant。" with the full stop, which the list of well-known names no
+    longer matched. A span written in Chinese, Japanese or Korean alone is dropped, and their
+    punctuation is trimmed off the ends of a span as spaces are. "Home Assistant" is made of the
+    English of software, so only the paranoid mode keeps it."""
+    text = "## 安装\n在 HACS 中搜索并安装，然后重启 Home Assistant。\n联系人：Ola Kowalska。"  # noqa: RUF001
+    entities = [
+        _Entity(text, "中搜索并安装", "persName"),
+        _Entity(text, "Home Assistant。", "orgName"),
+        _Entity(text, "：Ola Kowalska。", "persName"),  # noqa: RUF001
+    ]
+    assert _found(NerGuard(), text, entities) == ["Ola Kowalska"]
+    assert _found(NerGuard(mode="paranoid"), text, entities) == [
+        "中搜索并安装",
+        "Home Assistant",
+        "Ola Kowalska",
+    ]
+
+
 def test_in_paranoid_mode_every_name_the_model_finds_is_kept():
     """The filters for English and code let a little through by design: a name opening an English
     sentence, a word in inline code, a place typed in lowercase. With `mode="paranoid"` every

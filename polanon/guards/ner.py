@@ -362,6 +362,12 @@ _LANGUAGES_IN_ENGLISH = frozenset(
 #: A model number, letters and digits in one word, then the spaces before a span: "M4 ".
 _MODEL_NUMBER_BEFORE = re.compile(r"(?<![^\W_])((?=[^\W_]*[^\W\d_])[^\W_]+)[ \t]+$")
 
+#: The punctuation of Chinese, Japanese and Korean, trimmed off a span's ends as a space is.
+_EAST_ASIAN_MARKS = "。，、；：！？「」『』（）《》【】・"  # noqa: RUF001
+
+#: A letter of Chinese, Japanese or Korean.
+_EAST_ASIAN_LETTER = re.compile("[぀-ヿ㐀-䶿一-鿿가-힯]")
+
 #: What ends a line or a cell of a table: no name runs across it.
 _CELL_BREAKS = re.compile(r"[\n;|\t]")
 
@@ -515,6 +521,16 @@ def _product_or_code(fragment: str) -> bool:
     if any(char.isdigit() for char in fragment):
         return not _holds_a_first_name(fragment)
     return _INNER_CAPITAL.search(fragment) is not None and _NAME_PREFIX.match(fragment) is None
+
+
+def _east_asian(fragment: str) -> bool:
+    """Return whether every letter of a span is Chinese, Japanese or Korean.
+
+    The Polish model reads such text as a string of names: a page in Chinese in an agent's
+    results gave it a "person" of six characters. A name in those scripts is beyond it anyway.
+    """
+    letters = [char for char in fragment if char.isalpha()]
+    return bool(letters) and all(_EAST_ASIAN_LETTER.match(char) for char in letters)
 
 
 def _software_english(fragment: str) -> bool:
@@ -700,6 +716,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
             or _after_a_model_number(text, span, fragment)
             or _product_or_code(fragment)
             or _software_english(fragment)
+            or _east_asian(fragment)
         ):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
@@ -922,7 +939,7 @@ class NerGuard(Guard):
         for piece in _CELL_BREAKS.split(text[start:end]):
             piece_start = cursor
             cursor += len(piece) + 1
-            stripped = piece.strip()
+            stripped = piece.strip().strip(_EAST_ASIAN_MARKS).strip()
             if not stripped or _is_only_labels(stripped) or _is_lowercase_adjective(stripped):
                 continue
             offset = piece.index(stripped)
