@@ -49,6 +49,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Changed
 
+- **`WELL_KNOWN_NAMES` holds hardware an agent names**: Dell, Lenovo, Samsung, Roborock and HACS,
+  the store of Home Assistant's add-ons. In the agent's calls of the benchmark "Dell" was masked
+  as a company eight times in one call, "Roborock" as a person and "HACS" as a place.
 - **`WELL_KNOWN_NAMES` holds the platforms an AI agent names**: OpenRouter, DeepSeek, Hugging
   Face, Ollama, LM Studio, Claude Code, Hermes Agent, Nous Research, Home Assistant and its "HA",
   GitHub, GitLab, Docker, Linux and Ubuntu. An agent driving a smart home named "HA" 117 times in

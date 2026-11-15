@@ -648,7 +648,8 @@ anonymizer = Anonymizer(default_guards(), allowlist=Allowlist(WELL_KNOWN_NAMES))
 
 `WELL_KNOWN_NAMES` holds platforms and office tools, public institutions and filing programs
 such as ZUS, Płatnik, NFZ and KSeF, and the models and tools an AI agent names, such as
-OpenRouter, DeepSeek and Home Assistant with its "HA". A one-word name also matches its Polish case forms
+OpenRouter, DeepSeek and Home Assistant with its "HA", and hardware such as Dell or Roborock.
+A one-word name also matches its Polish case forms
 ("Facebooku", "Canvie", "ZUS-ie"). Only detections of names are dropped, and only when every word in them is on the list; identifiers, the denylist and
 values a conversation has already masked stay masked.
 

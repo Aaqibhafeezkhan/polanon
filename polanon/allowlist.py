@@ -42,10 +42,10 @@ _PERSON_EVIDENCE_SOURCES = frozenset({"names_pl"})
 
 #: Platforms and tools an office or marketing team in Poland names every day, the public
 #: institutions and filing programs its staff name as often, and the models, tools and smart home
-#: an AI agent names in every prompt, "HA" for Home Assistant among them. Nothing here is also a
-#: first name ("Claude", "Miro") or an ordinary word ("Word", "Teams", "Make"), but for "Płatnik",
-#: the program ZUS contributions are filed with: a person of that name the name guard finds, "pani
-#: Płatnik", stays masked whatever the list holds.
+#: an AI agent names in every prompt, "HA" for Home Assistant among them, and the hardware it
+#: compares and drives. Nothing here is also a first name ("Claude", "Miro") or an ordinary word
+#: ("Word", "Teams", "Make"), but for "Płatnik", the program ZUS contributions are filed with: a
+#: person of that name the name guard finds, "pani Płatnik", stays masked whatever the list holds.
 WELL_KNOWN_NAMES: tuple[str, ...] = (
     "Facebook",
     "Instagram",
@@ -160,6 +160,11 @@ WELL_KNOWN_NAMES: tuple[str, ...] = (
     "Docker",
     "Linux",
     "Ubuntu",
+    "HACS",
+    "Dell",
+    "Lenovo",
+    "Samsung",
+    "Roborock",
     "ZUS",
     "PUE ZUS",
     "eZUS",

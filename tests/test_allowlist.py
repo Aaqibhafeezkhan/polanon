@@ -311,3 +311,24 @@ async def test_the_platforms_of_an_agent_s_own_stack_go_out_as_written():
     assert result.anonymized == (
         "Sprawdź w HA i w Home Assistant, co mówi OpenRouter o DeepSeek; pyta <OSOBA_1>."
     )
+
+
+async def test_the_hardware_an_agent_names_goes_out_as_written():
+    """An agent comparing laptops and running a vacuum named "Dell" eight times in one call of
+    the benchmark, masked as a company, and the store of Home Assistant's add-ons as a place."""
+    text = "Dell czy Lenovo, a może Samsung? Roborock i HACS działają; pyta Jan Kowalski."
+    result = await anonymize(
+        text,
+        enabled=ALL,
+        guards=[
+            WordGuard("ORG", "Dell", "Lenovo", "Samsung", "Roborock"),
+            WordGuard("LOCATION", "HACS"),
+            WordGuard("PERSON", "Jan Kowalski"),
+        ],
+        judge=None,
+        existing_mapping={},
+        allowlist=PLATFORMS,
+    )
+    assert result.anonymized == (
+        "Dell czy Lenovo, a może Samsung? Roborock i HACS działają; pyta <OSOBA_1>."
+    )
