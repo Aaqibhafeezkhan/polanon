@@ -536,3 +536,23 @@ def test_the_token_instructions_are_polish_unless_asked_otherwise():
     assert "przepisz" in token_instructions()
     with pytest.raises(ValueError, match="pl and en, not 'de'"):
         token_instructions("de")
+
+
+def test_a_date_under_a_key_that_names_a_birthday_is_a_birth_date():
+    """A contact book an agent read held a birthday under the key "birthday", and the guards,
+    shown the value alone, let the date go out. A key that names a birth date is read as the
+    label before its value; a date under any other key stays readable."""
+    turn = anonymizer.turn()
+    contact = {
+        "name": "Irena Nowicka",
+        "birthday": "1961-11-21",
+        "dateOfBirth": "21.11.1961",
+        "created": "2026-11-15",
+        "family": [{"birth_date": "1957-11-03", "relation": "mama"}],
+    }
+    masked = turn.mask_data(contact)
+    assert re.fullmatch(r"<DATA_URODZENIA_\d+>", masked["birthday"])
+    assert re.fullmatch(r"<DATA_URODZENIA_\d+>", masked["dateOfBirth"])
+    assert re.fullmatch(r"<DATA_URODZENIA_\d+>", masked["family"][0]["birth_date"])
+    assert masked["created"] == "2026-11-15"
+    assert turn.restore_data(masked) == contact

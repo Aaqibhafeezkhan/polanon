@@ -172,6 +172,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   in the clear. The rule for birth dates now also reads "birthday", "birth date", "birth_date",
   "date_of_birth", "dateOfBirth", "Geburtsdatum" and "urodziny", with a quote or "=" between
   the label and the date, as code and JSON write them.
+- **A date under a key that names a birthday is a birth date.** A tool's JSON is masked value
+  by value, so the guards saw "1961-11-21" without the key "birthday" before it, and the date
+  went out in the clear; in the agent's calls of the benchmark two birthdays of a contact book
+  did. `MaskedTurn.mask_data`, `mask_messages` and the gateway now read a value under such a
+  key, "birthday", "birth_date", "dateOfBirth", "dob" or "data_urodzenia", after the label of a
+  birth date. A date under any other key stays readable.
 
 ## [0.3.5] - 2026-11-14
 

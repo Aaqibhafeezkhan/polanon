@@ -404,7 +404,7 @@ def _walk(value: Any, text: _Text, default: Callable[[Any], Any] | None = None) 
     if value is None or isinstance(value, bool | int | float):
         return value
     if isinstance(value, Mapping):
-        return {key: _walk(item, text, default) for key, item in value.items()}
+        return {key: _under_key(key, item, text, default) for key, item in value.items()}
     if isinstance(value, list):
         return [_walk(item, text, default) for item in value]
     if isinstance(value, tuple):
@@ -414,6 +414,30 @@ def _walk(value: Any, text: _Text, default: Callable[[Any], Any] | None = None) 
             f"cannot mask a {type(value).__name__}: convert it first, or pass default=str"
         )
     return _walk(default(value), text)
+
+
+#: Keys that name a birth date, written without spaces, "_" or "-" and in lowercase.
+_BIRTH_DATE_KEYS = frozenset(
+    {"birthday", "birthdate", "dateofbirth", "dob", "dataurodzenia", "urodziny", "geburtsdatum"}
+)
+#: The label a value under such a key is read after: a rule masks a date after it as a birth date.
+_BIRTH_DATE_LABEL = "data urodzenia: "
+
+
+def _under_key(key: Any, item: Any, text: _Text, default: Callable[[Any], Any] | None) -> Any:
+    """Mask a dictionary's value, a key that names a birth date read as the label before it.
+
+    A contact book an agent read held a birthday under the key "birthday", and the guards, shown
+    the value alone, let the date go out: a date is no birth date without its label. If the
+    masking ever touched the label, the value is masked alone, as before.
+    """
+    if isinstance(key, str) and isinstance(item, str):
+        name = "".join(char for char in key if char not in " _-").lower()
+        if name in _BIRTH_DATE_KEYS:
+            masked = text(_BIRTH_DATE_LABEL + item)
+            if masked.startswith(_BIRTH_DATE_LABEL):
+                return masked[len(_BIRTH_DATE_LABEL) :]
+    return _walk(item, text, default)
 
 
 def _json_text(content: str, text: _Text) -> str:
