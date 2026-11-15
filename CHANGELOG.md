@@ -143,8 +143,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   agent's calls of the benchmark the Polish model took a vacuum's fan speed "Max" for a person,
   masked 57 times once known, Python's `JSONDecodeError` and `HTTPError` too, and an invoice
   number for a place. A span of one word is dropped when it is a tier such as Max, Pro or Ultra,
-  ends as the name of an error does, holds a digit without a Polish first name, or has a capital
-  after a small letter, as `AdGuard` or `iPhone` do; MacLeod, DeVito and O'Brien are kept. A span
+  ends as the name of an error does, holds a digit without a Polish first name, or is written as
+  code writes a name, with two capitals inside, `MediaPlayerEntity`, or an abbreviation run into
+  a word, `HTTPServer`. One capital inside is not enough: a handle or a small company's name,
+  "AnnaLis" or "ZielonyDom", is written so too, and so are MacLeod and DeVito. A span
   is cut at a semicolon, a pipe and a tab as at a line break, so a CSV row read as one company
   gives its cells apart. Token uses that hide nothing fall from 83 of 382 to 22 of 321, with the
   same values leaking, and the twelve documents score as before.

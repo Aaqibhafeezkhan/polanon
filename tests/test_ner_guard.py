@@ -397,6 +397,25 @@ def test_a_product_tier_a_code_identifier_and_a_word_with_a_digit_are_no_names()
     assert not {"615,00", "4012736604"} & set(paranoid)
 
 
+def test_a_word_with_one_capital_inside_may_be_a_handle_and_stays_a_name():
+    """A capital after a small letter marks code, `MediaPlayerEntity` or `HTTPServer`, but a
+    person's handle or a small company's name is written so too, "AnnaLis" or "ZielonyDom":
+    dropped, it went out in the clear. Only a word with two capitals inside, or an abbreviation
+    run into a word, is taken for code, and never one with a Polish first name in it."""
+    text = (
+        "Klasa MediaPlayerEntity i HTTPServer są w kodzie.\n"
+        "Konto AnnaLis prowadzi sklep ZielonyDom, a OlaNowakDesign robi zdjęcia."
+    )
+    entities = [
+        _Entity(text, "MediaPlayerEntity", "orgName"),
+        _Entity(text, "HTTPServer", "orgName"),
+        _Entity(text, "AnnaLis", "persName"),
+        _Entity(text, "ZielonyDom", "orgName"),
+        _Entity(text, "OlaNowakDesign", "orgName"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["AnnaLis", "ZielonyDom", "OlaNowakDesign"]
+
+
 def test_the_english_of_software_is_no_name():
     """An agent's answers named buttons and settings in English inside Polish sentences, and the
     Polish model took them for people and companies: "Uncheck", "Authorization", "Privacy

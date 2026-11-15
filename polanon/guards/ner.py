@@ -398,9 +398,12 @@ _PRODUCT_TIERS = frozenset({"max", "pro", "ultra", "plus", "mini", "lite", "air"
 #: The ends of the names of errors in code: `JSONDecodeError`, `HTTPError`, `ValueError`.
 _CODE_ENDINGS = ("Error", "Exception", "Warning")
 
-#: A capital after a small letter, as code writes `AdGuard` or `iPhone`, and the starts of names
-#: that have one too: McDonald, MacLeod, O'Brien, DeVito, LaToya, VanDyke.
+#: A capital after a small letter, as code writes `MediaPlayerEntity`, an abbreviation run into
+#: a word, as in `HTTPServer`, the parts of such a word, and the starts of names that have a
+#: capital inside too: McDonald, MacLeod, O'Brien, DeVito, LaToya, VanDyke.
 _INNER_CAPITAL = re.compile(r"[a-ząćęłńóśźż][A-ZĄĆĘŁŃÓŚŹŻ]")
+_RUN_IN_ABBREVIATION = re.compile(r"[A-ZĄĆĘŁŃÓŚŹŻ]{2}[a-ząćęłńóśźż]")
+_CAMEL_PARTS = re.compile(r"[A-ZĄĆĘŁŃÓŚŹŻ]?[a-ząćęłńóśźż]+|[A-ZĄĆĘŁŃÓŚŹŻ]+(?![a-ząćęłńóśźż])")
 _NAME_PREFIX = re.compile(r"(?:Mc|Mac|O'|D'|De|Di|Da|Du|La|Le|Van|Von)[A-Z]")
 
 #: English small words that are first names too: "Will Nowak" opens with one, and is a person.
@@ -530,8 +533,8 @@ def _product_or_code(fragment: str) -> bool:
     In an agent's calls the Polish model took a vacuum's fan speed "Max" for a person, masked 57
     times once known, Python's `JSONDecodeError` and `HTTPError` too, an invoice number
     "FV/2026/10/014" for a place and a line of a CSV file for a company. A tier alone names
-    nobody, and a name holds no digit and no capital after a small letter, but for a login with a
-    Polish first name in it and names such as MacLeod, DeVito or O'Brien.
+    nobody, and a name holds no digit, but for a login with a Polish first name in it. See
+    :func:`_code_identifier` for a capital inside a word.
     """
     if " " in fragment:
         return False
@@ -541,7 +544,26 @@ def _product_or_code(fragment: str) -> bool:
         return True
     if any(char.isdigit() for char in fragment):
         return not _holds_a_first_name(fragment)
-    return _INNER_CAPITAL.search(fragment) is not None and _NAME_PREFIX.match(fragment) is None
+    return _code_identifier(fragment)
+
+
+def _code_identifier(fragment: str) -> bool:
+    """Return whether a word is written as code writes a name: `MediaPlayerEntity`, `HTTPServer`.
+
+    One capital inside a word is not enough: a person's handle or a small company's name is
+    written so too, "AnnaLis" or "ZielonyDom", and dropping it sent it in the clear. Two
+    capitals after small letters, or an abbreviation run into a word, mark code, unless a part
+    of the word is a Polish first name, as in "OlaNowakDesign", or it starts as McDonald,
+    MacLeod or DeVito do.
+    """
+    if _NAME_PREFIX.match(fragment):
+        return False
+    if any(fold(part.lower()) in NAME_FORMS for part in _CAMEL_PARTS.findall(fragment)):
+        return False
+    return (
+        len(_INNER_CAPITAL.findall(fragment)) >= 2
+        or _RUN_IN_ABBREVIATION.search(fragment) is not None
+    )
 
 
 def _east_asian(fragment: str) -> bool:
