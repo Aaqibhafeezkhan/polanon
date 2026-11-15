@@ -10,6 +10,9 @@
 your network, send only tokens to the model, and put the originals back into its answer — even
 while it streams. Pure Python: the standard library is the whole core.
 
+Featured in [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A), Jakub
+Mrugalski's weekly newsletter for people in IT, on 13 November 2026.
+
 ![polanon masking a Polish invoice request in a terminal, then restoring the model's answer in Python](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.gif)
 
 ```bash
