@@ -145,6 +145,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   is cut at a semicolon, a pipe and a tab as at a line break, so a CSV row read as one company
   gives its cells apart. Token uses that hide nothing fall from 83 of 382 to 22 of 321, with the
   same values leaking, and the twelve documents score as before.
+- **The English of software is no name.** An agent's answers name buttons and settings in
+  English inside Polish sentences, and the Polish model took "Uncheck" for a person, masked 48
+  times in one call once known, "Authorization", "Scheduling" and "Privacy Policy" too. A span
+  whose every word is a word of menus, settings and manuals, on a list of some 670 written for
+  this library, is dropped unless it holds a Polish first name. Words that are also first names
+  or surnames, such as Price, Grant or Page, are left off the list, so Hugh Grant is a person.
 
 ## [0.3.5] - 2026-11-14
 

@@ -397,6 +397,31 @@ def test_a_product_tier_a_code_identifier_and_a_word_with_a_digit_are_no_names()
     assert not {"615,00", "4012736604"} & set(paranoid)
 
 
+def test_the_english_of_software_is_no_name():
+    """An agent's answers named buttons and settings in English inside Polish sentences, and the
+    Polish model took them for people and companies: "Uncheck", "Authorization", "Privacy
+    Policy". A span made of such words is dropped; a person whose name is also an English word,
+    Hugh Grant, is kept, and so is one with a Polish first name."""
+    text = (
+        "W ustawieniach kliknij Uncheck, potem Authorization i Privacy Policy.\n"
+        "Internal Guide jest w zakładce Scheduling, a Switch obok.\n"
+        "Film z Hugh Grant poleciła nam Ola Kowalska."
+    )
+    entities = [
+        _Entity(text, "Uncheck", "persName"),
+        _Entity(text, "Authorization", "persName"),
+        _Entity(text, "Privacy Policy", "orgName"),
+        _Entity(text, "Internal Guide", "orgName"),
+        _Entity(text, "Scheduling", "persName"),
+        _Entity(text, "Switch", "orgName"),
+        _Entity(text, "Hugh Grant", "persName"),
+        _Entity(text, "Ola Kowalska", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == ["Hugh Grant", "Ola Kowalska"]
+    paranoid = _found(NerGuard(mode="paranoid"), text, entities)
+    assert {"Uncheck", "Privacy Policy", "Scheduling", "Switch"} <= set(paranoid)
+
+
 def test_in_paranoid_mode_every_name_the_model_finds_is_kept():
     """The filters for English and code let a little through by design: a name opening an English
     sentence, a word in inline code, a place typed in lowercase. With `mode="paranoid"` every

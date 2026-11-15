@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from polanon.guards._software_english import SOFTWARE_WORDS
 from polanon.guards.base import Guard
 from polanon.guards.names_pl import NAME_FORMS, fold, is_common_adjective
 from polanon.policy import Mode, check_mode
@@ -516,6 +517,23 @@ def _product_or_code(fragment: str) -> bool:
     return _INNER_CAPITAL.search(fragment) is not None and _NAME_PREFIX.match(fragment) is None
 
 
+def _software_english(fragment: str) -> bool:
+    """Return whether a span is made of the English of software: "Uncheck", "Privacy Policy".
+
+    An agent's answers name buttons and settings in English inside Polish sentences, and the
+    Polish model took "Uncheck" for a person, masked 48 times in one call once known, and
+    "Authorization" too. A span whose every word is on :data:`SOFTWARE_WORDS` or is an English
+    small word is dropped, unless it holds a Polish first name. The list leaves out words that
+    are also first names or surnames, so Hugh Grant is still a person.
+    """
+    words = [_bare(word).lower() for word in fragment.split()]
+    return (
+        any(word in SOFTWARE_WORDS for word in words)
+        and all(word in SOFTWARE_WORDS or word in _ENGLISH_WORDS for word in words)
+        and not _holds_a_first_name(fragment)
+    )
+
+
 def _has_a_letter(fragment: str) -> bool:
     return any(char.isalpha() for char in fragment)
 
@@ -681,6 +699,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
             or _language_named_in_english(span, fragment)
             or _after_a_model_number(text, span, fragment)
             or _product_or_code(fragment)
+            or _software_english(fragment)
         ):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
