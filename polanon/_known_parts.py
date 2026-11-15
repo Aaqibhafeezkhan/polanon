@@ -55,9 +55,10 @@ MIN_LOGIN_SURNAME = 6
 #: A word written as a login or a handle is: small letters and digits, with dots, "_" or "-".
 _LOGIN = re.compile(r"(?<![\w.-])[a-z0-9ąćęłńóśźż][a-z0-9ąćęłńóśźż._-]*[a-z0-9ąćęłńóśźż](?![\w-])")
 #: What a login adds to a surname: an initial or two before it, then maybe a dot, "_" or "-";
-#: after it, maybe one of those and an initial or two, then maybe digits.
+#: after it, maybe one of those and then an initial or two, then maybe digits. Letters glued
+#: straight on are left out: "malinowskie" may be an adjective as much as a login.
 _LOGIN_BEFORE = re.compile(r"(?:[a-z]{1,2}[._-]?)?")
-_LOGIN_AFTER = re.compile(r"(?:[._-]?[a-z]{1,2})?\d*")
+_LOGIN_AFTER = re.compile(r"(?:[._-][a-z]{1,2})?\d*")
 
 
 def logins_of(text: str, values: Iterable[tuple[str, str]]) -> list[str]:

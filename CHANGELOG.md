@@ -182,8 +182,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   the benchmark held "user.name=Tomasz Malinowski" and the directory "/home/tmalinowski": the
   name was masked, the login went out. A word in lowercase that is a known surname of six
   letters or more with an initial, a dot, "_", "-" or digits around it, "tmalinowski",
-  "t.malinowski" or "malinowski85", is now masked with the name. The surname alone in
-  lowercase is still left as it is, since Zima, Kot or Wilk are ordinary words too.
+  "t.malinowski" or "malinowski85", is now masked with the name. Letters after the surname count
+  only after a dot, "_" or "-", so "malinowskie" stays the adjective it may be, and the surname
+  alone in lowercase is still left as it is, since Zima, Kot or Wilk are ordinary words too.
 
 ## [0.3.5] - 2026-11-14
 

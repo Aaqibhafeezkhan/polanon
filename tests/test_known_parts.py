@@ -189,3 +189,13 @@ def test_a_login_made_of_a_known_surname_is_the_person_too():
     for login in ("tmalinowski", "t.malinowski", "malinowski85", "malinowski_t"):
         assert login not in masked, login
     assert " malinowski sam " in masked
+
+
+def test_a_surname_with_letters_glued_on_is_no_login():
+    """A surname declines as an adjective does, and a lowercase word with an ending glued on,
+    "malinowskie", may be an ordinary one, so letters after a surname make a login only after a
+    dot, "_" or "-"."""
+    text = "Pisze Tomasz Malinowski, a odmiany malinowskie są w katalogu; login malinowski.t."
+    masked = mask(text).anonymized
+    assert "odmiany malinowskie" in masked
+    assert "malinowski.t" not in masked
