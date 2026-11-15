@@ -21,8 +21,8 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   "paranoid")` and `NerGuard(mode="paranoid")` keep every span with a letter in it instead. On
   the agent's calls of the benchmark only what no guard finds leaks, 1 of 243 marked
   occurrences against 3 in the default `mode="normal"`, and 386 of 696 token uses hide nothing,
-  against 5 of 307. On the twelve
-  documents it masks the same 184 values, with 8 over-masked spans instead of 6. The rules are
+  against 5 of 307. On the sample
+  documents it masks the same 187 values, with 8 over-masked spans instead of 6. The rules are
   the same in both modes. `benchmarks/run.py` and `benchmarks/run_agent.py` take `--paranoid`.
 
 - **A benchmark of an AI agent's calls, and of what comes back.** `benchmarks/agent_corpus.py`
@@ -140,6 +140,16 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   Max" and a vacuum's "S8 Pro", and the Polish model took "Max" for a person, masked 44 times in
   one call once known. A person right after a word of letters and digits is now dropped, unless
   it holds a Polish first name: "12A Maja Nowak" is a house number and a woman.
+- **A first name that is also a word, before a common surname in a chat,** is masked with it:
+  `maja nowak` and `marek nowak`, typed in lowercase, went out with only the surname masked. Nowak,
+  Wójcik, Woźniak, Kowalczyk, Kaczmarek, Krawczyk and Mazur in lowercase now settle the first
+  name before them, in agreement with it, and `10 marek w ofercie` is left alone. In text that
+  writes names with capitals they settle nothing, so `ani Kowalczyk` stays "nor Kowalczyk", and
+  `maja` after a day, "od", "do", "końca" or "połowie" is May, not Maja: `od 1 maja nowak` keeps
+  its month. Nor does such a surname claim a word in the next cell of a table. A thirteenth
+  benchmark document, `common_surnames.txt`, holds the cases. Contributed by louisss1016 in
+  [#28](https://github.com/boromat/polanon/pull/28), closing
+  [#13](https://github.com/boromat/polanon/issues/13).
 - **A product's tier, an identifier of code and a word with a digit are no names.** In the
   agent's calls of the benchmark the Polish model took a vacuum's fan speed "Max" for a person,
   masked 57 times once known, Python's `JSONDecodeError` and `HTTPError` too, and an invoice
@@ -150,7 +160,7 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   "AnnaLis" or "ZielonyDom", is written so too, and so are MacLeod and DeVito. A span
   is cut at a semicolon, a pipe and a tab as at a line break, so a CSV row read as one company
   gives its cells apart. Token uses that hide nothing fall from 83 of 382 to 22 of 321, with the
-  same values leaking, and the twelve documents score as before.
+  same values leaking, and the sample documents score as before.
 - **The English of software is no name.** An agent's answers name buttons and settings in
   English inside Polish sentences, and the Polish model took "Uncheck" for a person, masked 48
   times in one call once known, "Authorization", "Scheduling" and "Privacy Policy" too. A span
@@ -491,9 +501,6 @@ alone.
 
 ### Fixed
 
-- **Lowercase names with a common surname** are masked whole even when the first name
-  is also an ordinary word, such as `maja nowak` and `marek nowak`. The short surname list
-  preserves grammatical agreement and leaves ordinary phrases such as `10 marek w ofercie` alone.
 - **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
   as a name and half an address, and an address on an internationalised domain not at all.
   Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).

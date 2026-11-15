@@ -15,6 +15,10 @@ would in one company's paperwork. No data about an actual person belongs in this
 `../gold/*.json` annotates each document with the values that must be masked and their entity type.
 `../run.py` scores the guards against those annotations; `../demo.py` just prints the masked text.
 
+`common_surnames.txt` keeps chat lines in lowercase where a first name that is also a word,
+`maja` or `marek`, comes before a common surname, beside `10 marek w ofercie`, which names
+nobody.
+
 `monthly_roster.txt` keeps surname-first monthly periods and names beside ordinary numbers
 masked without a language model. The separate name-guard tests cover punctuated date formats.
 

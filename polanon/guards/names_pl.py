@@ -449,6 +449,11 @@ _SUBJECT_PREFIXES = frozenset(_words("dotyczy fw fwd odp pd re temat"))
 
 #: Space-based dates retain their original rules: "15 Jan 2024", "Jan 15, 2024".
 _DAY = r"(?:0?[1-9]|[12]\d|3[01])"
+#: What stands before "maja" when it is May: a day, or "od", "do", "końca", "początku", "połowy".
+_MAY_BEFORE = re.compile(
+    rf"(?:(?<![\d.,:]){_DAY}|\b(?:od|do|końca|początku|połowy|połowie))[ \t\u00a0]+$",
+    re.IGNORECASE,
+)
 _DAY_BEFORE = re.compile(rf"(?<![\d.,:]){_DAY}\.?[ \t\u00a0]+$")
 _YEAR_AFTER = re.compile(r"\.?,?[ \t\u00a0]+(?:19|20)\d\d(?!\d)")
 _DAY_AND_YEAR_AFTER = re.compile(
@@ -543,10 +548,16 @@ class _Word:
 
 @dataclass(frozen=True, slots=True)
 class SurnameReading:
-    """What a word could be as a surname, and whether it strongly suggests a person's name."""
+    """What a word could be as a surname, and whether it strongly suggests a person's name.
+
+    `common` says the word is strong only for being a common surname written in lowercase, as a
+    chat writes "maja nowak": strong enough to settle the first name right before it, not to
+    claim a word in the next cell of a table.
+    """
 
     tags: frozenset[Tag]
     strong: bool
+    common: bool = False
 
 
 def surname_reading(word: str) -> SurnameReading | None:
@@ -564,25 +575,33 @@ def surname_reading(word: str) -> SurnameReading | None:
     parts = fold(word).split("-")
     if parts[-1] in _NOT_NAMES:
         return None
+    lowercase = word.islower()
     readings = [
         reading
-        for reading in (_part_reading(part) for part in parts if part not in _NOT_NAMES)
+        for reading in (_part_reading(part, lowercase) for part in parts if part not in _NOT_NAMES)
         if reading is not None
     ]
     if not readings:
         return None
     agreed = frozenset.intersection(*(reading.tags for reading in readings))
+    strong = any(reading.strong for reading in readings)
     return SurnameReading(
-        agreed or readings[-1].tags, strong=any(reading.strong for reading in readings)
+        agreed or readings[-1].tags,
+        strong=strong,
+        common=strong and all(reading.common for reading in readings if reading.strong),
     )
 
 
-def _part_reading(part: str) -> SurnameReading | None:
-    """Return the readings of one folded word, or one part of a double surname, as a surname."""
-    common = part in _COMMON_SURNAME_FORMS
+def _part_reading(part: str, lowercase: bool = False) -> SurnameReading | None:
+    """Return the readings of one folded word, or one part of a double surname, as a surname.
+
+    A common surname is strong only in lowercase, the chat of #13: in text that writes names with
+    capitals, a lowercase word before "Nowak" is the ordinary word, "od 1 maja Nowak".
+    """
+    common = lowercase and part in _COMMON_SURNAME_FORMS
     listed = _SURNAME_FORMS.get(part)
     if listed is not None:
-        return SurnameReading(listed, strong=common)
+        return SurnameReading(listed, strong=common, common=common)
     if len(part) < 4:
         return None
     adjectival = _ADJECTIVAL.search(part)
@@ -600,7 +619,8 @@ def _part_reading(part: str) -> SurnameReading | None:
             return None
         return SurnameReading(_OBLIQUE_TAGS[ending], strong=True)
     if _NOUN_NOMINATIVE.search(part) and part not in _NOT_SURNAMES:
-        return SurnameReading(_NOMINATIVE_TAGS, strong=common or part.endswith("wicz"))
+        wicz = part.endswith("wicz")
+        return SurnameReading(_NOMINATIVE_TAGS, strong=common or wicz, common=common and not wicz)
     return None
 
 
@@ -760,6 +780,10 @@ def _in_a_date(text: str, word: _Word) -> bool:
     """
     if _DAY_AND_YEAR_AFTER.match(text, word.end) is not None:
         return True
+    if text[word.start : word.end] == "maja" and _MAY_BEFORE.search(
+        text, max(0, word.start - 12), word.start
+    ):
+        return True  # "od 1 maja", "do końca maja": the month, since Maja's genitive is "Mai"
     before = max(0, word.start - 8)
     if (
         _YEAR_AFTER.match(text, word.end) is not None
@@ -955,7 +979,8 @@ def _surname_across(
     surname = surname_reading(candidate.text)
     if surname is None or not _agrees(surname.tags, tags):
         return None
-    if not (surname.strong or (_name_shaped(name.text) and _name_shaped(candidate.text))):
+    strong = surname.strong and not surname.common
+    if not (strong or (_name_shaped(name.text) and _name_shaped(candidate.text))):
         return None
     if on_the_next_line:
         after = _neighbour(text, words, following, 1)

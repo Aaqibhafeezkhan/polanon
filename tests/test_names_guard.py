@@ -582,3 +582,32 @@ def test_a_name_with_no_known_first_name_gives_its_parts_only_when_trusted():
     assert person_name_parts("Politechnika Krakowska") == ["Politechnika"]
     assert person_name_parts("Politechnika Krakowska", needs_first_name=True) == []
     assert person_name_parts("Jan Kowalski", needs_first_name=True) == ["Kowalski"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Od 1 maja Nowak przejmuje projekt.",
+        "Do 15 maja Kowalczyk wyśle raport.",
+        "Od maja Nowak przejmuje projekt.",
+        "od 1 maja nowak przejmuje projekt",
+        "do końca maja kowalczyk wyśle raport",
+        "w połowie maja mazur wraca z urlopu",
+    ],
+)
+def test_may_before_a_common_surname_is_the_month(text):
+    """The common surnames of #13 settled an ambiguous first name, and "maja", May in the
+    genitive, went into the person's token with the surname: the model got a date without its
+    month and a first name nobody wrote. After a day or "od", "do", "końca" or "połowie" the
+    word is the month; Maja's own genitive is "Mai"."""
+    assert _found(text) == []
+
+
+def test_a_capitalised_common_surname_settles_no_lowercase_word_before_it():
+    """In text that writes names with capitals, a lowercase word before "Kowalczyk" is the
+    ordinary word: "ani" is "nor" here, not Ania's genitive."""
+    assert _found("Ani Nowak, ani Kowalczyk nie odpisali.") == ["Ani Nowak"]
+
+
+def test_a_common_surname_in_a_lowercase_list_still_settles_its_first_name():
+    assert _found("1. maja nowak") == ["maja nowak"]

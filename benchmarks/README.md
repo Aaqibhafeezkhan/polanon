@@ -1,10 +1,11 @@
 # How well polanon detects
 
-[`samples/`](samples/) holds twelve synthetic documents. Nine are Polish: a CV, a VAT invoice, a
+[`samples/`](samples/) holds thirteen synthetic documents. Ten are Polish: a CV, a VAT invoice, a
 customer complaint, an IT support ticket, an employment contract, an internal IT note, chat
 messages typed the way people type them, in lowercase and without Polish letters, a monthly
-roster of surnames and periods, and a hospital discharge summary. Three are invoices from abroad:
-British, Swedish and Swiss. [`gold/`](gold/) annotates the 187 values that
+roster of surnames and periods, a hospital discharge summary, and chat lines with common
+surnames after first names that are also words. Three are invoices from abroad:
+British, Swedish and Swiss. [`gold/`](gold/) annotates the 190 values that
 must be masked, and [`run.py`](run.py) reports whether each one was **fully** covered, because half
 a masked PESEL is a leak rather than half a success. It scores the guards and the merging of
 their findings, not the pass that masks every later occurrence of a value already found: through
@@ -13,13 +14,13 @@ can only come out the same or better.
 
 | Configuration | Fully masked | Partially masked | Missed | Over-masked spans |
 |---|---:|---:|---:|---:|
-| polanon, guards only, no model | 161 / 187 (86%) | 0 | 26 | 0 |
-| polanon, guards + `pl_core_news_md` | **184 / 187 (98%)** | 0 | 3 | 8 |
+| polanon, guards only, no model | 164 / 190 (86%) | 0 | 26 | 0 |
+| polanon, guards + `pl_core_news_md` | **187 / 190 (98%)** | 0 | 3 | 6 |
 | Presidio 2.2.366, set up for Polish with the same model | 112 / 169 (66%) | 25 | 32 | 47 |
 | Presidio, phone recognizer at leniency 0 | 128 / 169 (76%) | 29 | 12 | 76 |
 
 Presidio was measured on the first eleven documents, before the discharge summary joined them, and
-has not been run on the twelve; on those eleven polanon masks 145 of 169 with the rules alone and
+has not been run on the thirteen; on those eleven polanon masks 145 of 169 with the rules alone and
 166 of 169 with the model, with 7 over-masked spans.
 
 Presidio is the usual answer to "mask personal data before an LLM call", so it is the baseline.
@@ -69,7 +70,7 @@ formula. What the model adds is places and company names without a legal form.
 
 </details>
 
-**Read the number honestly.** Twelve short documents are a regression check, not a research
+**Read the number honestly.** Thirteen short documents are a regression check, not a research
 benchmark, and the corpus was written by the same person who wrote the guards, who tuned them
 against it; Presidio was never tuned on it. The misses are
 instructive: the word *Kraków* is masked in one document and missed in another, and *Bristol* and
@@ -120,7 +121,7 @@ Two birthdays under a contact's `birthday` key and a login made of a surname in 
 `/home/tmalinowski`, leaked too until a key that names a birthday was read as its label and a
 login made of a known surname was masked with the person. `mode="paranoid"` takes every name the
 model finds and wastes more than half of the token uses, on "return", "message", "notify" and
-"That's". On the twelve documents it masks the same 184 values as the default, with 8
+"That's". On the thirteen documents it masks the same 187 values as the default, with 8
 over-masked spans instead of 6. What the default still masks for nothing, five uses in all, is
 three German nouns, the name of a speaker in a smart home and "thanks" in Ukrainian; before the
 filters for products, code, the English of software, Chinese and the parties of a contract it
