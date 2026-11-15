@@ -167,6 +167,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   "Najemcy" for a company. Najemca, Wynajmujący, Zleceniodawca, Zleceniobiorca, Zamawiający,
   Wykonawca, Sprzedający, Kupujący, Pracodawca, Pracownik, Strony and the like, in their cases,
   join the form words a span made only of is dropped; the person who is a party is still masked.
+- **A birth date after "birthday", "birth_date" or "Geburtsdatum" is masked.** A contact book in
+  the agent's calls of the benchmark gave the label "birthday", and the dates after it went out
+  in the clear. The rule for birth dates now also reads "birthday", "birth date", "birth_date",
+  "date_of_birth", "dateOfBirth", "Geburtsdatum" and "urodziny", with a quote or "=" between
+  the label and the date, as code and JSON write them.
 
 ## [0.3.5] - 2026-11-14
 

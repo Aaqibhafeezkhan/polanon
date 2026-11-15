@@ -1060,6 +1060,24 @@ def test_a_birth_date_written_in_english_is_masked(text, date):
     assert _found(text, "BIRTH_DATE") == [date]
 
 
+@pytest.mark.parametrize(
+    ("text", "date"),
+    [
+        ("birthday: 1961-11-21", "1961-11-21"),
+        ("Birthday 21 November 1961", "21 November 1961"),
+        ("birth date: 1957-11-03", "1957-11-03"),
+        ("birth_date=1957-11-03", "1957-11-03"),
+        ("date_of_birth: 1957-11-03", "1957-11-03"),
+        ("Geburtsdatum: 03.11.1957", "03.11.1957"),
+        ("urodziny: 21.11.1961", "21.11.1961"),
+    ],
+)
+def test_a_birth_date_after_birthday_or_a_label_of_code_is_masked(text, date):
+    """A contact book an agent read gave "birthday" and "date_of_birth", and the dates after them
+    went out in the clear."""
+    assert _found(text, "BIRTH_DATE") == [date]
+
+
 def test_a_date_written_in_english_is_a_date_and_no_birth_date_without_its_label():
     assert _found("Deadline: 15 June 2025", "DATE") == ["15 June 2025"]
     assert _found("Deadline: 15 June 2025", "BIRTH_DATE") == []

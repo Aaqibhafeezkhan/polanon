@@ -322,10 +322,11 @@ _DATE_VALUE = (
     rf"|\d{{1,2}}(?:st|nd|rd|th)?\s+(?i:{_EN_MONTHS})\.?,?\s+\d{{4}}"
     rf"|(?i:{_EN_MONTHS})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s+\d{{4}}"
 )
-#: Words that introduce a birth date: "ur.", "urodzona", "data urodzenia:", "DOB", "geb.".
+#: Words that introduce a birth date: "ur.", "urodzona", "data urodzenia:", "DOB", "geb.", and
+#: the names code gives them, "birthday", "birth_date" or "dateOfBirth".
 _BIRTH_LABEL = (
-    r"(?i:\b(?:data\s+urodzenia|urodzon[aey]?|urodz\.|ur\.|date\s+of\s+birth|born|dob"
-    r"|geboren|geb\.))"
+    r"(?i:\b(?:data[\s_]+urodzenia|urodzon[aey]?|urodz\.|ur\.|urodziny|date[\s_]+of[\s_]+birth"
+    r"|dateofbirth|birth[\s_-]?(?:date|day)|born|dob|geburtsdatum|geboren|geb\.))"
 )
 
 #: Registered IBAN length per country (ISO 13616 / the SWIFT IBAN registry). An IBAN is often
@@ -528,7 +529,7 @@ PATTERNS: list[Rule] = [
     (
         "BIRTH_DATE",
         re.compile(
-            rf"{_BIRTH_LABEL}\s*[:-]?\s*(?:(?:w\s+)?dniu\s+|dnia\s+|on\s+|am\s+)?"
+            rf"{_BIRTH_LABEL}[\"']?\s*[:=-]?\s*[\"']?(?:(?:w\s+)?dniu\s+|dnia\s+|on\s+|am\s+)?"
             rf"(?P<value>{_DATE_VALUE})(?!\d)"
         ),
         None,
