@@ -1,0 +1,17 @@
+{
+  "source": "common_surnames.txt",
+  "entities": [
+    {
+      "value": "maja nowak",
+      "type": "PERSON"
+    },
+    {
+      "value": "marek nowak",
+      "type": "PERSON"
+    },
+    {
+      "value": "kalina mazur",
+      "type": "PERSON"
+    }
+  ]
+}

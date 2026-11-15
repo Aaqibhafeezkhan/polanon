@@ -11,8 +11,8 @@ kowalskiej"). An initial counts as a first name in a signature: "J. Kowalski".
 Some forms of first names are also ordinary words: "marka" is Marek's genitive and a brand, "mają"
 is Maja's instrumental and "they have", "ani" is Ania's genitive and "nor", "kasko" is how Kaśko
 comes out without Polish letters. Those count as a name only after a form of address, or next to a
-surname with a telling ending. The declension rules were validated against the hunspell pl_PL word
-list, and the list of such collisions was drawn from it.
+surname with a telling ending or on a short list of common surnames. The declension rules were
+validated against the hunspell pl_PL word list, and the list of such collisions was drawn from it.
 
 Standard library only, so the guard also runs in the configuration without a language model.
 """
@@ -286,6 +286,13 @@ _SURNAME_FORMS: dict[str, frozenset[Tag]] = _index(
     + [(gender, decline_feminine(name.lower())) for name in _A_SURNAMES for gender in "mf"]
 )
 
+#: Forms of common surnames that settle an ambiguous first name even in lowercase.
+_COMMON_SURNAME_FORMS = frozenset(
+    fold(form)
+    for name in _words("Nowak Wójcik Woźniak Kowalczyk Kaczmarek Krawczyk Mazur")
+    for form in decline_masculine(name.lower())
+)
+
 #: Abbreviated titles, which may be followed by a full stop.
 _ABBREVIATIONS = frozenset(_words("adw dr dyr hab inz lek mec mgr prof red"))
 
@@ -536,7 +543,7 @@ class _Word:
 
 @dataclass(frozen=True, slots=True)
 class SurnameReading:
-    """What a word could be as a surname, and whether its ending alone makes that likely."""
+    """What a word could be as a surname, and whether it strongly suggests a person's name."""
 
     tags: frozenset[Tag]
     strong: bool
@@ -546,8 +553,9 @@ def surname_reading(word: str) -> SurnameReading | None:
     """Return the grammatical readings a word has as a Polish surname, or None.
 
     An adjectival ending (-ski, -cka, -dzkiego), -wicz, or a declined noun ending (Nowakiem,
-    Bednarka) is a strong sign. A bare -ak, -ek, -ik and the listed surnames are weak ones, because
-    plenty of ordinary nouns look the same.
+    Bednarka) is a strong sign, as is a form of a surname on the short common-surname list.
+    Other bare -ak, -ek, -ik and listed noun surnames are weak ones, because plenty of ordinary
+    nouns look the same.
 
     A double surname, "Kowalska-Nowak", is as strong as its stronger part and takes the cases its
     parts agree on. Read by its last part alone, a strong first part was ignored, and "mają
@@ -571,9 +579,10 @@ def surname_reading(word: str) -> SurnameReading | None:
 
 def _part_reading(part: str) -> SurnameReading | None:
     """Return the readings of one folded word, or one part of a double surname, as a surname."""
+    common = part in _COMMON_SURNAME_FORMS
     listed = _SURNAME_FORMS.get(part)
     if listed is not None:
-        return SurnameReading(listed, strong=False)
+        return SurnameReading(listed, strong=common)
     if len(part) < 4:
         return None
     adjectival = _ADJECTIVAL.search(part)
@@ -591,7 +600,7 @@ def _part_reading(part: str) -> SurnameReading | None:
             return None
         return SurnameReading(_OBLIQUE_TAGS[ending], strong=True)
     if _NOUN_NOMINATIVE.search(part) and part not in _NOT_SURNAMES:
-        return SurnameReading(_NOMINATIVE_TAGS, strong=part.endswith("wicz"))
+        return SurnameReading(_NOMINATIVE_TAGS, strong=common or part.endswith("wicz"))
     return None
 
 

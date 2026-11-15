@@ -89,6 +89,54 @@ def test_words_that_only_look_like_names_are_left_alone(text):
     assert _found(text) == []
 
 
+@pytest.mark.parametrize("name", ["maja", "marek", "róża", "kalina"])
+@pytest.mark.parametrize(
+    "surname", ["nowak", "wójcik", "woźniak", "kowalczyk", "kaczmarek", "krawczyk", "mazur"]
+)
+def test_common_surnames_settle_ambiguous_first_names(name, surname):
+    person = f"{name} {surname}"
+    assert _found(f"{person} dzwoni") == [person]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("roza wojcik dzwoni", ["roza wojcik"]),
+        ("kalina wozniak dzwoni", ["kalina wozniak"]),
+        ("lista: nowak marek", ["nowak marek"]),
+        ("sprawa marka mazura", ["marka mazura"]),
+        ("rozmowa z mają mazur", ["mają mazur"]),
+    ],
+)
+def test_common_surnames_keep_case_folding_order_and_grammatical_agreement(text, expected):
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "10 marek w ofercie",
+        "róża kwitnie w ogrodzie",
+        "kalina rośnie w ogrodzie",
+        "marek młotek",
+        "róża kot",
+        "nowak wójcik woźniak kowalczyk kaczmarek krawczyk mazur",
+    ],
+)
+def test_common_surnames_do_not_make_ordinary_words_or_standalone_surnames_people(text):
+    assert _found(text) == []
+
+
+@pytest.mark.parametrize("person", ["maja nowak", "marek nowak", "kalina mazur"])
+@pytest.mark.parametrize("with_ner", [False, True])
+async def test_common_surnames_are_masked_whole_through_the_public_pipeline(person, with_ner):
+    if with_ner:
+        pytest.importorskip("pl_core_news_md")
+    result = await Anonymizer(default_guards(with_ner=with_ner)).anonymize(f"{person} dzwoni")
+    assert result.anonymized == "<OSOBA_1> dzwoni"
+    assert result.mapping == {"<OSOBA_1>": person}
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [

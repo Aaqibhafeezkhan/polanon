@@ -491,6 +491,9 @@ alone.
 
 ### Fixed
 
+- **Lowercase names with a common surname** are masked whole even when the first name
+  is also an ordinary word, such as `maja nowak` and `marek nowak`. The short surname list
+  preserves grammatical agreement and leaves ordinary phrases such as `10 marek w ofercie` alone.
 - **E-mail addresses with Polish letters** are masked whole: `zofia.żak@example.com` was masked
   as a name and half an address, and an address on an internationalised domain not at all.
   Contributed by ShahadatTest in [#14](https://github.com/boromat/polanon/pull/14).
