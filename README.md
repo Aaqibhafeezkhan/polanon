@@ -7,7 +7,7 @@
 **English** | [Polski](https://github.com/boromat/polanon/blob/main/README.pl.md)
 
 **Reversible PII masking for LLM calls, Polish-first.** Mask personal data before a prompt leaves
-your network, send only tokens to the model, and put the originals back into its answer — even
+your network, send only tokens to the model, and put the originals back into its answer, even
 while it streams. Pure Python: the standard library is the whole core.
 
 Featured in [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A), Jakub
@@ -46,8 +46,8 @@ General-purpose tools are built around English. Polish data needs three things t
 of the box:
 
 - **Checksums.** A PESEL, NIP, REGON, ID card number, IBAN or payment card is validated, not just
-  pattern-matched: the checksum rejects most random digit strings — for a PESEL, together with the
-  birth date, about 98% of them — while a valid number always passes. KRS numbers, which have no
+  pattern-matched: the checksum rejects most random digit strings (for a PESEL, together with the
+  birth date, about 98% of them), while a valid number always passes. KRS numbers, which have no
   public checksum, and passports are recognised next to their label as well. Eleven digits right
   after the word PESEL are masked even with a typo in them.
 - **Seven grammatical cases.** "Jan Kowalski", "Jana Kowalskiego" and "z Janem Kowalskim" are the
@@ -539,7 +539,7 @@ groups spaced differently, and around whatever a detector found inside it. Two e
 one-word name is not matched in all lowercase, because Zima, Kot and Wilk are surnames and "zima"
 is winter; identifiers such as a VIN or an e-mail address are matched in any case. A number shorter
 than six digits, such as a PIN, is not matched inside a longer number, a date, a time or an
-amount: "15.04.2025", "2024–2025", "2025,50" and "20250" stay readable when the PIN is 2025, while
+amount: "15.04.2025", "2024-2025", "2025,50" and "20250" stay readable when the PIN is 2025, while
 "w 2025 roku" and "PIN/PUK 2025/36912874" do not.
 
 **A token you write stays yours.** A placeholder such as `<PESEL_1>` in your own text is never handed
@@ -716,8 +716,8 @@ not, and what stays your application's job, starting with keeping the mapping sa
 
 polanon was built as the masking engine of [PolGate](https://github.com/boromat/polgate), a
 self-hosted hub that lets a team use Claude or GPT on real documents without sending personal data
-to the provider. The library knows nothing about it — no HTTP, no database, no settings — and a
-test fails if it ever starts to.
+to the provider. The library knows nothing about it, with no HTTP, no database and no settings,
+and a test fails if it ever starts to.
 
 ## Used by
 

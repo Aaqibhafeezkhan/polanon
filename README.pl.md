@@ -8,7 +8,7 @@
 
 **Odwracalne maskowanie danych osobowych w zapytaniach do LLM, przede wszystkim dla języka polskiego.**
 Zamaskuj dane osobowe, zanim prompt opuści twoją sieć, wyślij do modelu same tokeny, a oryginały
-wstaw z powrotem do jego odpowiedzi — nawet wtedy, gdy przychodzi strumieniowo. Czysty Python: rdzeń
+wstaw z powrotem do jego odpowiedzi, nawet wtedy, gdy przychodzi strumieniowo. Czysty Python: rdzeń
 nie potrzebuje niczego poza biblioteką standardową.
 
 polanon trafił do [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A),
@@ -49,13 +49,13 @@ rzeczy, których te narzędzia nie zapewniają od razu po instalacji:
 
 - **Sumy kontrolne.** PESEL, NIP, REGON, numer dowodu osobistego, IBAN czy numer karty płatniczej
   jest walidowany, a nie tylko dopasowywany do wzorca: suma kontrolna odrzuca większość przypadkowych
-  ciągów cyfr — w przypadku PESEL-u, razem z datą urodzenia, około 98% z nich — a prawidłowy numer
+  ciągów cyfr (w przypadku PESEL-u, razem z datą urodzenia, około 98% z nich), a prawidłowy numer
   jest zawsze akceptowany. Numery KRS, które nie mają publicznej sumy kontrolnej, oraz paszporty też
   są rozpoznawane, gdy występują obok swojej etykiety. Jedenaście cyfr tuż po słowie PESEL jest
   maskowanych nawet z literówką.
 - **Siedem przypadków gramatycznych.** „Jan Kowalski”, „Jana Kowalskiego” i „z Janem Kowalskim” to
   ta sama osoba. Polskie imiona są rozpoznawane w każdym z nich, także pisane małymi literami i bez
-  polskich znaków, razem z nazwiskiem, które się z nimi zgadza — bez żadnego modelu językowego.
+  polskich znaków, razem z nazwiskiem, które się z nimi zgadza, bez żadnego modelu językowego.
 - **Polskie etykiety w modelach.** Polskie modele spaCy oznaczają osoby jako `persName`, a nie
   `PERSON`. Pipeline skonfigurowany dla angielskich etykiet nie znajduje żadnych imion ani nazwisk
   i w żaden sposób o tym nie informuje.
@@ -79,9 +79,9 @@ Porównanie na podstawie własnej dokumentacji i kodu źródłowego każdego z p
 3 listopada 2026 r. Na przykładowych dokumentach uruchomiono tylko Presidio, skryptem
 z `benchmarks/`, i nie są to neutralne warunki: jedenaście syntetycznych dokumentów napisał autor
 biblioteki polanon, który dostrajał na nich jej reguły, a Presidio dostał tylko polski model, także
-do trzech faktur z zagranicy. Każde z tych narzędzi ma swoje miejsce: Presidio — do wielu języków,
-danych ustrukturyzowanych i integracji z Azure; pii-veil — do polskich identyfikatorów na licencji
-Apache-2.0, gdy imiona i nazwiska nie mają znaczenia; piimask — do identyfikatorów niezależnych od
+do trzech faktur z zagranicy. Każde z tych narzędzi ma swoje miejsce. Presidio służy do wielu języków,
+danych ustrukturyzowanych i integracji z Azure, pii-veil do polskich identyfikatorów na licencji
+Apache-2.0, gdy imiona i nazwiska nie mają znaczenia, a piimask do identyfikatorów niezależnych od
 języka (e-mail, numery telefonów, karty płatnicze, IBAN, adresy IP, adresy URL) i amerykańskich
 numerów ubezpieczenia społecznego, ze strategiami podstawiania fałszywych wartości, haszowania
 i częściowego maskowania oraz zaszyfrowanym sejfem. polanon jest dla polskiego tekstu wysyłanego do
@@ -561,8 +561,8 @@ czytelne. Jednowyrazowa nazwa pisana wielką literą nie jest dopasowywana, gdy 
 samymi małymi literami, bo Zima, Kot i Wilk to nazwiska, a „zima” to pora roku; identyfikatory
 takie jak VIN czy adres e-mail są dopasowywane bez względu na wielkość liter. Liczba krótsza niż
 sześć cyfr, na przykład PIN, nie jest dopasowywana wewnątrz dłuższej liczby, daty, godziny ani
-kwoty: „15.04.2025”, „2024–2025”, „2025,50” i „20250” zostają czytelne, gdy PIN to 2025,
-a „w 2025 roku” i „PIN/PUK 2025/36912874” — nie.
+kwoty: „15.04.2025”, „2024-2025”, „2025,50” i „20250” zostają czytelne, gdy PIN to 2025,
+a „w 2025 roku” i „PIN/PUK 2025/36912874” już nie.
 
 **Token, który sam wpiszesz, pozostaje twój.** Znacznik taki jak `<PESEL_1>` w twoim własnym
 tekście nigdy nie zostanie przydzielony prawdziwym danym. Trafia do mapowania jako odpowiadający
@@ -587,8 +587,8 @@ guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=
 ```
 
 **Sprawdzanie odpowiedzi.** Po przywróceniu `anonymizer.sweep(restored, mapping)` zgłasza tokeny
-wymyślone przez model i dane osobowe, które dodała jego odpowiedź: `report.is_clean` albo — jeśli
-chcesz się im przyjrzeć — `report.unknown_tokens` i `report.new_spans`.
+wymyślone przez model i dane osobowe, które dodała jego odpowiedź: `report.is_clean`, a jeśli
+chcesz się im przyjrzeć, `report.unknown_tokens` i `report.new_spans`.
 
 ## Co maskować
 
@@ -742,13 +742,13 @@ nazwą twojego detektora.
 
 Maskowanie to pseudonimizacja, a nie anonimizacja w rozumieniu prawa, i żaden detektor nie wyłapuje
 wszystkiego. [Model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md)
-opisuje, co jest objęte ochroną, a co nie, i co pozostaje zadaniem twojej aplikacji — począwszy od
+opisuje, co jest objęte ochroną, a co nie, i co pozostaje zadaniem twojej aplikacji, począwszy od
 bezpiecznego przechowywania mapowania.
 
 Biblioteka polanon powstała jako silnik maskowania dla [PolGate](https://github.com/boromat/polgate),
 samodzielnie hostowanego huba, dzięki któremu zespół może pracować z Claude'em albo GPT na
 prawdziwych dokumentach bez wysyłania danych osobowych do dostawcy modelu. Biblioteka nic o nim nie
-wie — żadnego HTTP, żadnej bazy danych, żadnych ustawień — a jeśli kiedykolwiek zacznie, jeden
+wie: nie ma w niej HTTP, bazy danych ani ustawień, a jeśli kiedykolwiek zacznie, jeden
 z testów nie przejdzie.
 
 ## Kto korzysta z polanon
