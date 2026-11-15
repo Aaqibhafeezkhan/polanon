@@ -361,6 +361,20 @@ _LANGUAGES_IN_ENGLISH = frozenset(
 #: A model number, letters and digits in one word, then the spaces before a span: "M4 ".
 _MODEL_NUMBER_BEFORE = re.compile(r"(?<![^\W_])((?=[^\W_]*[^\W\d_])[^\W_]+)[ \t]+$")
 
+#: What ends a line or a cell of a table: no name runs across it.
+_CELL_BREAKS = re.compile(r"[\n;|\t]")
+
+#: The tiers of a product's model, "M4 Max" or "S8 Pro Ultra", which alone name nobody.
+_PRODUCT_TIERS = frozenset({"max", "pro", "ultra", "plus", "mini", "lite", "air", "prime"})
+
+#: The ends of the names of errors in code: `JSONDecodeError`, `HTTPError`, `ValueError`.
+_CODE_ENDINGS = ("Error", "Exception", "Warning")
+
+#: A capital after a small letter, as code writes `AdGuard` or `iPhone`, and the starts of names
+#: that have one too: McDonald, MacLeod, O'Brien, DeVito, LaToya, VanDyke.
+_INNER_CAPITAL = re.compile(r"[a-ząćęłńóśźż][A-ZĄĆĘŁŃÓŚŹŻ]")
+_NAME_PREFIX = re.compile(r"(?:Mc|Mac|O'|D'|De|Di|Da|Du|La|Le|Van|Von)[A-Z]")
+
 #: English small words that are first names too: "Will Nowak" opens with one, and is a person.
 _FIRST_NAMES_TOO = frozenset({"will", "may"})
 
@@ -480,6 +494,26 @@ def _is_code(fragment: str) -> bool:
     if "_" in fragment and not _holds_a_first_name(fragment):
         return True
     return not _has_a_letter(fragment) or fragment in _CODE_LITERALS
+
+
+def _product_or_code(fragment: str) -> bool:
+    """Return whether a span of one word is a product's tier, an identifier of code, or a number.
+
+    In an agent's calls the Polish model took a vacuum's fan speed "Max" for a person, masked 57
+    times once known, Python's `JSONDecodeError` and `HTTPError` too, an invoice number
+    "FV/2026/10/014" for a place and a line of a CSV file for a company. A tier alone names
+    nobody, and a name holds no digit and no capital after a small letter, but for a login with a
+    Polish first name in it and names such as MacLeod, DeVito or O'Brien.
+    """
+    if " " in fragment:
+        return False
+    if fragment.lower().rstrip("+") in _PRODUCT_TIERS:
+        return True
+    if fragment.endswith(_CODE_ENDINGS):
+        return True
+    if any(char.isdigit() for char in fragment):
+        return not _holds_a_first_name(fragment)
+    return _INNER_CAPITAL.search(fragment) is not None and _NAME_PREFIX.match(fragment) is None
 
 
 def _has_a_letter(fragment: str) -> bool:
@@ -646,6 +680,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
             or _lowercase_place(span, fragment)
             or _language_named_in_english(span, fragment)
             or _after_a_model_number(text, span, fragment)
+            or _product_or_code(fragment)
         ):
             continue
         line_start = text.rfind("\n", 0, span.start) + 1
@@ -856,14 +891,16 @@ class NerGuard(Guard):
         return spans
 
     def _line_spans(self, text: str, start: int, end: int, entity_type: str) -> list[Span]:
-        """Split an entity at line breaks and trim surrounding whitespace.
+        """Split an entity at line breaks and the columns of a table, and trim the whitespace.
 
         Models occasionally run an entity across a newline, which then swallows whatever sits on the
-        next line. A name never spans two lines in the documents this library is written for.
+        next line. A name never spans two lines in the documents this library is written for, nor
+        two cells of a CSV file or a Markdown table: across "FV/2026/10/014;Studio Lumen" the model
+        read one company, and the invoice number was masked with it.
         """
         spans: list[Span] = []
         cursor = start
-        for piece in text[start:end].split("\n"):
+        for piece in _CELL_BREAKS.split(text[start:end]):
             piece_start = cursor
             cursor += len(piece) + 1
             stripped = piece.strip()

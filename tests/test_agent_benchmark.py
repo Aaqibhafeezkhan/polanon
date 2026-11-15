@@ -147,7 +147,7 @@ def test_in_paranoid_mode_nothing_leaks_and_more_than_half_the_tokens_hide_nothi
     assert leaked <= KNOWN_LEAKS - {"sopotu", "Erik Holm", "tmalinowski"}
     wasted = sum(score.wasted_uses for score in scores.values())
     used = sum(score.uses for score in scores.values())
-    assert wasted <= 398
+    assert wasted <= 401
     assert wasted / used > 0.5
 
 

@@ -133,7 +133,8 @@ def test_on_a_line_with_no_language_a_lowercase_word_is_no_name():
 
     The tool schema holds it as a key, which cannot be masked, so the gateway's last check refused
     every call. A line too short to show a language keeps capitalised spans, and lowercase ones
-    only when they hold a Polish first name.
+    only when they hold a Polish first name. "Max" of "Max results" is a product's tier, and
+    no name since the tiers are dropped.
     """
     text = (
         "replace_all\nnext\nMax results\nSkills for\njan_kowalski\nKOWALSKI JAN\nanna nowak\n"
@@ -151,7 +152,6 @@ def test_on_a_line_with_no_language_a_lowercase_word_is_no_name():
         _Entity(text, "volume_level", "persName"),
     ]
     assert _found(NerGuard(), text, entities) == [
-        "Max",
         "jan_kowalski",
         "KOWALSKI JAN",
         "anna nowak",
@@ -361,6 +361,40 @@ def test_a_word_after_a_model_number_is_no_person():
         _Entity(text, "Maja Nowak", "persName"),
     ]
     assert _found(NerGuard(), text, entities) == ["Ola Kowalska", "Maja Nowak"]
+
+
+def test_a_product_tier_a_code_identifier_and_a_word_with_a_digit_are_no_names():
+    """In an agent's calls the Polish model took a vacuum's fan speed "Max" for a person, masked
+    57 times once known, Python's `JSONDecodeError` and `HTTPError` too, an invoice number for a
+    place and a line of a CSV file for a company. A name with a capital inside it, MacLeod or
+    DeVito, is kept."""
+    text = (
+        "Ustaw moc na Max albo Max+, wersja Pro też ma tryb Ultra.\n"
+        "Błąd JSONDecodeError, potem HTTPError z serwera w Gdańsku.\n"
+        "Faktura FV/2026/10/014;Studio Lumen;615,00;4012736604 jest w pliku.\n"
+        "Projekt prowadzi Anna MacLeod z Danny DeVito."
+    )
+    entities = [
+        _Entity(text, "Max", "persName"),
+        _Entity(text, "Max+", "persName"),
+        _Entity(text, "Pro", "orgName"),
+        _Entity(text, "Ultra", "orgName"),
+        _Entity(text, "JSONDecodeError", "persName"),
+        _Entity(text, "HTTPError", "persName"),
+        _Entity(text, "Gdańsku"),
+        _Entity(text, "FV/2026/10/014;Studio Lumen;615,00;4012736604", "orgName"),
+        _Entity(text, "Anna MacLeod", "persName"),
+        _Entity(text, "Danny DeVito", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == [
+        "Gdańsku",
+        "Studio Lumen",
+        "Anna MacLeod",
+        "Danny DeVito",
+    ]
+    paranoid = _found(NerGuard(mode="paranoid"), text, entities)
+    assert {"Max", "JSONDecodeError", "FV/2026/10/014"} <= set(paranoid)
+    assert not {"615,00", "4012736604"} & set(paranoid)
 
 
 def test_in_paranoid_mode_every_name_the_model_finds_is_kept():
