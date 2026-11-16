@@ -19,6 +19,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   operator's `POLANON_UPSTREAM_KEY` goes there instead, and a gateway key is accepted there too
   and never sent on. `mask_messages_request`, `restore_messages_response` and `MessagesStream`
   in `polanon.gateway.payloads` do it without a server.
+- **`polanon-gateway --allow NAME` and `--allow-file PATH`** leave readable the names the model
+  has to see as they are: an assistant that speaks for a company has its own name and the
+  company's in its prompt, and masked they made it introduce itself as a token. Unlike the
+  well-known names, the operator's own release a person the name guard found too; a denylist
+  entry stays masked, and everything else in the prompt is masked as before. The banner counts
+  them. Asked for in [#30](https://github.com/boromat/polanon/pull/30), in place of sending the
+  whole system prompt unmasked.
 
 ### Fixed
 

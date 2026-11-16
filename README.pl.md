@@ -480,6 +480,10 @@ Co robi z jednym wywołaniem:
 - `--paranoid` maskuje każdą nazwę, którą znajdzie model spaCy, tak jak `mode="paranoid"`.
   Domyślnie pomija to, co znajdzie w angielskim tekście, w kodzie i identyfikatorach, bo prompt,
   narzędzia i logi agenta są pełne angielskich słów, które polski model bierze za nazwy.
+- `--allow NAZWA`, podane tyle razy, ile trzeba, i `--allow-file ŚCIEŻKA`, plik z jedną nazwą
+  w linii, zostawiają czytelne nazwy, które model musi widzieć takimi, jakie są, na przykład
+  imię asystenta i firmę, w imieniu której mówi; tak podana osoba też zostaje czytelna.
+  Reszta promptu jest maskowana jak dotąd.
 - Niczego nie zapisuje na dysku. Narzędzie wysyła całą rozmowę przy każdym wywołaniu, a każde
   wywołanie jest maskowane i przywracane osobno. Z `POLANON_KEY` ustawionym na 64 znaki
   szesnastkowe dana osoba ma jeden token w każdym wywołaniu i w każdym przypadku gramatycznym.

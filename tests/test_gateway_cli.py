@@ -147,3 +147,35 @@ def test_paranoid_mode_without_the_model_says_it_changes_nothing(capsys):
     status, _ = run([*UPSTREAM, "--paranoid"])
     assert status == 0
     assert "--paranoid needs the spaCy model" in capsys.readouterr().err
+
+
+def test_the_operator_s_names_stay_readable_even_a_person(tmp_path, capsys):
+    """An assistant that speaks for a company has a name and a company of its own in its prompt,
+    and masked they made it answer as a token. The operator names them with --allow or a file
+    of names, one per line, and they go out as written, a person too; anyone else is masked."""
+    from polanon.gateway.__main__ import _anonymizer, _parser
+
+    names = tmp_path / "names.txt"
+    names.write_text("# who the assistant speaks for\nKwadrat Sp. z o.o.\n\n", encoding="utf-8")
+    argv = [*UPSTREAM, "--allow", "Ola Nowak", "--allow-file", str(names)]
+    anonymizer, detection = _anonymizer(_parser().parse_args(argv), {})
+    text = "Asystentka Ola Nowak pisze w imieniu firmy Kwadrat Sp. z o.o. do Jana Kowalskiego."
+    masked = anonymizer.anonymize_sync(text, {}).anonymized
+    assert "Ola Nowak" in masked
+    assert "Kwadrat Sp. z o.o." in masked
+    assert "Kowalskiego" not in masked
+    assert "2 of the operator's names left readable" in detection
+
+    status, _ = run([*UPSTREAM, "--allow-file", str(tmp_path / "missing.txt")])
+    assert status == BAD_SETTING
+    assert "missing.txt" in capsys.readouterr().err
+
+
+def test_the_operator_s_names_stay_readable_without_the_well_known_ones():
+    from polanon.gateway.__main__ import _anonymizer, _parser
+
+    argv = [*UPSTREAM, "--no-well-known-names", "--allow", "Ola Nowak"]
+    anonymizer, _ = _anonymizer(_parser().parse_args(argv), {})
+    masked = anonymizer.anonymize_sync("Ola Nowak pisze z Facebooka do Jana Kowalskiego.", {})
+    assert masked.anonymized.startswith("Ola Nowak pisze")
+    assert "Kowalskiego" not in masked.anonymized

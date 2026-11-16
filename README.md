@@ -466,6 +466,10 @@ What it does with a call:
 - `--paranoid` masks every name the spaCy model finds, as `mode="paranoid"` does. By default
   what it finds in English prose, code and identifiers is left out, since an agent's prompt,
   tools and logs are full of English words the Polish model takes for names.
+- `--allow NAME`, given as many times as needed, and `--allow-file PATH`, a file with one name
+  per line, leave readable the names the model has to see as they are, such as the assistant's
+  own and the company it speaks for; a person named so stays readable too. Everything else in
+  the prompt is masked as before.
 - It keeps nothing on disk. A tool sends the whole conversation with every call, and each call is
   masked and restored on its own. With `POLANON_KEY` set to 64 hexadecimal characters, a person
   keeps one token in every call and in every grammatical case.

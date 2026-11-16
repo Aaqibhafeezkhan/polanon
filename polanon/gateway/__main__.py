@@ -20,7 +20,8 @@ import ipaddress
 import logging
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, Literal
 
 from polanon import (
@@ -31,6 +32,7 @@ from polanon import (
     default_guards,
     ner_available,
 )
+from polanon.allowlist import NAME_TYPES, PROTECTED_SOURCES
 from polanon.policy import Mode
 
 #: Exit status for a setting the gateway refuses to start with.
@@ -127,6 +129,19 @@ def _parser() -> argparse.ArgumentParser:
         help="also mask names on the well-known list, such as Facebook, Excel or ZUS",
     )
     parser.add_argument(
+        "--allow",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="a name to leave readable, such as the assistant's own or its company's, a person's "
+        "too; may be given many times",
+    )
+    parser.add_argument(
+        "--allow-file",
+        metavar="PATH",
+        help="a file of names to leave readable, one per line; a line starting with # is skipped",
+    )
+    parser.add_argument(
         "--instructions",
         choices=("pl", "en", "none"),
         default="pl",
@@ -179,13 +194,57 @@ def _anonymizer(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[Anony
                 'python -c "import secrets; print(secrets.token_hex(32))"'
             ) from None
         detection += ", stable tokens"
-    allowlist = None if args.no_well_known_names else Allowlist(WELL_KNOWN_NAMES)
+    operator = [*args.allow, *_names_in(args.allow_file)]
+    well_known = () if args.no_well_known_names else WELL_KNOWN_NAMES
+    allowlist = _OperatorNames(well_known, operator) if operator or well_known else None
+    if operator:
+        detection += f", {len(operator)} of the operator's names left readable"
     anonymizer = Anonymizer(
         default_guards(with_ner=with_ner, spacy_model=args.spacy_model, mode=mode),
         allowlist=allowlist,
         pseudonyms=pseudonyms,
     )
     return anonymizer, detection
+
+
+def _names_in(path: str | None) -> list[str]:
+    """The names of a file, one per line, without blank lines and comments.
+
+    Raises:
+        ValueError: when the file cannot be read; the message names the file, not its content.
+    """
+    if path is None:
+        return []
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"cannot read the names in {path}: {type(exc).__name__}") from None
+    return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
+class _OperatorNames(Allowlist):
+    """The well-known names, and the operator's own, which stay readable even as a person.
+
+    The list of well-known names never releases a person the name guard found, since a brand on
+    it must not uncover somebody of the same name. The operator's names are named on purpose, the
+    assistant's own or the one of the person it speaks for, and are left readable whatever found
+    them; what somebody asked to mask, a denylist entry, stays masked.
+    """
+
+    def __init__(self, well_known: Iterable[str], operator: Iterable[str]) -> None:
+        operator = list(operator)
+        super().__init__([*well_known, *operator])
+        self._operator = Allowlist(operator)
+
+    def exempts(self, entity_type: str, fragment: str, source: str = "") -> bool:
+        """Leave an operator's name readable, and anything else as the well-known list does."""
+        if (
+            entity_type in NAME_TYPES
+            and source not in PROTECTED_SOURCES
+            and self._operator.allows(fragment)
+        ):
+            return True
+        return super().exempts(entity_type, fragment, source)
 
 
 def _loopback(host: str) -> bool:
