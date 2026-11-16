@@ -597,8 +597,10 @@ def _messages_provider(received, *, tool_input=None):
             "id": "msg_1",
             "type": "message",
             "role": "assistant",
+            "model": "claude-test",
             "content": blocks,
             "stop_reason": "end_turn",
+            "usage": {"input_tokens": 12, "output_tokens": 7},
         }
         if not body.get("stream"):
             return httpx.Response(200, json=message)
@@ -628,7 +630,13 @@ def _messages_provider(received, *, tool_input=None):
                 {"type": "content_block_delta", "index": index, "delta": delta} for delta in deltas
             ]
             events.append({"type": "content_block_stop", "index": index})
-        events.append({"type": "message_delta", "delta": {"stop_reason": "end_turn"}})
+        events.append(
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 7},
+            }
+        )
         events.append({"type": "message_stop"})
         lines = "".join(
             f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
