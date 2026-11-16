@@ -5,7 +5,15 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
-## [Unreleased]
+## [0.3.7] - 2026-11-17
+
+Anthropic's Messages API in the gateway, names the operator leaves readable, an account number
+that no longer comes out half a card, and a name a tool result gives late that is masked where
+it came earlier too; nothing that worked before stops working, so this is a patch release, as
+CONTRIBUTING.md describes. `polanon-gateway` now masks `/v1/messages` too, streamed or not, for
+an app on Anthropic's SDK or Claude Code, `--allow` and `--allow-file` leave the assistant's
+own name and its company readable while the rest of the prompt is masked, and an agent's call
+the last check refused for such a name now goes out masked.
 
 ### Added
 
