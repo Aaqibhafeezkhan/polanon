@@ -892,3 +892,42 @@ def test_a_responses_stream_cut_short_gives_back_what_it_held():
     assert rest["delta"] == "<OSOBA"
     assert rest["item_id"] == "m1"
     assert stream.rest() == []
+
+
+def test_a_system_prompt_of_blocks_is_masked_and_gets_the_note_as_one_more_block():
+    from polanon.gateway.payloads import mask_messages_request
+
+    turn = MaskedTurn(ANONYMIZER)
+    body = {
+        "model": "claude-test",
+        "system": [
+            {
+                "type": "text",
+                "text": "Klient: Jan Kowalski.",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        "messages": [{"role": "user", "content": "Kto to jest Jan Kowalski?"}],
+    }
+    masked = mask_messages_request(turn, body, instructions="Tokens stand for values.")
+    assert masked["system"][0]["text"] == "Klient: <OSOBA_1>."
+    assert masked["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert masked["system"][1] == {"type": "text", "text": "Tokens stand for values."}
+    assert masked["messages"][0]["content"] == "Kto to jest <OSOBA_1>?"
+    assert body["system"][0]["text"] == "Klient: Jan Kowalski."
+
+
+def test_a_messages_stream_cut_short_gives_back_what_it_held():
+    from polanon.gateway.payloads import MessagesStream
+
+    stream = MessagesStream({"<OSOBA_1>": "Jan Kowalski"})
+    delta = {
+        "type": "content_block_delta",
+        "index": 0,
+        "delta": {"type": "text_delta", "text": "Dla <OSO"},
+    }
+    first = stream.events(delta)
+    assert first[0]["delta"]["text"] == "Dla "
+    rest = stream.rest()
+    assert rest[0]["delta"] == {"type": "text_delta", "text": "<OSO"}
+    assert stream.rest() == []

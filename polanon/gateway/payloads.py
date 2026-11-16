@@ -262,6 +262,189 @@ def restore_responses_response(turn: MaskedTurn, body: Any) -> Any:
     return _restored(body, turn.mapping)
 
 
+#: Content blocks of Anthropic's Messages API the provider signs: the model wrote them from masked
+#: text, and a changed one fails its signature, so they pass as they are both ways.
+_SEALED_BLOCKS = frozenset({"thinking", "redacted_thinking"})
+
+#: The text of a ``content_block_delta``, by the delta's type.
+_DELTA_TEXT = {"text_delta": "text", "input_json_delta": "partial_json"}
+
+
+def mask_messages_request(
+    turn: MaskedTurn, body: Mapping[str, Any], *, instructions: str | None = None
+) -> dict[str, Any]:
+    """Return an Anthropic ``/messages`` request with everything that carries data masked.
+
+    The system prompt, a text or a list of text blocks, is masked as the first of the messages,
+    and the messages as :meth:`MaskedTurn.mask_messages` masks them: their text, the input of a
+    ``tool_use`` block and the content of a ``tool_result``. The prose of the tools and of their
+    ``input_schema`` is masked as for the OpenAI API, and so is ``metadata``. A ``thinking`` or
+    ``redacted_thinking`` block is the model's own, written from masked text, and the provider
+    checks its signature, so it passes as it came; the gateway's last check still searches it.
+
+    Args:
+        turn: the turn of this call; its mapping restores the answer afterwards.
+        body: the request as the client sent it; it is not modified.
+        instructions: a note telling the model what the tokens are, added to the system prompt;
+            None leaves it as it is.
+
+    Raises:
+        GatewayRequestError: for a request without a list of messages.
+        MaskingUnavailableError: when masking fails, or for content that cannot be masked, such
+            as an image, while the turn refuses it.
+    """
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise GatewayRequestError("a message request needs a non-empty list of messages")
+    tools = {"tools": body["tools"]} if isinstance(body.get("tools"), list) else {}
+    defined = _chat_definitions(tools, turn.mask)
+    unsealed, sealed = _unsealed(messages)
+    system = body.get("system")
+    leading = [{"role": "system", "content": system}] if system is not None else []
+    masked = turn.mask_messages([*leading, *unsealed])
+    out = {**body, **defined, "messages": _resealed(masked[len(leading) :], sealed)}
+    if leading:
+        out["system"] = masked[0]["content"]
+    if isinstance(body.get("metadata"), Mapping):
+        out["metadata"] = turn.mask_data(body["metadata"])
+    if defined:
+        out.update(_chat_definitions({"tools": out["tools"]}, _known_values(turn)))
+    if instructions:
+        out["system"] = _system_with(out.get("system"), instructions)
+    return out
+
+
+def restore_messages_response(turn: MaskedTurn, body: Any) -> Any:
+    """Put the original values back into an Anthropic ``/messages`` response.
+
+    The text of every block is restored and the input of a ``tool_use`` block with it; a block
+    the provider signed, thinking, stays as the model wrote it, so it can be sent back.
+    """
+    if not isinstance(body, dict):
+        return _restored(body, turn.mapping)
+    return _message_restored(body, turn.mapping)
+
+
+class MessagesStream:
+    """Restores the events of one streamed Anthropic ``/messages`` answer.
+
+    Text arrives in ``content_block_delta`` events, as a ``text_delta`` or, for a tool's input,
+    an ``input_json_delta``. Each block has its own restorer, and what it still holds goes out as
+    one more delta right before the ``content_block_stop`` that closes the block. Thinking and
+    signatures pass as they are; every other event is restored as it is.
+    """
+
+    def __init__(self, mapping: Mapping[str, str]) -> None:
+        """Start a stream restored with the mapping its request was masked with."""
+        self._mapping = dict(mapping)
+        self._blocks: dict[Any, tuple[dict[str, Any], str, StreamRestorer]] = {}
+
+    def events(self, event: Any) -> list[Any]:
+        """Return the events to send for one event of the provider, restored."""
+        if not isinstance(event, dict):
+            return [event]
+        kind = event.get("type")
+        delta = event.get("delta")
+        if kind == "content_block_delta" and isinstance(delta, dict):
+            field = _DELTA_TEXT.get(str(delta.get("type")))
+            if field is None or not isinstance(delta.get(field), str):
+                return [event]
+            restorer = self._restorer(event, delta, field)
+            return [{**event, "delta": {**delta, field: restorer.feed(delta[field])}}]
+        if kind == "content_block_stop":
+            return [*self._held(event.get("index")), event]
+        if kind == "content_block_start":
+            block = event.get("content_block")
+            if isinstance(block, Mapping) and block.get("type") in _SEALED_BLOCKS:
+                return [event]
+        if kind == "message_start" and isinstance(event.get("message"), dict):
+            message = event["message"]
+            return [{**event, "message": _message_restored(message, self._mapping)}]
+        return [_restored(event, self._mapping)]
+
+    def rest(self) -> list[dict[str, Any]]:
+        """Return a delta for every block the stream still holds back, for a stream cut short."""
+        out: list[dict[str, Any]] = []
+        for index in list(self._blocks):
+            out.extend(self._held(index))
+        return out
+
+    def _restorer(self, event: dict[str, Any], delta: dict[str, Any], field: str) -> StreamRestorer:
+        index = event.get("index")
+        if index not in self._blocks:
+            escape = _json_escaped if field == "partial_json" else None
+            template = {**event, "delta": {**delta, field: ""}}
+            self._blocks[index] = (template, field, StreamRestorer(self._mapping, escape=escape))
+        return self._blocks[index][2]
+
+    def _held(self, index: Any) -> list[dict[str, Any]]:
+        """One more delta with what the block `index` still holds, or nothing."""
+        found = self._blocks.pop(index, None)
+        if found is None:
+            return []
+        template, field, restorer = found
+        held = restorer.flush()
+        if not held:
+            return []
+        return [{**template, "delta": {**template["delta"], field: held}}]
+
+
+def _message_restored(body: dict[str, Any], mapping: Mapping[str, str]) -> dict[str, Any]:
+    return {
+        key: _blocks_restored(value, mapping) if key == "content" else _restored(value, mapping)
+        for key, value in body.items()
+    }
+
+
+def _blocks_restored(content: Any, mapping: Mapping[str, str]) -> Any:
+    if not isinstance(content, list):
+        return _restored(content, mapping)
+    return [
+        block
+        if isinstance(block, Mapping) and block.get("type") in _SEALED_BLOCKS
+        else _restored(block, mapping)
+        for block in content
+    ]
+
+
+def _unsealed(messages: list[Any]) -> tuple[list[Any], dict[int, list[Any]]]:
+    """The messages without their signed blocks, and those blocks by the message they were in."""
+    unsealed: list[Any] = []
+    sealed: dict[int, list[Any]] = {}
+    for index, message in enumerate(messages):
+        content = message.get("content") if isinstance(message, Mapping) else None
+        if isinstance(content, list):
+            held = [
+                b for b in content if isinstance(b, Mapping) and b.get("type") in _SEALED_BLOCKS
+            ]
+            if held:
+                sealed[index] = held
+                rest = [block for block in content if not any(block is item for item in held)]
+                message = {**message, "content": rest}
+        unsealed.append(message)
+    return unsealed, sealed
+
+
+def _resealed(masked: list[dict[str, Any]], sealed: dict[int, list[Any]]) -> list[dict[str, Any]]:
+    """Put the signed blocks back first in their messages, where the API wants thinking."""
+    out = []
+    for index, message in enumerate(masked):
+        held = sealed.get(index)
+        if held:
+            message = {**message, "content": [*held, *message.get("content", [])]}
+        out.append(message)
+    return out
+
+
+def _system_with(system: Any, instructions: str) -> Any:
+    """The system prompt with the note about tokens after it, a text or one more text block."""
+    if system is None:
+        return instructions
+    if isinstance(system, list):
+        return [*system, {"type": "text", "text": instructions}]
+    return f"{system}\n\n{instructions}"
+
+
 def leaked_tokens(payload: Any, mapping: Mapping[str, str]) -> list[str]:
     """Return the tokens whose original value would still go out in `payload`.
 
@@ -574,7 +757,7 @@ def _definition(definition: Any, text: _Text) -> Any:
     out = dict(definition)
     if isinstance(out.get("description"), str):
         out["description"] = text(out["description"])
-    for field in ("parameters", "schema"):
+    for field in ("parameters", "schema", "input_schema"):
         if field in out:
             out[field] = _schema(out[field], text)
     return out

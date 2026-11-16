@@ -95,7 +95,10 @@ def main(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="polanon-gateway",
-        description="Mask calls to an OpenAI-compatible API on this machine, restore the answers.",
+        description=(
+            "Mask calls to an OpenAI-compatible API or to Anthropic's Messages API on this "
+            "machine, restore the answers."
+        ),
     )
     parser.add_argument(
         "--upstream",

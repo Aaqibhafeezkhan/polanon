@@ -573,3 +573,216 @@ async def test_the_provider_s_error_on_a_responses_call_passes_through():
     async with client(Provider(status=429)) as gw:
         response = await gw.post("/v1/responses", json=responses_body("Hej."))
     assert response.status_code == 429
+
+
+THINKING = {"type": "thinking", "thinking": "The user names <OSOBA_1>.", "signature": "c2lnbmVk"}
+
+
+def _messages_provider(received, *, tool_input=None):
+    """An Anthropic Messages API: echoes the last user text, as named events when streaming."""
+
+    def answer(request):
+        body = json.loads(request.content)
+        received.append((request, body))
+        content = body["messages"][-1]["content"]
+        if not isinstance(content, str):
+            content = next(block["text"] for block in content if block.get("type") == "text")
+        text = f"Echo: {content}"
+        blocks = [dict(THINKING), {"type": "text", "text": text}]
+        if tool_input is not None:
+            blocks.append(
+                {"type": "tool_use", "id": "toolu_1", "name": "notify", "input": tool_input(body)}
+            )
+        message = {
+            "id": "msg_1",
+            "type": "message",
+            "role": "assistant",
+            "content": blocks,
+            "stop_reason": "end_turn",
+        }
+        if not body.get("stream"):
+            return httpx.Response(200, json=message)
+        events = [{"type": "message_start", "message": {**message, "content": []}}]
+        for index, block in enumerate(blocks):
+            if block["type"] == "thinking":
+                start = {"type": "thinking", "thinking": ""}
+                deltas = [
+                    {"type": "thinking_delta", "thinking": block["thinking"]},
+                    {"type": "signature_delta", "signature": block["signature"]},
+                ]
+            elif block["type"] == "text":
+                start = {"type": "text", "text": ""}
+                deltas = [
+                    {"type": "text_delta", "text": text[at : at + 3]}
+                    for at in range(0, len(text), 3)
+                ]
+            else:
+                start = {**block, "input": {}}
+                arguments = json.dumps(block["input"], ensure_ascii=False)
+                deltas = [
+                    {"type": "input_json_delta", "partial_json": arguments[at : at + 4]}
+                    for at in range(0, len(arguments), 4)
+                ]
+            events.append({"type": "content_block_start", "index": index, "content_block": start})
+            events += [
+                {"type": "content_block_delta", "index": index, "delta": delta} for delta in deltas
+            ]
+            events.append({"type": "content_block_stop", "index": index})
+        events.append({"type": "message_delta", "delta": {"stop_reason": "end_turn"}})
+        events.append({"type": "message_stop"})
+        lines = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+            for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=lines)
+
+    return answer
+
+
+def messages_body(text, **fields):
+    return {
+        "model": "claude-test",
+        "max_tokens": 256,
+        "system": "Jesteś asystentem biura. Klient: Jan Kowalski.",
+        "messages": [{"role": "user", "content": [{"type": "text", "text": text}]}],
+        **fields,
+    }
+
+
+TOOLS = [
+    {
+        "name": "notify",
+        "description": f"Powiadamia klienta o PESEL {PESEL}.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "Np. Jan Kowalski."}},
+        },
+    }
+]
+
+
+async def test_a_messages_call_reaches_the_provider_masked_and_comes_back_restored():
+    """Anthropic's API: the system prompt, the messages, the tools and the metadata go out
+    masked, the note about tokens joins the system prompt, and the answer comes back restored.
+    A thinking block is the model's own and signed, so it passes as the provider wrote it."""
+    received = []
+    async with client(_messages_provider(received)) as gw:
+        response = await gw.post(
+            "/v1/messages",
+            json=messages_body(
+                f"Jan Kowalski, PESEL {PESEL}.",
+                tools=TOOLS,
+                metadata={"user_id": "jan.kowalski@example.com"},
+            ),
+        )
+    assert response.status_code == 200
+    content = response.json()["content"]
+    assert content[0] == THINKING
+    assert content[1]["text"] == f"Echo: Jan Kowalski, PESEL {PESEL}."
+    sent = json.dumps(received[0][1], ensure_ascii=False)
+    for value in (*RAW, "jan.kowalski@example.com"):
+        assert value not in sent
+    system = json.dumps(received[0][1]["system"], ensure_ascii=False)
+    assert "<OSOBA_1>" in system
+    assert "token" in system.lower()
+    assert received[0][1]["tools"][0]["name"] == "notify"
+
+
+async def test_a_tool_use_comes_back_with_the_original_values():
+    received = []
+
+    def tool_input(body):
+        return {"name": "<OSOBA_1>", "pesel": "<PESEL_1>"}
+
+    async with client(_messages_provider(received, tool_input=tool_input)) as gw:
+        response = await gw.post(
+            "/v1/messages", json=messages_body(f"Powiadom go, Jan Kowalski, PESEL {PESEL}.")
+        )
+    tool_use = response.json()["content"][2]
+    assert tool_use["input"] == {"name": "Jan Kowalski", "pesel": PESEL}
+
+
+async def test_a_streamed_messages_answer_comes_back_restored_as_named_events():
+    received = []
+
+    def tool_input(body):
+        return {"name": "<OSOBA_1>"}
+
+    async with client(_messages_provider(received, tool_input=tool_input)) as gw:
+        response = await gw.post(
+            "/v1/messages", json=messages_body("Jan Kowalski dzwonił.", stream=True)
+        )
+    lines = response.text.splitlines()
+    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ")]
+    names = [line[7:] for line in lines if line.startswith("event: ")]
+    assert names == [event["type"] for event in events]
+    deltas = [e["delta"] for e in events if e["type"] == "content_block_delta"]
+    text = "".join(d["text"] for d in deltas if d["type"] == "text_delta")
+    assert text == "Echo: Jan Kowalski dzwonił."
+    arguments = "".join(d["partial_json"] for d in deltas if d["type"] == "input_json_delta")
+    assert json.loads(arguments) == {"name": "Jan Kowalski"}
+    thinking = "".join(d["thinking"] for d in deltas if d["type"] == "thinking_delta")
+    assert thinking == THINKING["thinking"]
+    assert events[-1]["type"] == "message_stop"
+    assert "Kowalski" not in json.dumps(received[0][1], ensure_ascii=False)
+
+
+async def test_a_thinking_block_in_the_history_goes_back_as_it_came():
+    """The provider checks a thinking block's signature, so it must come back unchanged."""
+    received = []
+    body = messages_body("Jan Kowalski pyta o fakturę.")
+    body["messages"] = [
+        {"role": "user", "content": "Kto dzwonił?"},
+        {"role": "assistant", "content": [dict(THINKING), {"type": "text", "text": "Klient."}]},
+        *body["messages"],
+    ]
+    async with client(_messages_provider(received)) as gw:
+        response = await gw.post("/v1/messages", json=body)
+    assert response.status_code == 200
+    assert received[0][1]["messages"][1]["content"][0] == THINKING
+
+
+async def test_counting_tokens_is_asked_for_masked_text():
+    received = []
+
+    def answer(request):
+        received.append(json.loads(request.content))
+        return httpx.Response(200, json={"input_tokens": 12})
+
+    async with client(answer) as gw:
+        response = await gw.post(
+            "/v1/messages/count_tokens", json=messages_body(f"Jan Kowalski, PESEL {PESEL}.")
+        )
+    assert response.json() == {"input_tokens": 12}
+    sent = json.dumps(received[0], ensure_ascii=False)
+    assert "Kowalski" not in sent
+    assert PESEL not in sent
+
+
+async def test_an_anthropic_client_s_key_is_its_x_api_key_and_the_gateway_s_never_goes_on():
+    """Anthropic's clients send their key as x-api-key. With a gateway key the client sends that
+    one there, and the provider gets the operator's key as x-api-key, or none."""
+    received = []
+    headers = {"x-api-key": "local-secret", "anthropic-version": "2023-06-01"}
+    async with client(
+        _messages_provider(received), gateway_key="local-secret", upstream_key="sk-ant-operator"
+    ) as gw:
+        refused = await gw.post("/v1/messages", json=messages_body("Hej."))
+        allowed = await gw.post("/v1/messages", json=messages_body("Hej."), headers=headers)
+    assert refused.status_code == 401
+    assert allowed.status_code == 200
+    request = received[0][0]
+    assert request.headers["x-api-key"] == "sk-ant-operator"
+    assert request.headers["anthropic-version"] == "2023-06-01"
+    assert "authorization" not in request.headers
+
+    received.clear()
+    async with client(_messages_provider(received), gateway_key="local-secret") as gw:
+        await gw.post("/v1/messages", json=messages_body("Hej."), headers=headers)
+    assert "x-api-key" not in received[0][0].headers
+
+    received.clear()
+    own = {"x-api-key": "sk-ant-own"}
+    async with client(_messages_provider(received)) as gw:
+        await gw.post("/v1/messages", json=messages_body("Hej."), headers=own)
+    assert received[0][0].headers["x-api-key"] == "sk-ant-own"

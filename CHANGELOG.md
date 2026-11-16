@@ -7,6 +7,19 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **The gateway speaks Anthropic's Messages API.** `polanon-gateway --upstream
+  https://api.anthropic.com/v1` serves `/v1/messages`, streamed or not, and
+  `/v1/messages/count_tokens`, for an app on Anthropic's SDK or Claude Code pointed at it. The
+  system prompt, the messages, the tools with their `input_schema` and the metadata are masked;
+  a tool's input comes back restored, in a stream too, and the note about tokens joins the system
+  prompt. A thinking block passes as the model wrote it both ways, since the provider checks its
+  signature, and the last check still searches it. The client's key is its `x-api-key`; the
+  operator's `POLANON_UPSTREAM_KEY` goes there instead, and a gateway key is accepted there too
+  and never sent on. `mask_messages_request`, `restore_messages_response` and `MessagesStream`
+  in `polanon.gateway.payloads` do it without a server.
+
 ### Fixed
 
 - **An account number with a typo is masked whole as an IBAN, and never as a card.** A request

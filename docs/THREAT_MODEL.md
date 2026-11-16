@@ -197,7 +197,8 @@ application's part:
 
 ## The gateway
 
-`polanon-gateway` masks the calls of tools that speak the OpenAI API and restores their answers.
+`polanon-gateway` masks the calls of tools that speak the OpenAI API or Anthropic's Messages
+API and restores their answers.
 It is software the operator runs on their own machine, not a service: nobody else holds the
 calls, the keys or the logs. What it protects:
 

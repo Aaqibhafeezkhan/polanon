@@ -27,12 +27,15 @@ from polanon._matching import forget as forget_prepared_searches
 from polanon.gateway.payloads import (
     ChatStream,
     GatewayRequestError,
+    MessagesStream,
     ResponsesStream,
     leaked_tokens,
     mask_chat_request,
     mask_embeddings_request,
+    mask_messages_request,
     mask_responses_request,
     restore_chat_response,
+    restore_messages_response,
     restore_responses_response,
 )
 
@@ -46,7 +49,7 @@ Send = Callable[[dict[str, Any]], Awaitable[None]]
 #: cookies, and the client's credentials, which the gateway handles itself.
 _NOT_FORWARDED = frozenset(
     {"host", "content-length", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"}
-    | {"accept-encoding", "authorization", "proxy-authorization", "cookie"}
+    | {"accept-encoding", "authorization", "proxy-authorization", "cookie", "x-api-key"}
 )
 #: Headers of the provider's response that describe a body the gateway rewrites.
 _NOT_RETURNED = frozenset(
@@ -148,13 +151,17 @@ class Gateway:
                 status, counts = await self._responses(scope, receive, send)
             elif path == "/embeddings" and method == "POST":
                 status, counts = await self._embeddings(scope, receive, send)
+            elif path == "/messages" and method == "POST":
+                status, counts = await self._messages(scope, receive, send, "messages")
+            elif path == "/messages/count_tokens" and method == "POST":
+                status, counts = await self._messages(scope, receive, send, "messages/count_tokens")
             elif method == "GET" and (path == "/models" or path.startswith("/models/")):
                 status = await self._models(scope, send, path)
             else:
                 raise _RefusalError(
                     404,
                     f"the polanon gateway does not serve {method} {path}: it masks "
-                    "/v1/chat/completions, /v1/responses and /v1/embeddings only",
+                    "/v1/chat/completions, /v1/responses, /v1/embeddings and /v1/messages only",
                     "unsupported_endpoint",
                 )
         except _RefusalError as refusal:
@@ -230,6 +237,29 @@ class Gateway:
         self._check(masked, turn)
         response = await self._post("embeddings", masked, self._upstream_headers(scope))
         await _send_raw(send, response)
+        return response.status_code, turn.counts()
+
+    async def _messages(
+        self, scope: Scope, receive: Receive, send: Send, endpoint: str
+    ) -> tuple[int, dict[str, int]]:
+        """Anthropic's Messages API, and the count of its tokens, which is asked masked too."""
+        body = await self._body(receive)
+        turn = self._turn()
+        masked = await self._mask(
+            lambda: mask_messages_request(turn, body, instructions=self._instructions)
+        )
+        self._check(masked, turn)
+        headers = self._upstream_headers(scope, anthropic=True)
+        if endpoint == "messages" and body.get("stream"):
+            lines = _MessagesLines(turn.mapping)
+            status = await self._stream(endpoint, masked, headers, send, lines)
+            return status, turn.counts()
+        response = await self._post(endpoint, masked, headers)
+        if response.is_success and endpoint == "messages":
+            restored = restore_messages_response(turn, _json_of(response))
+            await _send_json(send, response.status_code, restored, response.headers)
+        else:
+            await _send_raw(send, response)
         return response.status_code, turn.counts()
 
     async def _models(self, scope: Scope, send: Send, path: str) -> int:
@@ -365,25 +395,37 @@ class Gateway:
             )
 
     def _authorised(self, scope: Scope) -> bool:
+        """Whether the client sent the gateway key, as a bearer token or as an x-api-key."""
         key = self._config.gateway_key
         if key is None:
             return True
-        given = _header(scope, "authorization") or ""
-        return hmac.compare_digest(given.encode(), f"Bearer {key}".encode())
+        bearer = _header(scope, "authorization") or ""
+        api_key = _header(scope, "x-api-key") or ""
+        return hmac.compare_digest(bearer.encode(), f"Bearer {key}".encode()) or (
+            bool(api_key) and hmac.compare_digest(api_key.encode(), key.encode())
+        )
 
-    def _upstream_headers(self, scope: Scope) -> dict[str, str]:
-        """The client's headers to pass on, with the key the provider should get."""
+    def _upstream_headers(self, scope: Scope, *, anthropic: bool = False) -> dict[str, str]:
+        """The client's headers to pass on, with the key the provider should get.
+
+        Anthropic's API takes its key as ``x-api-key``, the OpenAI API as a bearer token. With a
+        gateway key the client's own key is the gateway's, and never goes on.
+        """
         headers = {
             name.decode("latin-1"): value.decode("latin-1")
             for name, value in scope.get("headers", [])
             if name.decode("latin-1").lower() not in _NOT_FORWARDED
         }
         if self._config.upstream_key:
-            headers["authorization"] = f"Bearer {self._config.upstream_key}"
+            if anthropic:
+                headers["x-api-key"] = self._config.upstream_key
+            else:
+                headers["authorization"] = f"Bearer {self._config.upstream_key}"
         elif self._config.gateway_key is None:
-            client_key = _header(scope, "authorization")
-            if client_key:
-                headers["authorization"] = client_key
+            for name in ("authorization", "x-api-key"):
+                client_key = _header(scope, name)
+                if client_key:
+                    headers[name] = client_key
         return headers
 
     async def _lifespan(self, receive: Receive, send: Send) -> None:
@@ -490,6 +532,14 @@ class _ResponsesLines:
         name = event.get("type") if isinstance(event, dict) else None
         head = f"event: {name}\n" if self._named and name else ""
         return f"{head}data: {_dumps(event)}\n".encode()
+
+
+class _MessagesLines(_ResponsesLines):
+    """The event stream of an Anthropic Messages answer, restored event by event."""
+
+    def __init__(self, mapping: Mapping[str, str]) -> None:
+        super().__init__(mapping)
+        self._stream = MessagesStream(mapping)  # type: ignore[assignment]
 
 
 def _dumps(value: Any) -> str:

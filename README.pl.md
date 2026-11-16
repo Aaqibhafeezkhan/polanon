@@ -446,12 +446,21 @@ http://localhost:11434/v1`.
 | n8n | Base URL w poświadczeniach OpenAI |
 | Open WebUI | adres połączenia z API OpenAI |
 | LibreChat | `baseURL` własnego endpointu w `librechat.yaml` |
+| aplikacja na SDK Anthropic, Claude Code | `base_url` albo `ANTHROPIC_BASE_URL` jako `http://127.0.0.1:8787` |
+
+Narzędzie, które mówi Messages API Anthropic, potrzebuje osobnej bramki, uruchomionej
+z `--upstream https://api.anthropic.com/v1`; jego `x-api-key` idzie dalej tak jak klucz OpenAI.
 
 Co robi z jednym wywołaniem:
 
-- Obsługuje `/v1/chat/completions` i Responses API, `/v1/responses`, strumieniowo albo nie,
-  oraz `/v1/embeddings` i `/v1/models`, a każdy inny endpoint odrzuca, więc nic, czego nie umie
-  zamaskować, nie wychodzi w postaci, w jakiej przyszło.
+- Obsługuje `/v1/chat/completions`, Responses API, `/v1/responses`, i Messages API Anthropic,
+  `/v1/messages`, strumieniowo albo nie, z `/v1/messages/count_tokens`, oraz `/v1/embeddings`
+  i `/v1/models`, a każdy inny endpoint odrzuca, więc nic, czego nie umie zamaskować, nie
+  wychodzi w postaci, w jakiej przyszło.
+- Przy Messages API maskowane są prompt systemowy, wiadomości, narzędzia i metadane, a notatka
+  o tokenach trafia do promptu systemowego. Blok myślenia (`thinking`) przechodzi tak, jak
+  napisał go model, z zamaskowanego tekstu: dostawca sprawdza jego podpis. Ostatnia kontrola
+  i tak go przeszukuje.
 - Przy Responses API cała rozmowa przychodzi z każdym wywołaniem, tak jak wysyła ją Hermes Agent
   ze `store: false`. Wywołanie, które zostawia ją u dostawcy, przez `previous_response_id` albo
   `conversation`, albo prosi o odpowiedź `background` do odebrania później, przyniosłoby tokeny,
@@ -477,14 +486,14 @@ Co robi z jednym wywołaniem:
 
 Klucze zostają u tego, kto uruchamia bramkę, i są brane wyłącznie ze zmiennych środowiskowych.
 Domyślnie bramka przekazuje dalej klucz narzędzia; `POLANON_UPSTREAM_KEY` wysyła zamiast niego
-inny. Bramka słucha na `127.0.0.1`. Żeby była dostępna z innego komputera, ustaw `--host` i
-`POLANON_GATEWAY_KEY`, który każdy klient musi wtedy wysyłać: bez tego klucza bramka odmawia
+inny, jako token bearer albo, do Anthropic, jako `x-api-key`. Bramka słucha na `127.0.0.1`.
+Żeby była dostępna z innego komputera, ustaw `--host` i `POLANON_GATEWAY_KEY`, który każdy
+klient musi wtedy wysyłać, jako token bearer albo jako `x-api-key`: bez tego klucza bramka odmawia
 startu. Log podaje ścieżkę, status, czas i liczbę zamaskowanych wartości każdego typu, nigdy samą
 wartość.
 
 Nie ma żadnej usługi w chmurze: bramka działa tam, gdzie ją zainstalowano, a kto ją uruchamia,
-odpowiada za ten komputer, swoje klucze i dostawcę, do którego idą wywołania. Na razie bez
-obsługi: Messages API Anthropic.
+odpowiada za ten komputer, swoje klucze i dostawcę, do którego idą wywołania.
 [Model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#the-gateway)
 opisuje, przed czym bramka chroni, a przed czym nie.
 
