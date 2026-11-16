@@ -807,3 +807,27 @@ async def test_a_base_url_that_ends_in_v1_works_for_an_anthropic_client_too():
     assert str(received[0][0].url) == "https://provider.test/v1/messages"
     assert PESEL in response.json()["content"][1]["text"]
     assert PESEL not in received[0][0].content.decode()
+
+
+async def test_a_name_found_late_in_a_tool_result_goes_out_masked_and_the_call_is_sent():
+    """An agent's tool returned JSON with a person's name first in a list of tags, where nothing
+    recognised it, and then in a sentence that did. The last check found the name in the tags and
+    refused the call, and the agent got an error three times; a surname alone there went out."""
+    provider = Provider()
+    result = {"tags": ["Bożydar Wąsowicz", "Kowalski"], "note": "Dzwonił Pan Bożydar Wąsowicz."}
+    result["note"] += " Jan Kowalski prosi o fakturę."
+    call = {"id": "call_1", "type": "function", "function": {"name": "ticket", "arguments": "{}"}}
+    body = chat("Sprawdź zgłoszenie.")
+    body["messages"] += [
+        {"role": "assistant", "content": None, "tool_calls": [call]},
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": json.dumps(result, ensure_ascii=False),
+        },
+    ]
+    async with client(provider) as gw:
+        response = await gw.post("/v1/chat/completions", json=body)
+    assert response.status_code == 200
+    assert "Wąsowicz" not in provider.sent()
+    assert "Kowalski" not in provider.sent()

@@ -427,6 +427,42 @@ def test_a_value_found_in_a_later_message_is_masked_in_an_earlier_one(earlier, l
     assert first["content"] == masked
 
 
+def test_a_value_found_late_in_one_message_is_masked_where_it_came_earlier_in_it():
+    """An agent's tool returned JSON with a person's name first in a list of tags, where nothing
+    recognised it, and then in a sentence that did. The tags went out in the clear, and the
+    gateway's last check, finding them, refused the call: the agent got an error, three times."""
+    note = "Jan Kowalski prosi o fakturę."
+    result = json.dumps({"tags": ["pilne", "Kowalski"], "note": note}, ensure_ascii=False)
+    messages = [
+        {"role": "tool", "tool_call_id": "call_1", "content": result},
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Kowalski?"}, {"type": "text", "text": note}],
+        },
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "notify",
+                        "arguments": json.dumps(
+                            {"to": "Kowalski", "text": note}, ensure_ascii=False
+                        ),
+                    },
+                },
+            ],
+        },
+    ]
+    for message in messages:
+        masked = anonymizer.turn().mask_messages([message])
+        assert "Kowalski" not in json.dumps(masked, ensure_ascii=False), message["role"]
+    data = anonymizer.turn().mask_data({"tags": ["Kowalski"], "note": note})
+    assert "Kowalski" not in json.dumps(data, ensure_ascii=False)
+
+
 class SecondLookGuard(Guard):
     """Finds the model code "Q12" in a text only when it reads that text a second time.
 
@@ -486,8 +522,8 @@ def test_masking_stops_after_its_passes_when_the_mapping_keeps_growing():
         {"role": "user", "content": "Kody K20 K40 K60 K80"},
     ]
     every_look.turn().mask_messages(messages)
-    # Both read in the first pass, then one of them in each later pass, each time growing again.
-    assert guard.reads == MASKING_PASSES + 1
+    # Both read in every pass, since the mapping grows while each of them is masked, and no more.
+    assert guard.reads == 2 * MASKING_PASSES
 
 
 def test_messages_that_are_not_chat_messages_are_refused():

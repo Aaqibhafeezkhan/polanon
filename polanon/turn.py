@@ -42,7 +42,12 @@ _Masked = TypeVar("_Masked")
 def settled(
     originals: list[_Item], mask: Callable[[_Item], _Masked], size: Callable[[], int]
 ) -> list[_Masked]:
-    """Mask every item, then mask again each one masked before the mapping last grew.
+    """Mask every item, then mask again each one the mapping grew during or after.
+
+    An item is masked once more when the mapping grew while it was masked, not only after: a tool
+    result held a name first in a list of tags, where nothing recognised it, and then in a sentence
+    that did, so the tags had been masked before the name was known. The guards remember what they
+    found in a text, so masking an item again costs little more than the rules.
 
     Args:
         originals: the items, oldest first; they are not modified.
@@ -51,16 +56,16 @@ def settled(
     """
     masked, sizes = [], []
     for original in originals:
-        masked.append(mask(original))
         sizes.append(size())
+        masked.append(mask(original))
     for _ in range(MASKING_PASSES - 1):
         final = size()
-        stale = [index for index, grown in enumerate(sizes) if grown < final]
+        stale = [index for index, before in enumerate(sizes) if before < final]
         if not stale:
             break
         for index in stale:
-            masked[index] = mask(originals[index])
             sizes[index] = size()
+            masked[index] = mask(originals[index])
     return masked
 
 
@@ -202,8 +207,11 @@ class MaskedTurn:
             TypeError: for an object that is not JSON-like when no `default` is given. Converted
                 to text after masking, it would reach the model unmasked.
             MaskingUnavailableError: when masking fails.
+
+        A value recognised in one string is masked in every other one, also in a string that
+        comes before it, such as a name in a list of tags ahead of the sentence that names it.
         """
-        return _walk(value, self.mask, default)
+        return settled([value], lambda item: _walk(item, self.mask, default), self._size)[0]
 
     def mask_messages(self, messages: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         """Mask a list of chat messages written for the Anthropic or the OpenAI API.
@@ -219,9 +227,10 @@ class MaskedTurn:
         signed reasoning, is refused, left out or kept as it is, as `unknown_blocks` says.
 
         A value first recognised in a later message, such as the question, is also masked in the
-        earlier ones, where nothing recognised it on its own: a message masked before the mapping
-        last grew is masked once more, from its original, with the whole mapping, until the mapping
-        stops growing or :data:`MASKING_PASSES` passes are done.
+        earlier ones, where nothing recognised it on its own, and so is one recognised late in a
+        message, such as a tool result naming somebody in its tags before a sentence does: a
+        message the mapping grew during or after is masked once more, from its original, with the
+        whole mapping, until the mapping stops growing or :data:`MASKING_PASSES` passes are done.
 
         Args:
             messages: plain dictionaries, oldest first. They are not modified.

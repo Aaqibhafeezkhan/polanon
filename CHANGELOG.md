@@ -32,6 +32,15 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Fixed
 
+- **A value recognised late in a message is masked where it came earlier in it too.** An
+  agent's tool returned JSON naming a person first in a list of tags, where nothing recognised
+  the name on its own, and then in a sentence that did. The tags had been masked before the
+  name was known, so the gateway's last check found it there and refused the call, and the
+  agent got an error three times; a surname alone in such a place, which the check does not
+  look for, would have gone out. `MaskedTurn.mask_messages()` now masks a message once more
+  when the mapping grew while it was masked, not only after, the Responses API's input items
+  too, and `mask_data()` does the same for a whole value. The guards remember what they found
+  in a text, so the second look costs little more than the rules.
 - **A path the gateway refuses is named in its 404 as the client sent it**, with its `/v1`, not
   as the gateway read it: a client that asked for `/v1/v1/messages` was told the gateway does
   not serve `/v1/messages`, the one path it had just been told it serves.
