@@ -449,7 +449,8 @@ http://localhost:11434/v1`.
 | aplikacja na SDK Anthropic, Claude Code | `base_url` albo `ANTHROPIC_BASE_URL` jako `http://127.0.0.1:8787` |
 
 Narzędzie, które mówi Messages API Anthropic, potrzebuje osobnej bramki, uruchomionej
-z `--upstream https://api.anthropic.com/v1`; jego `x-api-key` idzie dalej tak jak klucz OpenAI.
+z `--upstream https://api.anthropic.com/v1`; jego klucz, wysłany jako `x-api-key` albo token
+bearer, idzie dalej tak jak klucz OpenAI, a adres bazowy z `/v1` na końcu też działa.
 
 Co robi z jednym wywołaniem:
 

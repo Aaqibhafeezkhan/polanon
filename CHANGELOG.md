@@ -15,10 +15,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   system prompt, the messages, the tools with their `input_schema` and the metadata are masked;
   a tool's input comes back restored, in a stream too, and the note about tokens joins the system
   prompt. A thinking block passes as the model wrote it both ways, since the provider checks its
-  signature, and the last check still searches it. The client's key is its `x-api-key`; the
-  operator's `POLANON_UPSTREAM_KEY` goes there instead, and a gateway key is accepted there too
-  and never sent on. `mask_messages_request`, `restore_messages_response` and `MessagesStream`
-  in `polanon.gateway.payloads` do it without a server.
+  signature, and the last check still searches it. The client's key passes on as it came, as
+  `x-api-key` or as a bearer token; the operator's `POLANON_UPSTREAM_KEY` goes as `x-api-key`
+  instead, and a gateway key is accepted either way and never sent on. A base URL ending in
+  `/v1`, the one an OpenAI client is given, works too, although Anthropic's SDKs add `/v1`
+  themselves and asked for `/v1/v1/messages`. `mask_messages_request`,
+  `restore_messages_response` and `MessagesStream` in `polanon.gateway.payloads` do it without
+  a server.
 - **`polanon-gateway --allow NAME` and `--allow-file PATH`** leave readable the names the model
   has to see as they are: an assistant that speaks for a company has its own name and the
   company's in its prompt, and masked they made it introduce itself as a token. Unlike the
@@ -29,6 +32,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Fixed
 
+- **A path the gateway refuses is named in its 404 as the client sent it**, with its `/v1`, not
+  as the gateway read it: a client that asked for `/v1/v1/messages` was told the gateway does
+  not serve `/v1/messages`, the one path it had just been told it serves.
 - **An account number with a typo is masked whole as an IBAN, and never as a card.** A request
   typed "konto PL61 1090 1014 0000 0712 1921 2974", a digit or two off a real account: the IBAN
   failed its checksum, and sixteen digits from its middle passed Luhn, so they were masked as a

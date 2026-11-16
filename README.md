@@ -435,7 +435,8 @@ http://localhost:11434/v1` for Ollama.
 | an app on Anthropic's SDK, Claude Code | `base_url`, or `ANTHROPIC_BASE_URL`, as `http://127.0.0.1:8787` |
 
 A tool that speaks Anthropic's Messages API needs a gateway of its own, started with
-`--upstream https://api.anthropic.com/v1`; its `x-api-key` is passed on as the OpenAI key is.
+`--upstream https://api.anthropic.com/v1`; its key, sent as `x-api-key` or as a bearer token, is
+passed on as the OpenAI key is, and a base URL ending in `/v1` works for it too.
 
 What it does with a call:
 

@@ -160,7 +160,7 @@ class Gateway:
             else:
                 raise _RefusalError(
                     404,
-                    f"the polanon gateway does not serve {method} {path}: it masks "
+                    f"the polanon gateway does not serve {method} {scope['path']}: it masks "
                     "/v1/chat/completions, /v1/responses, /v1/embeddings and /v1/messages only",
                     "unsupported_endpoint",
                 )
@@ -440,9 +440,15 @@ class Gateway:
 
 
 def _route(path: str) -> str:
-    """The path with the API's version taken off: clients set the base URL with or without it."""
+    """The path with the API's version taken off: clients set the base URL with or without it.
+
+    Anthropic's SDKs add /v1 themselves, so one given the base URL an OpenAI client takes, ending
+    in /v1, asks for /v1/v1/messages: the version comes off as many times as it is there.
+    """
     path = path.rstrip("/") or "/"
-    return path[3:] if path.startswith("/v1/") else path
+    while path.startswith("/v1/"):
+        path = path[3:]
+    return path
 
 
 def _header(scope: Scope, name: str) -> str | None:

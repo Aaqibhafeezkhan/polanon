@@ -214,6 +214,7 @@ async def test_an_endpoint_the_gateway_cannot_mask_is_refused_and_nothing_is_sen
         response = await gw.request(method, path, json=chat("Jan Kowalski"))
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "unsupported_endpoint"
+    assert f"{method} {path}:" in response.json()["error"]["message"]
     assert provider.requests == []
 
 
@@ -794,3 +795,15 @@ async def test_an_anthropic_client_s_key_is_its_x_api_key_and_the_gateway_s_neve
     async with client(_messages_provider(received)) as gw:
         await gw.post("/v1/messages", json=messages_body("Hej."), headers=own)
     assert received[0][0].headers["x-api-key"] == "sk-ant-own"
+
+
+async def test_a_base_url_that_ends_in_v1_works_for_an_anthropic_client_too():
+    """Anthropic's SDKs add /v1/messages to their base URL, so one given the base URL of an OpenAI
+    client, ending in /v1, asks for /v1/v1/messages."""
+    received = []
+    async with client(_messages_provider(received)) as gw:
+        response = await gw.post("/v1/v1/messages", json=messages_body(f"PESEL {PESEL}."))
+    assert response.status_code == 200
+    assert str(received[0][0].url) == "https://provider.test/v1/messages"
+    assert PESEL in response.json()["content"][1]["text"]
+    assert PESEL not in received[0][0].content.decode()
