@@ -35,6 +35,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   of 5,255 values whole with 435 spans outside them, and Presidio 66% with 2,641; on KPWr both
   find 90% of people.
 
+### Changed
+
+- **The README shows polanon at work and how it compares.** The terminal demo, now an animated
+  SVG drawn by `benchmarks/terminal_demo.py`, shows the gateway in Docker next to the library
+  and ends on the scores against Presidio. `benchmarks/comparison_chart.py` draws those scores
+  as a chart under "How it compares", and a button at the top opens the demo that runs polanon
+  in the browser, with nothing sent anywhere.
+
 ### Fixed
 
 - **An e-mail address with letters from outside Polish is masked whole.** Only Polish letters
