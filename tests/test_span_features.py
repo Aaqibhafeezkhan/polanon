@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "benchmarks"))
 
 from run import GoldEntity  # noqa: E402
 from verifier_data import label_of  # noqa: E402
+from verifier_train import Example, fit, probability, threshold_on  # noqa: E402
 
 from polanon.guards._span_features import FEATURES, span_features  # noqa: E402
 from polanon.types import Span  # noqa: E402
@@ -67,3 +68,16 @@ def test_a_span_over_a_value_is_one_over_another_name_ignored_and_over_nothing_z
     assert label_of(Span(14, 30, "PERSON", 0.85, "spacy_ner"), [person], [country]) == 1
     assert label_of(Span(30, 36, "LOCATION", 0.85, "spacy_ner"), [person], [country]) is None
     assert label_of(Span(40, 45, "ORG", 0.85, "spacy_ner"), [person], [country]) == 0
+
+
+def test_the_verifier_learns_a_sign_and_its_threshold_keeps_the_names_the_filters_keep():
+    """A feature that every name has and a feature that every non-name has: the fitted weights
+    tell them apart, and the threshold keeps every name the filters kept."""
+    names = [Example((0,), 1, True, "openpii", "train", "Jan", "PERSON")] * 20
+    others = [Example((1,), 0, True, "openpii", "train", "Subject", "ORG")] * 20
+    weights, bias = fit(2, names + others)
+    assert probability(weights, bias, names[0]) > 0.9
+    assert probability(weights, bias, others[0]) < 0.1
+    scores = {e: probability(weights, bias, e) for e in names + others}
+    threshold = threshold_on(names + others, scores)
+    assert scores[names[0]] >= threshold > scores[others[0]]

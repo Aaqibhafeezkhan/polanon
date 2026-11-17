@@ -13,6 +13,8 @@ as how much the sign counts, and :data:`FEATURES` fixes their order.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from polanon._canonical import _surname
 from polanon.guards import ner
@@ -26,7 +28,22 @@ _PREPOSITIONS = frozenset(
     | {"nad", "pod", "przed", "między", "wobec"}
 )
 
+#: Parts of speech that name nothing on their own, as the model tags its words.
+_FUNCTION_POS = frozenset({"ADP", "AUX", "CCONJ", "DET", "PART", "PRON", "SCONJ"})
+
 _WORD = re.compile(r"\S+")
+
+
+@dataclass(frozen=True)
+class Word:
+    """What the language model read in one word of a span: its part of speech and lemma."""
+
+    text: str
+    pos: str
+    lemma: str
+    has_vector: bool
+
+
 _PREVIOUS_WORD = re.compile(r"(\S+)\s*$")
 
 #: The features in a fixed order, as a verifier's weights are stored.
@@ -80,20 +97,37 @@ FEATURES: tuple[str, ...] = (
     "rule_named_in_english",
     # the rules of polanon agree
     "rules_found_it",
+    # what the model read in its words
+    "pos_every_word_proper",
+    "pos_a_proper_noun",
+    "pos_a_common_noun",
+    "pos_an_adjective",
+    "pos_a_verb",
+    "pos_a_function_word",
+    "pos_other",
+    "lemma_in_lowercase",
+    "a_word_without_vector",
 )
 
 
-def span_features(text: str, span: Span, *, rules_found_it: bool) -> dict[str, int]:
+def span_features(
+    text: str, span: Span, *, rules_found_it: bool, words: Sequence[Word] = ()
+) -> dict[str, int]:
     """Return the features of a span the model found in `text`, each 0 or 1.
 
     Args:
         text: the whole text the model read.
         span: one of its spans, as the paranoid mode keeps it.
         rules_found_it: whether a rule of polanon, not the model, found something overlapping it.
+        words: what the model read in the span's words. A name keeps its capital in its lemma,
+            "Kowalskiego" is "Kowalski", while a word of a form written with a capital does not:
+            "Nieokreślona" is "nieokreślony".
     """
     fragment = text[span.start : span.end]
-    words = _WORD.findall(fragment)
-    bare = [ner._bare(word) for word in words]
+    tags = {word.pos for word in words}
+    capitalised = [word for word in words if word.text[:1].isupper()]
+    written = _WORD.findall(fragment)
+    bare = [ner._bare(word) for word in written]
     folded = [word.lower() for word in bare if word]
     english = sum(word in ner._ENGLISH_WORDS or word in SOFTWARE_WORDS for word in folded)
     line_start = text.rfind("\n", 0, span.start) + 1
@@ -106,10 +140,10 @@ def span_features(text: str, span: Span, *, rules_found_it: bool) -> dict[str, i
         "type_person": span.entity_type == "PERSON",
         "type_location": span.entity_type == "LOCATION",
         "type_org": span.entity_type == "ORG",
-        "one_word": len(words) == 1,
-        "two_words": len(words) == 2,
-        "three_words_or_more": len(words) >= 3,
-        "every_word_capitalised": bool(words) and all(ner._capitalised(w) for w in words),
+        "one_word": len(written) == 1,
+        "two_words": len(written) == 2,
+        "three_words_or_more": len(written) >= 3,
+        "every_word_capitalised": bool(written) and all(ner._capitalised(w) for w in written),
         "a_word_in_lowercase": any(word[:1].islower() for word in bare),
         "all_capitals": fragment.isupper(),
         "short": len(fragment) <= 3,
@@ -144,9 +178,18 @@ def span_features(text: str, span: Span, *, rules_found_it: bool) -> dict[str, i
         "rule_software_english": ner._software_english(fragment),
         "rule_east_asian": ner._east_asian(fragment),
         "rule_opens_with_an_english_word": (
-            bool(words) and ner._opens_with_an_english_word(fragment)
+            bool(written) and ner._opens_with_an_english_word(fragment)
         ),
         "rule_named_in_english": ner._named_in_english(text, span),
         "rules_found_it": rules_found_it,
+        "pos_every_word_proper": bool(tags - {"PUNCT"}) and tags - {"PUNCT"} <= {"PROPN"},
+        "pos_a_proper_noun": "PROPN" in tags,
+        "pos_a_common_noun": "NOUN" in tags,
+        "pos_an_adjective": "ADJ" in tags,
+        "pos_a_verb": "VERB" in tags,
+        "pos_a_function_word": bool(tags & _FUNCTION_POS),
+        "pos_other": bool(tags - {"PROPN", "NOUN", "ADJ", "VERB", "PUNCT"} - _FUNCTION_POS),
+        "lemma_in_lowercase": any(word.lemma[:1].islower() for word in capitalised),
+        "a_word_without_vector": any(not word.has_vector for word in words),
     }
     return {name: int(bool(found[name])) for name in FEATURES}
