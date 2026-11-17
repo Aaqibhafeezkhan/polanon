@@ -1240,3 +1240,44 @@ def test_a_driving_licence_number_after_its_label_is_masked(text):
 )
 def test_no_driving_licence_without_its_label_and_a_number(text):
     assert masked(text, {"DRIVING_LICENCE"}) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Adres: ul. 1000-lecia 5, 00-950 Warszawa", "ul. 1000-lecia 5"),
+        ("Mieszka przy ul. 10-go Pułku Piechoty 55.", "ul. 10-go Pułku Piechoty 55"),
+        ("Biuro: ul. 83. Pułku Strzelców 7", "ul. 83. Pułku Strzelców 7"),
+        ("Dom przy ul. A. Słonimskiego 108.", "ul. A. Słonimskiego 108"),
+        ("Adres: ul. Cypriana K. Norwida 21", "ul. Cypriana K. Norwida 21"),
+        ("Siedziba: ul. inż. Bohdana Łozińskiego 11A", "ul. inż. Bohdana Łozińskiego 11A"),
+        ("Adres: ul. ks. J. Popiełuszki 4", "ul. ks. J. Popiełuszki 4"),
+        ("Adres: ul. Bohaterów Wojny 1920 r. 31", "ul. Bohaterów Wojny 1920 r. 31"),
+        ("Mieszka przy ul. Nad Stawem 3 od lat.", "ul. Nad Stawem 3"),
+        ("Adres: ul. Pod Lipami nad Wisłą 12", "ul. Pod Lipami nad Wisłą 12"),
+        ('Adres: skwer im. "Solidarności" 31', 'skwer im. "Solidarności" 31'),
+        ("Biuro na Wybrzeżu Kościuszkowskim 20.", "Wybrzeżu Kościuszkowskim 20"),
+        ("Magazyn: Nabrzeże Wieleckie 5", "Nabrzeże Wieleckie 5"),
+        ("Sklep przy Trakcie Lubelskim 120.", "Trakcie Lubelskim 120"),
+        ("Lokal: Pasaż Grunwaldzki 3", "Pasaż Grunwaldzki 3"),
+        ("Adres: bulw. Filadelfijski 8", "bulw. Filadelfijski 8"),
+    ],
+)
+def test_streets_as_the_teryt_register_names_them_are_masked_whole(text, address):
+    """Run through every street in GUS's TERYT register, the rules missed numbers in a street's
+    name, initials, titles beyond the usual few, small words, quotes, years and prefixes such as
+    "Wybrzeże" or "Trakt", and the street with its house number went out in clear."""
+    assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Spotkanie 10-go maja o 12.",
+        "Rocznica 1000-lecia 5 razy hucznie.",
+        "Trakt handlowy przez 3 kraje.",
+        "Dr A. Kowalski przyjmuje w pokoju 12.",
+    ],
+)
+def test_numbers_and_initials_outside_a_street_are_no_address(text):
+    assert _found(text, "ADDRESS") == []

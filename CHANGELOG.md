@@ -49,6 +49,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   another started after it. Nothing leaked, but the model read two people where there was one.
   Two person spans one space apart are now joined when the space follows an initial or comes
   right before one; two names side by side without an initial stay two.
+- **Streets as the TERYT register names them are masked whole.** Every one of the 50 449
+  street names in GUS's TERYT catalogue of 16 November 2026, written with its house number,
+  was run through the rules, and 91.4% came out masked whole. Missed were numbers in a name
+  ("ul. 1000-lecia", "10-go Pułku Piechoty", "83. Pułku Strzelców"), initials ("ul. A.
+  Słonimskiego"), titles beyond the usual few ("inż.", "mgr", "adw.", "kmdr"), small words and
+  years ("Nad Stawem", "Bohaterów Wojny 1920 r."), a name in quotes or opened by "im.", and
+  the kinds "Wybrzeże", "Nabrzeże", "Trakt", "Pasaż", "Zaułek" and "bulw.". Now 95.3% are,
+  98.0% of those with "ul.", with no new span on any other benchmark.
 
 ## [0.3.8] - 2026-11-17
 

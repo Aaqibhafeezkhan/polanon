@@ -171,14 +171,26 @@ def _is_plate_value(value: str) -> bool:
 #: "przy ulicy Długiej 5", "na placu Wolności 2", which the nominative alone let through whole.
 _STREET = (
     r"(?:ul|al|pl|os|ulic[aąęy]|ale(?:ja|je|i|ją|ję|jach)|plac(?:u|em)?|osiedl(?:e|a|u|em)"
-    r"|rond(?:o|a|em|zie)|skwer(?:u|em|ze)?)"
+    r"|rond(?:o|a|em|zie)|skwer(?:u|em|ze)?"
+    # Streets the TERYT register files under other kinds: "Wybrzeże Kościuszkowskie 20",
+    # "Nabrzeże Wieleckie 5", "Trakt Lubelski 120", "Pasaż Grunwaldzki 3", "bulw. Filadelfijski".
+    r"|bulw|bulwar\w*|wybrze[żz]\w*|nabrze[żz]\w*|trak(?:t\w*|cie)|pasa[żz]\w*|zau[łl]\w*)"
 )
-#: A name component: a capitalised word (Roman numerals such as "II" included), or a leading day
-#: number as in "3 Maja". A separate Roman-numeral branch matched "I" a second way, and on OCR
-#: output with a run of "I" tokens the failed match backtracked through 2^n combinations.
-_NAME_PART = r"(?:[A-ZŁŚŻŹĆÓĄĘŃ][\w'\u2019-]*|\d{1,2}(?=\s+[A-ZŁŚŻŹĆÓĄĘŃ]))"
-#: An abbreviated title in front of the patron's name: "ul. gen. Andersa", "al. Kard. Wyszyńskiego".
-_TITLE = r"(?i:gen|ks|św|sw|prof|kard|marsz|płk|plk|abp|bp|bł|dr|mjr|kpt|ppor|por|hetm)\."
+#: A name component: a capitalised word (Roman numerals such as "II" included), in quotes as in
+#: skwer im. "Solidarności", a leading day number as in "3 Maja", or a number the name counts
+#: by: "1000-lecia", "10-go Pułku", "83. Pułku". A separate Roman-numeral branch matched "I" a
+#: second way, and on OCR output with a run of "I" tokens the failed match backtracked through
+#: 2^n combinations.
+_NAME_PART = (
+    r"(?:[\"„“]?[A-ZŁŚŻŹĆÓĄĘŃ][\w'\u2019-]*[\"”]?|\d{1,2}(?=\s+[A-ZŁŚŻŹĆÓĄĘŃ])"
+    r"|\d{1,4}-(?:lecia|lecie|go|ej|ego|tej|ty|ci|ym)\b|\d{1,3}\.(?=\s+[A-ZŁŚŻŹĆÓĄĘŃ]))"
+)
+#: An abbreviated title in front of the patron's name, or an initial: "ul. gen. Andersa", "al.
+#: Kard. Wyszyńskiego", "ul. inż. Bohdana Łozińskiego", "ul. A. Słonimskiego".
+_TITLE = (
+    r"(?:(?i:gen|ks|św|sw|prof|kard|marsz|płk|plk|ppłk|pplk|abp|bp|bł|dr|mjr|kpt|ppor|por|hetm"
+    r"|inż|inz|mgr|adw|asp|kmdr|hm|phm|kpr|plut|sierż|sierz|adm)|[A-ZŁŚŻŹĆÓĄĘŃ])\."
+)
 #: A house number, optionally with a flat number: "43A", "12/4", "15 m. 3", "5 lok. 12".
 _HOUSE = r"\d+[A-Za-z]?(?:\s*/\s*\d+[A-Za-z]?)?(?:\s*(?:m|lok(?:al)?)\.?\s*\d+[A-Za-z]?)?"
 #: The most words a street's name takes, and the most titles in front of it: "Jana Pawła II",
@@ -187,8 +199,14 @@ _HOUSE = r"\d+[A-Za-z]?(?:\s*/\s*\d+[A-Za-z]?)?(?:\s*(?:m|lok(?:al)?)\.?\s*\d+[A
 #: the run, so "Ulica Ulica ..." or "Z Z ..." of 5,000 words took seconds.
 _STREET_WORDS = 8
 _TITLES = 3
-#: The words of a street's name after its first one: "Pawła II", "im. Jana", "pod Lipami".
-_MORE_STREET_WORDS = rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}"
+#: The small words and years a street's name holds after its first word: "Pawła II", "im. Jana",
+#: "pod Lipami nad Wisłą", "Bohaterów Wojny 1920 r.", "Andrzeja Szwajkerta ps. Jędruś".
+_STREET_LINKS = (
+    r"i|w|we|z|ze|na|nad|pod|przy|za|od|do|o|u|im\.|imienia|ps\.|vel|von|van|der|de|la|di|del"
+    r"|(?:1[0-9]|20)\d\d(?:\s+r\.)?"
+)
+#: The words of a street's name after its first one.
+_MORE_STREET_WORDS = rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|{_STREET_LINKS})){{0,{_STREET_WORDS - 1}}}"
 #: "nr" or "numer" written between a street and its house number: "przy ulicy Długiej nr 36".
 #: It ended the street, and the street with its number went out in clear.
 _HOUSE_NR = r"(?i:nr|numer)\.?"
@@ -197,7 +215,7 @@ ADDRESS_PATTERN = re.compile(
     # The word boundary matters: without it the "al" at the end of "TOTAL" reads as "al." (aleja),
     # and an invoice line such as "TOTAL M0061 Catalyst 1" became an address cut mid-word.
     # PDF output and quick typing drop the space after the prefix's dot: "ul.Długa 5".
-    rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:{_TITLE}\s+){{0,{_TITLES}}}{_NAME_PART}"
+    rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:(?:{_TITLE}|im\.|imienia)\s+){{0,{_TITLES}}}{_NAME_PART}"
     rf"{_MORE_STREET_WORDS}\s+(?:{_HOUSE_NR}\s*)?{_HOUSE}"
 )
 
@@ -213,7 +231,7 @@ _SHORT_HOUSE = (
 #: numbers are short, so "NIP 1234567890, 00-950" is not read as a street.
 ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
     rf"(?<![\w.]){_NAME_PART}"
-    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}[ \t]+"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|{_STREET_LINKS})){{0,{_STREET_WORDS - 1}}}[ \t]+"
     rf"(?:{_HOUSE_NR}[ \t]*)?{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
 )
 
@@ -241,7 +259,7 @@ ADDRESS_BEFORE_TOWN_PATTERN = re.compile(
 ADDRESS_STREET_FIELD_PATTERN = re.compile(
     r"(?<![\w.])(?i:ulica|street)[ \t]*:[ \t]*"
     rf"(?P<value>{_NAME_PART}"
-    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}})"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|{_STREET_LINKS})){{0,{_STREET_WORDS - 1}}})"
 )
 ADDRESS_NUMBER_FIELD_PATTERN = re.compile(
     r"(?<![\w.])(?i:(?:nr|numer)\.?[ \t]+(?:domu|budynku|lokalu|mieszkania)"
