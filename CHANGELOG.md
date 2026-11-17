@@ -7,6 +7,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **Driving licence numbers, after their label**, as the new type `DRIVING_LICENCE` with the
+  token `<PRAWO_JAZDY_1>`: "Numer prawa jazdy: 01234/15/1234", "driver's license number:
+  D1234-5678-9012". No rule knew them, and an HR record or a rental agreement sent them in
+  clear. The shape differs by country, so the label is what makes a run of letters and digits
+  one, and it must hold a digit: "prawo jazdy kategorii B" names no number.
+
 ### Fixed
 
 - **An e-mail address with letters from outside Polish is masked whole.** Only Polish letters

@@ -474,6 +474,18 @@ PATTERNS: list[Rule] = [
     # Polish word and a six-figure number ("dla 120000 osób") would pass the check one time in ten.
     ("PL_ID", re.compile(r"\b(?:[A-Z]{3} ?|[a-z]{3})\d{6}\b"), None),  # see _LOCATORS
     ("PL_PASSPORT", re.compile(r"\b(?:[A-Z]{2} ?|[a-z]{2})\d{7}\b"), None),  # see _LOCATORS
+    # A driving licence number has a different shape in every country, "01234/15/1234" in Poland,
+    # so only its label makes a run of letters and digits one. It must hold a digit: "prawo
+    # jazdy kategorii B" or "prawo jazdy: tak" names no number.
+    (
+        "DRIVING_LICENCE",
+        re.compile(
+            r"(?i:\b(?:praw(?:o|a|em)\s+jazdy|driv(?:ing|er'?s|er\u2019s)\s+licen[cs]e)"
+            r"(?:\s+(?:nr|numer|no|number))?\.?)\s*[:#-]?\s*"
+            r"(?P<value>(?=[A-Za-z0-9/-]*\d)[A-Za-z0-9][A-Za-z0-9/-]{3,18}[A-Za-z0-9])(?![\w/-])"
+        ),
+        None,
+    ),
     (
         "IBAN",
         re.compile(

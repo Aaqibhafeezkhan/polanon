@@ -545,7 +545,7 @@ Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód os
 płatnicze), numery KRS obok swojej etykiety, adresy e-mail i numery telefonów, adresy i kody
 pocztowe, linki do profilu osoby (LinkedIn, GitHub, GitHub Pages, GitLab, media społecznościowe) aż
 po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów po etykiecie
-(„nr rej.”), numery VIN, numery paszportów, daty urodzenia, klucze API, tokeny i hasła, polskie
+(„nr rej.”), numery VIN, numery paszportów, numery praw jazdy po etykiecie, daty urodzenia, klucze API, tokeny i hasła, polskie
 imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp. z o.o.”, „S.A.”,
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
 maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”,

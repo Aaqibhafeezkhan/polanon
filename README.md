@@ -530,7 +530,7 @@ Checksum-validated Polish identifiers (PESEL, NIP, REGON, ID card, IBAN, payment
 next to their label, e-mail addresses and phone numbers, street addresses and postcodes, links to
 a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
 and IPv6, MAC addresses, vehicle registrations after their label ("nr rej."), VINs, passport
-numbers, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
+numbers, driving licence numbers after their label, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
 company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). Once a person or a
 profile link is masked, the surname or the handle alone is masked wherever it appears in the same
 text: "Kowalski" after "Jan Kowalski", "jkowalski" in a JSON field after "github.com/jkowalski".

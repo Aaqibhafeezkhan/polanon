@@ -1211,3 +1211,32 @@ def test_a_birth_date_after_birthday_or_a_label_of_code_is_masked(text, date):
 def test_a_date_written_in_english_is_a_date_and_no_birth_date_without_its_label():
     assert _found("Deadline: 15 June 2025", "DATE") == ["15 June 2025"]
     assert _found("Deadline: 15 June 2025", "BIRTH_DATE") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Numer prawa jazdy: 01234/15/1234",
+        "nr prawa jazdy 00012/18/1465",
+        "prawo jazdy nr ABX123456Z",
+        "Driver's license number: D1234-5678-9012",
+        "driving licence no. KOWAL703123J99XY",
+    ],
+)
+def test_a_driving_licence_number_after_its_label_is_masked(text):
+    """A driving licence number in an HR record or a rental agreement went out in clear: no rule
+    knew it. Its shape differs by country, so the label is what makes it one."""
+    assert masked(text, {"DRIVING_LICENCE"}).endswith("<PRAWO_JAZDY_1>")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Prawo jazdy kategorii B od 2015 roku.",
+        "prawo jazdy: tak",
+        "Ma prawo jazdy B1 i samochód.",
+        "Kod produktu 01234/15/1234 w magazynie.",
+    ],
+)
+def test_no_driving_licence_without_its_label_and_a_number(text):
+    assert masked(text, {"DRIVING_LICENCE"}) == text

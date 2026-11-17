@@ -20,6 +20,7 @@ ENTITY_TYPES: dict[str, str] = {
     "KRS": "KRS",
     "PL_ID": "DOWOD",
     "PL_PASSPORT": "PASZPORT",
+    "DRIVING_LICENCE": "PRAWO_JAZDY",  # a driving licence number after its label, any country
     "IBAN": "IBAN",
     "CREDIT_CARD": "KARTA",
     "EMAIL": "EMAIL",
