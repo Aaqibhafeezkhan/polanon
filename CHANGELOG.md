@@ -29,6 +29,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   logins made of it, "akowalczyk", are masked as well. A surname of five letters now gives a
   login when a dot, "_" or "-" stands next to it, "nowak_j"; glued straight on it still takes
   six, so "nowakowie" stays a word.
+- **The label of a field no longer goes inside a person's token.** The Polish spaCy model reads
+  a word of software English before a surname as a first name: "Login Kowalski", "Email Nowaka"
+  and "Admin: Ola Kowalska" came back as one person each, so the model saw `<OSOBA_1> nie
+  działa` where the text said that a login does not work. Nothing leaked, but the label was
+  hidden with the name. Such words at the front of a person are now cut off, and the rest of the
+  span is masked as before. The list of those words leaves out every word that is also a first
+  name or a surname, so "Grant Nowak" stays whole, and the paranoid mode keeps the span as the
+  model found it.
 
 ## [0.3.9] - 2026-11-17
 

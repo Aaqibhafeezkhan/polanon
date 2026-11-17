@@ -14,6 +14,7 @@ import re
 import threading
 from collections import OrderedDict
 from collections.abc import Iterator
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -593,6 +594,29 @@ def _software_english(fragment: str) -> bool:
     )
 
 
+def _without_software_words_in_front(text: str, span: Span) -> Span:
+    """Cut the English of software off the front of a person, as "Login" of "Login Kowalski".
+
+    The Polish model reads the label of a field before a surname as a first name: "Login
+    Kowalski", "Email Nowaka" and "Admin: Ola Kowalska" came back as one person each, and the
+    label went to the model inside the token. :data:`SOFTWARE_WORDS` leaves out every word that is
+    also a first name or a surname, so such a word in front names nobody, and the rest of the
+    span is the person. The last word is never cut, so the span keeps something to mask.
+    """
+    if span.entity_type != "PERSON":
+        return span
+    fragment = text[span.start : span.end]
+    words = list(re.finditer(r"\S+", fragment))
+    cut = 0
+    for word, following in pairwise(words):
+        if _bare(word[0]).lower() not in SOFTWARE_WORDS or _holds_a_first_name(word[0]):
+            break
+        cut = following.start()
+    if cut == 0:
+        return span
+    return Span(span.start + cut, span.end, span.entity_type, span.score, span.source)
+
+
 def _has_a_letter(fragment: str) -> bool:
     return any(char.isalpha() for char in fragment)
 
@@ -746,7 +770,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
         piece
         for span in spans
         if not _opens_with_an_english_word(text[span.start : span.end])
-        for piece in _cut_at_english_words(text, span)
+        for piece in _cut_at_english_words(text, _without_software_words_in_front(text, span))
     )
     for span in pieces:
         fragment = text[span.start : span.end]
