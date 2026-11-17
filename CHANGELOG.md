@@ -7,6 +7,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+A minor release, since masked text changes shape: a person named again in another case goes out
+as `<OSOBA_1:celownik>`, which `TOKEN_PATTERN` does not match. Code that reads masked text for
+its tokens should use the new `CASED_TOKEN_PATTERN`; restoring needs no change, as every restore
+already understood such tokens. The spaCy guard gets an ML filter, on by default: on OpenPII's
+test part polanon still masks 3,733 of 5,255 values whole and raises 306 false alarms instead of
+434, eight times fewer than Presidio's 2,641, and `ml_filter=False` switches it off. Logins
+written from a name are masked whole, with their surname, and English words that are forms of a
+first name stay words.
+
 ### Added
 
 - **An ML filter for the spaCy guard, on by default.** In the normal mode a logistic regression

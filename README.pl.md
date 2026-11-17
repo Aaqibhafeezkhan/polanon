@@ -24,7 +24,7 @@ wywołanie jest maskowane, zanim wyjdzie:
 export POLANON_UPSTREAM_KEY=sk-...                 # klucz twojego dostawcy
 export POLANON_GATEWAY_KEY=$(openssl rand -hex 16)  # klucz, który wyślą twoje narzędzia
 docker run --rm -p 127.0.0.1:8787:8787 -e POLANON_UPSTREAM_KEY -e POLANON_GATEWAY_KEY \
-    ghcr.io/boromat/polanon-gateway:0.3 --upstream https://api.openai.com/v1
+    ghcr.io/boromat/polanon-gateway:0.4 --upstream https://api.openai.com/v1
 ```
 
 Potem ustaw w narzędziu adres bazowy `http://127.0.0.1:8787/v1`, a jako klucz API wartość
@@ -126,7 +126,7 @@ odpowiedź liczą się tak samo jak numery.
 | Sędziowie etapu 2 (lokalny model w Ollamie albo zdalny) | `pip install "polanon[judge]"` |
 | Komponenty do potoków [Haystacka 3](#z-haystackiem) | `pip install "polanon[haystack]"` |
 | [Bramka](#bramka-dla-każdego-narzędzia-zgodnego-z-api-openai) dla narzędzi korzystających z API OpenAI | `pip install "polanon[gateway]"` |
-| Bramka jako obraz Dockera, z modelem spaCy w środku | `docker pull ghcr.io/boromat/polanon-gateway:0.3` |
+| Bramka jako obraz Dockera, z modelem spaCy w środku | `docker pull ghcr.io/boromat/polanon-gateway:0.4` |
 
 Następnie użyj `default_guards()` z modelem albo `default_guards(with_ner=False)` bez niego.
 Inny model spaCy to kwestia jednego argumentu: `default_guards(spacy_model="pl_core_news_lg")`.
@@ -475,7 +475,7 @@ Albo w Dockerze, z modelem spaCy w środku, tak samo na komputerach z procesorem
 
 ```bash
 docker run --rm -p 127.0.0.1:8787:8787 -e POLANON_UPSTREAM_KEY -e POLANON_GATEWAY_KEY \
-    ghcr.io/boromat/polanon-gateway:0.3 --upstream https://api.openai.com/v1
+    ghcr.io/boromat/polanon-gateway:0.4 --upstream https://api.openai.com/v1
 ```
 
 W kontenerze bramka słucha na wszystkich interfejsach, więc startuje tylko
@@ -484,8 +484,8 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.3.9`,
-z wersją pomniejszą, `0.3`, i `latest`.
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.0`,
+z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |
 |---|---|

@@ -134,7 +134,7 @@ def _scenes(language: str) -> list[list[Line]]:
             True,
             [
                 ("    ", "c"),
-                ("ghcr.io/boromat/polanon-gateway:0.3 --upstream https://api.openai.com/v1", "c"),
+                ("ghcr.io/boromat/polanon-gateway:0.4 --upstream https://api.openai.com/v1", "c"),
             ],
         ),
         (
