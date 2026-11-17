@@ -9,10 +9,11 @@ on:
 permissions:
   contents: read
 
-# A new push to the same branch makes the previous run pointless.
+# A new push to a pull request makes its previous run pointless. On main every commit keeps its
+# run: a cancelled one shows as failing on the README's badge until the next run ends.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
