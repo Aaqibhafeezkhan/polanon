@@ -26,6 +26,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   "Kalina" is, and Max, Mark, Frank, Roger, Pascal, Christian and Aurora are left out as the
   English words an agent's tools and logs are full of. Without the model, people found whole in
   the training part of CLARIN-PL's KPWr rise from 39% to 45%.
+- **A benchmark on public Polish data polanon was never tuned on**, `benchmarks/run_external.py`.
+  It downloads the Polish rows of ai4privacy's OpenPII (CC-BY-4.0), the test part of CLARIN-PL's
+  KPWr (CC-BY-3.0) and GUS's TERYT street catalogue (CC-BY-4.0) on first use, keeps none of them
+  in the repository, and scores polanon, and Presidio if asked, as `benchmarks/run.py` does.
+  OpenPII is shuffled with a fixed seed: the first 1,000 Polish texts were read to find what the
+  fixes above fix, the next 1,000 never were. On those, with `pl_core_news_md`, polanon masks 71%
+  of 5,255 values whole with 435 spans outside them, and Presidio 66% with 2,641; on KPWr both
+  find 90% of people.
 
 ### Fixed
 
