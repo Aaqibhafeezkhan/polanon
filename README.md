@@ -470,7 +470,7 @@ Inside a container the gateway listens on every interface, so it starts only wit
 keeps the port on this machine. Every option of `polanon-gateway` goes after the image's
 name. A model on the same machine, such as Ollama, is `--upstream
 http://host.docker.internal:11434/v1`, on Linux with `--add-host=host.docker.internal:host-gateway`.
-The image is tagged with the version, such as `0.3.8`, the minor version, `0.3`, and `latest`.
+The image is tagged with the version, such as `0.3.9`, the minor version, `0.3`, and `latest`.
 
 | Tool | Where the base URL goes |
 |---|---|

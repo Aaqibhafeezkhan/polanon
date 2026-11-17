@@ -5,7 +5,16 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
-## [Unreleased]
+## [0.3.9] - 2026-11-17
+
+What public Polish data showed polanon missing, fixed, and a benchmark that keeps measuring on
+data polanon was never tuned on. On 1,000 Polish texts of ai4privacy's OpenPII that no fix was
+made from, the values masked whole with `pl_core_news_md` rise from 63.2% in 0.3.8 to 71.0%,
+with 435 spans outside them instead of 432; Presidio, set up the same way, masks 65.8% with
+2,641. Driving licence numbers are a new type, e-mail addresses, streets and identifiers with a
+typo after their label are masked whole, and 630 first names of the PESEL register are known
+without a model. Nothing that worked before stops working, so this is a patch release, as
+CONTRIBUTING.md describes.
 
 ### Added
 
