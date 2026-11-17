@@ -160,6 +160,24 @@ def test_email_with_polish_letters_is_masked_as_one_unit(text, expected):
     assert [text[s.start : s.end] for s in spans] == [expected]
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Napisz do françois.dupont@example.com jutro.", "françois.dupont@example.com"),
+        ("Kontakt: jürgen.müller@firma.example", "jürgen.müller@firma.example"),
+        ("adres annaantúnez@example.org, telefon", "annaantúnez@example.org"),
+        ("pisz na Ö@example.com", "Ö@example.com"),
+        ("mail: jiří.dvořák@příklad.example.cz", "jiří.dvořák@příklad.example.cz"),
+        ("[at]: søren [at] example [dot] dk", "søren [at] example [dot] dk"),
+    ],
+)
+def test_email_with_any_letters_is_masked_whole(text, expected):
+    """Only Polish letters were accepted, so a French, German or Czech name in an address was
+    masked from its first such letter on: "franç" went out in front of the token."""
+    spans = [s for s in RegexGuard().detect(text, {"EMAIL"}) if s.entity_type == "EMAIL"]
+    assert [text[s.start : s.end] for s in spans] == [expected]
+
+
 def test_address_does_not_swallow_the_postcode_that_follows():
     text = "ul. Krótka 5, 00-950 Warszawa"
     found = {(s.entity_type, text[s.start : s.end]) for s in RegexGuard().detect(text, ALL)}

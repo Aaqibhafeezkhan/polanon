@@ -243,16 +243,20 @@ _NOT_A_TOWN = frozenset(
     | {"stanach", "emiratach", "niemczech", "włoszech", "węgrzech"}
 )
 
-_POLISH_LETTERS = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-_EMAIL_LOCAL = rf"A-Za-z0-9._%+\-{_POLISH_LETTERS}"
-_EMAIL_LABEL = rf"[A-Za-z0-9\-{_POLISH_LETTERS}]+"
+#: What an address may hold, in a character class: letters of any alphabet, as an address with a
+#: French, German or Czech name in it has them, digits, "_" and ".%+-". Only Polish letters were
+#: allowed once, and "françois.dupont@…" was masked from its "ç" on, with "franç" left in front.
+_EMAIL_LOCAL = r"\w.%+\-"
+_EMAIL_LABEL = r"[\w\-]+"
+#: A top-level domain: letters only, of any alphabet.
+_EMAIL_TLD = r"[^\W\d_]{2,}"
 _EMAIL_AT = r"\s*[\[({]\s*(?i:at|małpa|malpa)\s*[\])}]\s*"
 _EMAIL_DOT = r"(?:\.|\s*[\[({]\s*(?i:dot|kropka)\s*[\])}]\s*)"
 
 #: An e-mail address with its "@" written out in brackets, and optionally its dots too.
 OBFUSCATED_EMAIL_PATTERN = re.compile(
     rf"(?<![{_EMAIL_LOCAL}])[{_EMAIL_LOCAL}]+{_EMAIL_AT}"
-    rf"{_EMAIL_LABEL}(?:{_EMAIL_DOT}{_EMAIL_LABEL})*{_EMAIL_DOT}[A-Za-z{_POLISH_LETTERS}]{{2,}}"
+    rf"{_EMAIL_LABEL}(?:{_EMAIL_DOT}{_EMAIL_LABEL})*{_EMAIL_DOT}{_EMAIL_TLD}"
 )
 
 #: Sites whose path starts with the handle of the person or the organisation the page belongs to.
@@ -457,15 +461,10 @@ PATTERNS: list[Rule] = [
     ("CREDIT_CARD", re.compile(r"(?<!\d)\d+(?:[ -]\d+)*"), None),
     # The lookbehind starts a match only where a run of address characters starts. Without it a
     # long run with no "@" — a hex dump, a base64 blob — was rescanned from every position.
-    # Polish letters are allowed in the local part and in every domain label (#7).
+    # Letters of any alphabet are allowed in the local part and in every domain label (#7).
     (
         "EMAIL",
-        re.compile(
-            r"(?<![A-Za-z0-9._%+\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
-            r"[A-Za-z0-9._%+\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+@"
-            r"[A-Za-z0-9.\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\."
-            r"[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}"
-        ),
+        re.compile(rf"(?<![{_EMAIL_LOCAL}])[{_EMAIL_LOCAL}]+@[\w.\-]+\.{_EMAIL_TLD}"),
         None,
     ),
     # An address written to slip past harvesters: "jan.kowalski [at] example.com", "(małpa)",

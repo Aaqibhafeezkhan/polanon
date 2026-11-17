@@ -5,6 +5,17 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Fixed
+
+- **An e-mail address with letters from outside Polish is masked whole.** Only Polish letters
+  were accepted next to the Latin ones, so `françois.dupont@example.com` was masked from its "ç"
+  on and "franç" went to the model; a German, Czech or Scandinavian name in an address lost the
+  same way, and one made of such letters alone was not masked at all. Every letter of any
+  alphabet now counts, in the local part, the domain and the bracketed `[at]` form. Found by
+  measuring on the Polish rows of ai4privacy's OpenPII, where 24 of 537 addresses leaked so.
+
 ## [0.3.8] - 2026-11-17
 
 The gateway as a Docker image, for a tool that is already written: one command, and the tool
