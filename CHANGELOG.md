@@ -14,6 +14,8 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   the minor version and `latest`. In the container the gateway listens on every interface, so it
   starts only with `POLANON_GATEWAY_KEY`; it runs as a user without privileges and reports its
   health to Docker. CI builds the image and tries it on every change.
+- **Two ways to start, at the top of the README**: the gateway in Docker for a tool that is
+  already written, Claude Code among them, and the library for one's own code.
 
 ## [0.3.7] - 2026-11-17
 

@@ -13,6 +13,27 @@ while it streams. Pure Python: the standard library is the whole core.
 Featured in [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A), Jakub
 Mrugalski's weekly newsletter for people in IT, on 13 November 2026.
 
+**Without writing code**, with the gateway in Docker. Claude Code, n8n, Open WebUI, LibreChat,
+Hermes Agent and any other tool that speaks the OpenAI or Anthropic API keep working as they did,
+and every call is masked before it leaves:
+
+```bash
+export POLANON_UPSTREAM_KEY=sk-...                 # your provider's key
+export POLANON_GATEWAY_KEY=$(openssl rand -hex 16)  # the key your tools will send
+docker run --rm -p 127.0.0.1:8787:8787 -e POLANON_UPSTREAM_KEY -e POLANON_GATEWAY_KEY \
+    ghcr.io/boromat/polanon-gateway:0.3 --upstream https://api.openai.com/v1
+```
+
+Then give the tool `http://127.0.0.1:8787/v1` as its base URL and the value of
+`POLANON_GATEWAY_KEY` as its API key. One gateway serves one provider: for Claude Code start
+another with `--upstream https://api.anthropic.com/v1`, an Anthropic key and
+`-p 127.0.0.1:8788:8787`, then run
+`ANTHROPIC_BASE_URL=http://127.0.0.1:8788 ANTHROPIC_API_KEY=$POLANON_GATEWAY_KEY claude`. Every
+tool, the gateway without Docker, and what it does with a call are in
+[the gateway's section](#a-gateway-for-any-openai-compatible-tool).
+
+**In Python**, in your own code: mask a text, send it, restore the answer.
+
 ![polanon masking a Polish invoice request in a terminal, then restoring the model's answer in Python](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.gif)
 
 ```bash
@@ -90,6 +111,7 @@ and the restored answer matter as much as the numbers.
 | The stage-2 judges (a local Ollama model, or a remote one) | `pip install "polanon[judge]"` |
 | Components for [Haystack 3](#with-haystack) pipelines | `pip install "polanon[haystack]"` |
 | A [gateway](#a-gateway-for-any-openai-compatible-tool) for tools that use the OpenAI API | `pip install "polanon[gateway]"` |
+| The gateway as a Docker image, with the spaCy model inside | `docker pull ghcr.io/boromat/polanon-gateway:0.3` |
 
 Then use `default_guards()` with the model, or `default_guards(with_ner=False)` without it.
 Another spaCy model is one argument away: `default_guards(spacy_model="pl_core_news_lg")`.
@@ -425,6 +447,21 @@ polanon-gateway --upstream https://api.openai.com/v1
 Then point the tool's base URL at `http://127.0.0.1:8787/v1` and keep its API key: the gateway
 passes it on to the provider. A local model works the same way, `--upstream
 http://localhost:11434/v1` for Ollama.
+
+Or in Docker, with the spaCy model inside, on Intel and ARM machines alike:
+
+```bash
+docker run --rm -p 127.0.0.1:8787:8787 -e POLANON_UPSTREAM_KEY -e POLANON_GATEWAY_KEY \
+    ghcr.io/boromat/polanon-gateway:0.3 --upstream https://api.openai.com/v1
+```
+
+Inside a container the gateway listens on every interface, so it starts only with
+`POLANON_GATEWAY_KEY`, the key every tool then sends as its API key, and needs
+`POLANON_UPSTREAM_KEY`, the provider's key it sends on instead. `-p 127.0.0.1:8787:8787`
+keeps the port on this machine. Every option of `polanon-gateway` goes after the image's
+name. A model on the same machine, such as Ollama, is `--upstream
+http://host.docker.internal:11434/v1`, on Linux with `--add-host=host.docker.internal:host-gateway`.
+The image is tagged with the version, such as `0.3.8`, the minor version, `0.3`, and `latest`.
 
 | Tool | Where the base URL goes |
 |---|---|
