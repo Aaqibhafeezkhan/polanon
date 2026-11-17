@@ -36,7 +36,7 @@ Wszystkie narzędzia, bramkę bez Dockera i to, co robi z wywołaniem, opisuje
 
 **W Pythonie**, we własnym kodzie: zamaskuj tekst, wyślij go, przywróć odpowiedź.
 
-![polanon w terminalu: maskowanie polskiego tekstu w Pythonie i przywracanie odpowiedzi, bramka w Dockerze przed narzędziem i wyniki wobec Presidio](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.pl.svg)
+<p align="center"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.pl.svg" alt="polanon w terminalu: maskowanie polskiego tekstu w Pythonie i przywracanie odpowiedzi, bramka w Dockerze przed narzędziem i wyniki wobec Presidio"></p>
 
 ```bash
 pip install polanon
@@ -88,7 +88,7 @@ pocztowe.
 
 ## Na tle innych
 
-![polanon i Presidio na polskich danych, na których polanon nie był strojony: wartości zamaskowane w całości, fałszywe alarmy, rodzaje danych i osoby w prawdziwych tekstach](https://raw.githubusercontent.com/boromat/polanon/main/docs/comparison.pl.svg)
+<p align="center"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/comparison.pl.svg" alt="polanon i Presidio na polskich danych, na których polanon nie był strojony: wartości zamaskowane w całości, fałszywe alarmy, rodzaje danych i osoby w prawdziwych tekstach"></p>
 
 |  | polanon | [Presidio](https://github.com/data-privacy-stack/presidio) | [pii-veil](https://pypi.org/project/pii-veil/) | [piimask](https://pypi.org/project/piimask/) |
 |---|---|---|---|---|

@@ -36,7 +36,7 @@ tool, the gateway without Docker, and what it does with a call are in
 
 **In Python**, in your own code: mask a text, send it, restore the answer.
 
-![polanon in a terminal: masking a Polish text in Python and restoring the answer, the gateway in Docker in front of a tool, and the scores against Presidio](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.svg)
+<p align="center"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.svg" alt="polanon in a terminal: masking a Polish text in Python and restoring the answer, the gateway in Docker in front of a tool, and the scores against Presidio"></p>
 
 ```bash
 pip install polanon
@@ -84,7 +84,7 @@ Plusgiro and sort codes, international phone numbers, street addresses and postc
 
 ## How it compares
 
-![polanon and Presidio on Polish data polanon was never tuned on: values masked whole, false alarms, by kind of value, and people in real Polish text](https://raw.githubusercontent.com/boromat/polanon/main/docs/comparison.svg)
+<p align="center"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/comparison.svg" alt="polanon and Presidio on Polish data polanon was never tuned on: values masked whole, false alarms, by kind of value, and people in real Polish text"></p>
 
 |  | polanon | [Presidio](https://github.com/data-privacy-stack/presidio) | [pii-veil](https://pypi.org/project/pii-veil/) | [piimask](https://pypi.org/project/piimask/) |
 |---|---|---|---|---|
