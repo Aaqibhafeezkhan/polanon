@@ -9,8 +9,10 @@ Belarusian names that Poland's residents bear, written as the register writes th
 AMBIGUOUS lists the folded forms of these names that Polish text also writes as ordinary
 words, in lowercase, or that are small English words: names_pl treats them as it treats
 "Kalina" or "Wiktoria". A form counts as a word when KPWr, the Polish rows of ai4privacy's
-OpenPII or the benchmark samples write it in lowercase twice or more, and by review: Sylwester,
-Malina, Melisa, Ida ("idę") and Alex ("alexa") among others. Seven names that are English words
+OpenPII or the benchmark samples write it in lowercase twice or more, when the English prose of
+Python's documentation and comments does, and by review: Sylwester, Malina, Melisa, Ida ("idę")
+and Alex ("alexa") among others, and Alona's "Alonę", Nika's "Nice" and Maxim's "Maxima", which
+read "alone", "nice" and "maxima" without their Polish letters. Seven names that are English words
 in tools and logs are left out: Max, Mark, Frank, Roger, Pascal, Christian and Aurora.
 
 Generated once from the register; a name added by hand belongs in the lists of names_pl.
@@ -76,10 +78,10 @@ FEMALE = """
 """
 
 AMBIGUOUS = """
-    ale alex alexa alexem alexie alexowi any dalia dalie dalii dalio dana dane danie dano dany
-    donate ida ide ido idy idzie inna inne inny lesie liana liane lianie liano liany lilia lina
-    line linie lino liny lubie luke luki malina maline malinie malino maliny marina marine
-    marinie marino mariny marzanna marzanne marzannie marzanno marzanny melisa melise melisie
-    meliso melisy mie mila mile milo nadziei nadzieja nadzieje raise sylwester sylwestera
-    sylwesterem sylwesterowi sylwesterze taras very wierze wita zoo zycie
+    ale alex alexa alexem alexie alexowi alone any dalia dalie dalii dalio dana dane danie dano
+    dany donate ida ide ido idy idzie inna inne inny lesie liana liane lianie liano liany lilia
+    lina line linie lino liny lubie luke luki malina maline malinie malino maliny marina marine
+    marinie marino mariny marzanna marzanne marzannie marzanno marzanny maxima melisa melise
+    melisie meliso melisy mie mila mile milo nadziei nadzieja nadzieje nice raise sylwester
+    sylwestera sylwesterem sylwesterowi sylwesterze taras very wierze wita zoo zycie
 """

@@ -5,6 +5,20 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Fixed
+
+- **English words that are forms of a first name stay words.** Three of the names 0.3.9 took
+  from the PESEL register have a form that reads as an English word once a chat drops its
+  Polish letters: Alona's "Alonę" is "alone", Nika's "Nice" is "nice" and Maxim's "Maxima" is
+  "maxima". In lowercase text, an agent's English tools and logs among it, "alone", every word
+  holding it such as "standalone", and "nice" were masked as people. Nothing leaked, but the
+  model read a token where a word stood. Such forms are now treated as "Kalina" is, a name next
+  to its surname and a word on its own, and every form of the register's names was checked
+  against the English of Python's documentation. No benchmark loses a value, and on OpenPII one
+  span outside the values goes.
+
 ## [0.3.9] - 2026-11-17
 
 What public Polish data showed polanon missing, fixed, and a benchmark that keeps measuring on

@@ -647,3 +647,23 @@ def test_register_names_that_are_also_words_stay_words(text):
     """Inna, Melisa, Malina, Frank, Sylwester, Lina, Taras, Dana and Pascal are first names in the
     register and ordinary words too: alone, in lowercase, they name nobody."""
     assert _found(text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "leave it alone and run it standalone",
+        "the worker runs alone in its container",
+        "nice, the build passed",
+        "find the local maxima of the curve",
+    ],
+)
+def test_register_name_forms_that_are_english_words_stay_words(text):
+    """Alona's accusative "Alonę", Nika's dative "Nice" and Maxim's genitive "Maxima" read
+    "alone", "nice" and "maxima" once a chat drops the Polish letters, and English writes them
+    in lowercase all the time: in an agent's tools and logs they name nobody."""
+    assert _found(text) == []
+
+
+def test_a_register_name_whose_form_is_an_english_word_is_still_a_name_with_its_surname():
+    assert _found("Wczoraj spotkałem Alonę Kowalczuk w biurze.") == ["Alonę Kowalczuk"]
