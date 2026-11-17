@@ -8,10 +8,17 @@ street, a company), 0 when it covers nothing annotated, and null when it covers 
 else: an identifier or an e-mail address, which the rules mask whatever the model says, or a name
 the benchmark does not read, such as a country or an institution in KPWr. Those train nothing.
 
-The parts keep the benchmarks honest. OpenPII's Polish rows are shuffled as run_external.py
-shuffles them: its dev part (the first 1,000) tunes, its test part (the next 1,000) is only
-measured, and the 7,290 rows after them train. KPWr's train-tune file trains and its test file is
-only measured. Neither source was used to build the spaCy model, which learned from NKJP.
+The parts keep the measurement honest. OpenPII's Polish rows are shuffled as run_external.py
+shuffles them: its dev part (the first 1,000) tunes, its test part (the next 1,000) is the
+benchmark's, the next 6,000 train, and the last 1,290 are "final": held out until the verifier is
+done and measured once. KPWr's train-tune file is split by document, so no text has sentences on
+both sides: every tenth document is final, every tenth from the fifth on is dev, the rest train;
+its test file is the benchmark's. Neither source was used to build the spaCy model, which learned
+from NKJP.
+
+OpenPII does not annotate every name its texts hold: "Kasia" or "Marek" in a sentence the
+language model wrote around the annotated values. A span over a first name the rules know that
+covers nothing annotated is no evidence that it is no name, so its label is null too.
 
     python benchmarks/verifier_data.py
 """
@@ -38,7 +45,7 @@ from run_external import (
 )
 
 from polanon.guards import ner
-from polanon.guards._span_features import FEATURES, Word, span_features
+from polanon.guards._span_features import FEATURES, Word, span_context, span_features
 from polanon.types import Span
 
 #: The types the model's spans come in.
@@ -61,27 +68,50 @@ def label_of(span: Span, wanted: Iterable[GoldEntity], other: Iterable[GoldEntit
     return 0
 
 
-def documents(data: Path) -> Iterator[tuple[str, str, str, list[GoldEntity], list[GoldEntity]]]:
-    """Yield (source, part, text, values the benchmark reads, other names) for every text."""
+#: OpenPII's rows after the benchmark's two parts that train; the rest are final.
+OPENPII_TRAIN = 6000
+
+
+def openpii_part(index: int) -> str:
+    """The part of OpenPII's shuffled row `index`."""
+    if index < SAMPLE:
+        return "dev"
+    if index < 2 * SAMPLE:
+        return "test"
+    return "train" if index < 2 * SAMPLE + OPENPII_TRAIN else "final"
+
+
+def kpwr_part(document: int) -> str:
+    """The part of KPWr's train-tune document `document`, counted in the file's order."""
+    return {0: "final", 5: "dev"}.get(document % 10, "train")
+
+
+def documents(
+    data: Path,
+) -> Iterator[tuple[str, str, str, str, list[GoldEntity], list[GoldEntity]]]:
+    """Yield (source, part, document, text, values the benchmark reads, other names)."""
     rows = openpii_rows(data)
     random.Random(SEED).shuffle(rows)  # noqa: S311 - the benchmark's fixed sample, not a secret
     for index, row in enumerate(rows):
-        part = "dev" if index < SAMPLE else "test" if index < 2 * SAMPLE else "train"
         gold = openpii_gold(row)
         wanted = [value for value in gold if value.entity_type in OPENPII_NAMES]
         other = [value for value in gold if value.entity_type not in OPENPII_NAMES]
-        yield "openpii", part, row["source_text"], wanted, other
-    for part in ("train", "test"):
-        for sentence in kpwr_sentences(data, part):
+        yield "openpii", openpii_part(index), row["uid"], row["source_text"], wanted, other
+    for split in ("train", "test"):
+        numbers: dict[str, int] = {}
+        for sentence in kpwr_sentences(data, split):
+            number = numbers.setdefault(sentence["doc"], len(numbers))
+            part = kpwr_part(number) if split == "train" else "test"
             text, names = kpwr_sentence(sentence, None)
             wanted = [gold for gold in names if gold.entity_type in KPWR_TYPES]
             other = [gold for gold in names if gold.entity_type not in KPWR_TYPES]
-            yield "kpwr", part, text, wanted, other
+            yield "kpwr", part, f"{split}/{sentence['doc']}", text, wanted, other
 
 
 def rows_of(
     source: str,
     part: str,
+    document: str,
     text: str,
     wanted: list[GoldEntity],
     other: list[GoldEntity],
@@ -94,34 +124,40 @@ def rows_of(
         return []
     kept = ner._without_english_misreadings(text, found)
     by_rules = [span for rule in rules for span in rule.detect(text, EVALUATED)]
-    document = guard._get_pipeline()(text)
+    read = guard._get_pipeline()(text)
     tokens = [
         (
             token.idx,
             token.idx + len(token),
             Word(token.text, token.pos_, token.lemma_, token.has_vector),
         )
-        for token in document
+        for token in read
         if not token.is_space
     ]
     lines = []
     for span in found:
         words = [word for start, end, word in tokens if overlaps(span, start, end)]
+        features = span_features(
+            text,
+            span,
+            rules_found_it=any(overlaps(span, r.start, r.end) for r in by_rules),
+            words=words,
+            vocab=guard._get_pipeline().vocab,
+        )
+        label = label_of(span, wanted, other)
+        if source == "openpii" and label == 0 and features["a_first_name"]:
+            label = None  # a name OpenPII did not annotate
         lines.append(
             {
                 "source": source,
                 "part": part,
+                "doc": document,
                 "type": span.entity_type,
                 "text": text[span.start : span.end],
                 "kept_by_filters": any(overlaps(span, k.start, k.end) for k in kept),
-                "label": label_of(span, wanted, other),
-                "features": span_features(
-                    text,
-                    span,
-                    rules_found_it=any(overlaps(span, r.start, r.end) for r in by_rules),
-                    words=words,
-                    vocab=guard._get_pipeline().vocab,
-                ),
+                "label": label,
+                "features": features,
+                "context": span_context(text, span),
             }
         )
     return lines
@@ -163,8 +199,8 @@ def main() -> int:
     guard = ner.NerGuard(spacy_model=args.spacy_model, mode="paranoid")
     rules = guards_for(False, "")
     lines: list[dict] = []
-    for count, (source, part, text, wanted, other) in enumerate(documents(args.data), 1):
-        lines.extend(rows_of(source, part, text, wanted, other, guard, rules))
+    for count, (source, part, document, text, wanted, other) in enumerate(documents(args.data), 1):
+        lines.extend(rows_of(source, part, document, text, wanted, other, guard, rules))
         if count % 2000 == 0:
             print(f"{count} texts, {len(lines)} spans", file=sys.stderr)
     args.out.mkdir(parents=True, exist_ok=True)

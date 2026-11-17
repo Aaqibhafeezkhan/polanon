@@ -175,28 +175,37 @@ def openpii_rows(data: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.open(encoding="utf-8")]
 
 
-def kpwr_sentences(data: Path, part: str = "test") -> list[dict[str, list[str]]]:
-    """KPWr's sentences of one part, "test" or "train", as tokens and IOB tags, downloaded once."""
+def kpwr_sentences(data: Path, part: str = "test") -> list[dict[str, Any]]:
+    """KPWr's sentences of one part, "test" or "train", as tokens and IOB tags, downloaded once.
+
+    Each sentence carries the name of the document it comes from under "doc", so that the
+    sentences of one text can be kept together.
+    """
     name = KPWR_PARTS[part]
     path = data / f"kpwr-ner-n82-{name}.iob"
     if not path.exists():
         print(f"downloading KPWr's {part} part...", file=sys.stderr)
         data.mkdir(parents=True, exist_ok=True)
         path.write_bytes(_get(KPWR.format(part=name)))
-    sentences, tokens, tags = [], [], []
+    sentences: list[dict[str, Any]] = []
+    tokens: list[str] = []
+    tags: list[str] = []
+    doc = ""
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("-DOCSTART"):
+            if line.startswith("-DOCSTART FILE"):
+                doc = line.split(maxsplit=2)[-1]
             continue
         if not line.strip():
             if tokens:
-                sentences.append({"tokens": tokens, "ner": tags})
+                sentences.append({"tokens": tokens, "ner": tags, "doc": doc})
                 tokens, tags = [], []
             continue
         parts = line.split("\t")
         tokens.append(parts[0])
         tags.append(parts[-1])
     if tokens:
-        sentences.append({"tokens": tokens, "ner": tags})
+        sentences.append({"tokens": tokens, "ner": tags, "doc": doc})
     return sentences
 
 
@@ -317,7 +326,7 @@ def _written_together(tokens: list[str], index: int) -> bool:
 
 
 def kpwr_sentence(
-    row: dict[str, list[str]], types: dict[str, str] | None = KPWR_TYPES
+    row: dict[str, Any], types: dict[str, str] | None = KPWR_TYPES
 ) -> tuple[str, list[GoldEntity]]:
     """A sentence as written, rebuilt from its tokens, and the values of `types` in it.
 

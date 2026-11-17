@@ -12,9 +12,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "benchmarks"))
 
 from run import GoldEntity  # noqa: E402
-from verifier_data import label_of  # noqa: E402
+from verifier_data import kpwr_part, label_of, openpii_part  # noqa: E402
 
-from polanon.guards._span_features import FEATURES, span_features, span_vector  # noqa: E402
+from polanon.guards._span_features import (  # noqa: E402
+    FEATURES,
+    span_context,
+    span_features,
+    span_vector,
+)
 from polanon.types import Span  # noqa: E402
 
 
@@ -78,11 +83,11 @@ def test_the_verifier_learns_a_sign_from_its_features():
     """A feature that every name has and one that every non-name has: the fitted weights tell
     them apart."""
     np = pytest.importorskip("numpy")
-    from verifier_train import fit
+    from verifier_train import fit_logistic
 
     x = np.array([[1.0, 0.0]] * 20 + [[0.0, 1.0]] * 20)
     y = np.array([1.0] * 20 + [0.0] * 20)
-    weights, bias = fit(x, y)
+    weights, bias = fit_logistic(x, y, 1e-3)
     scores = 1 / (1 + np.exp(-(x @ weights + bias)))
     assert scores[0] > 0.9 > 0.1 > scores[-1]
 
@@ -109,3 +114,40 @@ def test_a_capitalised_common_word_a_month_and_the_vector_of_a_span():
     assert _features(text, "February", vocab=vocab)["a_month_or_day"] == 1
     assert span_vector("Nieokreślona", vocab) == [0.0, 1.0]
     assert span_vector("Brzęczyszczykiewicz", vocab) == []
+
+
+def test_the_context_of_a_span_is_the_word_before_the_word_after_and_its_ending():
+    text = "Mieszka przy ul. Fabrycznej 5, a pisze do Kowalskiego."
+    start = text.index("Fabrycznej")
+    span = Span(start, start + len("Fabrycznej"), "LOCATION", 0.85, "spacy_ner")
+    assert span_context(text, span) == ["before:ul", "after:5", "end:nej", "end2:ej"]
+    start = text.index("Kowalskiego")
+    span = Span(start, start + len("Kowalskiego"), "PERSON", 0.85, "spacy_ner")
+    assert span_context(text, span) == ["before:do", "after:$", "end:ego", "end2:go"]
+    span = Span(0, len("Mieszka"), "PERSON", 0.85, "spacy_ner")
+    assert span_context(text, span)[0] == "before:^"
+
+
+def test_the_parts_keep_the_benchmarks_and_the_final_part_apart():
+    assert [openpii_part(i) for i in (0, 999, 1000, 1999, 2000, 7999, 8000)] == [
+        "dev",
+        "dev",
+        "test",
+        "test",
+        "train",
+        "train",
+        "final",
+    ]
+    assert [kpwr_part(d) for d in range(11)] == [
+        "final",
+        "train",
+        "train",
+        "train",
+        "train",
+        "dev",
+        "train",
+        "train",
+        "train",
+        "train",
+        "final",
+    ]

@@ -666,6 +666,18 @@ and 2% of the token uses hide nothing; "paranoid" lets 1 through, a name in Cyri
 finds, and more than half of the token uses hide nothing. The rules are the same in both, so without the model
 the mode changes nothing.
 
+With `verifier="after"`, a learned verifier drops more of what the model reads as a name in the
+normal mode: a logistic regression that weighs the span, its words and the words around it, their
+vectors and what the rules found there, fitted on public Polish data. It masks the same values
+whole on every benchmark and leaves about a quarter fewer spans that hide nothing: on a part of
+OpenPII held out until it was done, 400 instead of 539. It is off by default; the
+[benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#a-learned-verifier)
+tell how it was fitted and measured.
+
+```python
+guards = default_guards(verifier="after")
+```
+
 ## A second opinion: the judge
 
 Rules and a language model miss what identifies someone only by context: "the finance director of

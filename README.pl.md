@@ -693,6 +693,18 @@ a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 1, imię zapisan
 znajduje żaden strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
 tryb niczego nie zmienia.
 
+Z `verifier="after"` uczony weryfikator odrzuca więcej z tego, co model uznaje za nazwę w trybie
+normalnym: to regresja logistyczna, która waży fragment, jego słowa i słowa wokół niego, ich
+wektory oraz to, co znalazły tam reguły, dopasowana na publicznych polskich danych. Na każdym
+benchmarku maskuje w całości te same wartości, a fragmentów, które niczego nie ukrywają, zostawia
+mniej więcej o jedną czwartą mniej: na części OpenPII odłożonej do samego końca 400 zamiast 539.
+Domyślnie jest wyłączony; jak go dopasowano i zmierzono, opisują
+[notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#a-learned-verifier).
+
+```python
+guards = default_guards(verifier="after")
+```
+
 ## Druga opinia: sędzia
 
 Reguły i model językowy przeoczają to, co pozwala kogoś zidentyfikować wyłącznie z kontekstu:

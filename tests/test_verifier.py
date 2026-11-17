@@ -60,7 +60,7 @@ def seen(monkeypatch) -> list[dict[str, int]]:
     """Let the verifier keep a span only where a rule found something too, and record it."""
     features: list[dict[str, int]] = []
 
-    def keeps(found: dict[str, int], entity_type: str, vector=()) -> bool:
+    def keeps(found: dict[str, int], entity_type: str, vector=(), context=()) -> bool:
         features.append(found)
         return bool(found["rules_found_it"])
 
@@ -96,8 +96,43 @@ def test_an_unknown_verifier_is_refused():
 
 
 def test_the_shipped_weights_score_every_feature_they_name():
-    names = {name.split(":")[-1] for name in _span_features.fitted.WEIGHTS}
+    context = ("before:", "after:", "end:", "end2:")
+    names = {
+        name.split(":")[-1]
+        for name in _span_features.fitted.WEIGHTS
+        if not name.startswith(context)
+    }
     assert names <= set(_span_features.FEATURES)
+    assert len(_span_features.fitted.VECTOR) == 300
     assert set(_span_features.fitted.THRESHOLDS) == {"PERSON", "LOCATION", "ORG"}
     everything = dict.fromkeys(_span_features.FEATURES, 1)
     assert 0 < _span_features.verifier_score(everything, "PERSON") < 1
+
+
+def test_default_guards_hand_the_verifier_to_the_spacy_guard():
+    pytest.importorskip("spacy")
+    from polanon import default_guards
+    from polanon.types import NerModelUnavailableError
+
+    try:
+        guards = default_guards(verifier="after")
+    except NerModelUnavailableError:
+        pytest.skip("pl_core_news_md is not installed")
+    assert [guard.verifier for guard in guards if isinstance(guard, NerGuard)] == ["after"]
+
+
+def test_the_shipped_verifier_drops_a_month_and_keeps_a_name_after_the_filters():
+    """On a text like the benchmarks', with the shipped weights and thresholds: an English month
+    the model reads as a person goes, a Polish name stays."""
+    pytest.importorskip("spacy")
+    try:
+        guard = NerGuard(verifier="after")
+        guard._get_pipeline()
+    except RuntimeError:
+        pytest.skip("pl_core_news_md is not installed")
+    text = "Data: February. Umowę podpisał Jan Kowalski z Gdańska."
+    spans = detect(text, None, {"PERSON", "LOCATION", "ORG"}, [guard])
+    found = {text[span.start : span.end] for span in spans}
+    assert "Jan Kowalski" in found
+    assert "February" not in found
+    assert "February" in {text[s.start : s.end] for s in NerGuard().detect(text, {"PERSON"})}

@@ -28,6 +28,7 @@ identifiers.
 import importlib.util
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Literal
 
 from polanon._detection import custom_type_problem
 from polanon.allowlist import WELL_KNOWN_NAMES, Allowlist
@@ -137,6 +138,7 @@ def default_guards(
     with_ner: bool = True,
     spacy_model: str = "pl_core_news_md",
     mode: Mode = "normal",
+    verifier: Literal["off", "after"] = "off",
 ) -> list[Guard]:
     """Guards in recommended order. NER guard is imported lazily because spaCy is heavy/optional.
 
@@ -155,10 +157,13 @@ def default_guards(
             typed in lowercase; "paranoid" masks all of it, and many more words of an agent's
             English become tokens. The rules are the same in both, so without the model the
             mode changes nothing.
+        verifier: "after" lets a learned verifier drop more of what the spaCy model reads as a
+            name in the normal mode, weighing the span, its words and what the rules found; see
+            :class:`polanon.guards.ner.NerGuard`. "off" keeps the hand-written filters alone.
 
     Raises:
         TypeError: when `denylist` is a single string, which would be read letter by letter.
-        ValueError: for a mode that is neither "normal" nor "paranoid".
+        ValueError: for a mode that is neither "normal" nor "paranoid", or an unknown verifier.
         NerModelUnavailableError: when `with_ner` is on and spaCy or the model is not installed.
             It is raised here rather than on the first text to mask, with the command that fixes
             it, and it is both a ModuleNotFoundError and a MaskingUnavailableError.
@@ -183,7 +188,7 @@ def default_guards(
             raise NerModelUnavailableError(str(exc)) from None
         from polanon.guards.ner import NerGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model, mode=mode))
+        guards.append(NerGuard(spacy_model=spacy_model, mode=mode, verifier=verifier))
     return guards
 
 

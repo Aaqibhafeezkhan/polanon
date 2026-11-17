@@ -943,12 +943,14 @@ class NerGuard(Guard):
                 out as written. "paranoid" keeps every span with a letter in it. In the calls of
                 an AI agent in ``benchmarks/run_agent.py``, "normal" lets 3 of 243 values
                 through and 2% of the token uses hide nothing, "paranoid" 1 and more than half.
-            verifier: an experiment, in the normal mode only. "after" lets the learned verifier
-                of :mod:`polanon.guards._span_features` drop more of what the filters keep;
-                "hybrid" drops code, identifiers and the English of software by the filters and
-                leaves the rest, what reads as a name in the language of its line, to the
-                verifier. Either weighs what the other guards found as well. "off" is the
-                filters alone.
+            verifier: in the normal mode only. "after" lets the learned verifier of
+                :mod:`polanon.guards._span_features` drop more of what the filters keep, weighing
+                the span, its words, the words around it, their vectors and what the other
+                guards found there. On OpenPII's test part it leaves 306 spans outside the
+                annotations instead of 434 and masks the same 3,733 values whole; on a part held
+                out until it was done, 400 instead of 539, no value lost. "hybrid", an
+                experiment for the benchmarks, also leaves the test of a line's language to it,
+                and wastes tokens on an agent's English. "off" is the filters alone.
 
         Raises:
             ValueError: for a mode that is neither "normal" nor "paranoid", or an unknown verifier.
@@ -1060,7 +1062,12 @@ class NerGuard(Guard):
         """
         if not spans or not self._verifies():
             return spans
-        from polanon.guards._span_features import span_features, span_vector, verifier_keeps
+        from polanon.guards._span_features import (
+            span_context,
+            span_features,
+            span_vector,
+            verifier_keeps,
+        )
 
         digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
         with _CACHE_LOCK:
@@ -1078,7 +1085,8 @@ class NerGuard(Guard):
                 vocab=vocab,
             )
             vector = span_vector(text[span.start : span.end], vocab) if vocab is not None else []
-            if verifier_keeps(features, span.entity_type, vector):
+            context = span_context(text, span)
+            if verifier_keeps(features, span.entity_type, vector, context):
                 kept.append(span)
         return kept
 

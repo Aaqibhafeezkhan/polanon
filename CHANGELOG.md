@@ -7,6 +7,21 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **A learned verifier for the spaCy guard, off by default.** `default_guards(verifier="after")`
+  and `NerGuard(verifier="after")` let a logistic regression drop more of what the Polish model
+  reads as a name in the normal mode. It weighs the span's shape, its words and the words around
+  it, their vectors in the spaCy model, and whether a rule found something there, once every
+  guard has read the text. It was fitted on OpenPII's Polish rows and KPWr's train part, which
+  no benchmark reads, chosen by cross-validation by document, and its thresholds were set end to
+  end on dev parts, with a margin. On a part held out until it was done, measured once, it masks
+  the same 4,878 values whole and leaves 400 spans outside the annotations instead of 539; on
+  OpenPII's test part, 306 instead of 434, the same 3,733 values; KPWr, the agent's calls and the
+  sample documents are unchanged. `benchmarks/verifier_data.py`, `verifier_train.py` and
+  `verifier_tune.py` rebuild it, and the benchmarks take `--verifier`. The masking reads its
+  weights in plain Python; numpy only fits them.
+
 ### Changed
 
 - **One person is one number in every case, also without a key.** Each case of a name went out

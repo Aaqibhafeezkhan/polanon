@@ -1,29 +1,33 @@
-"""Fit a learned verifier on the labelled spans and measure it against the hand-written filters.
+"""Choose and fit the learned verifier by cross-validation on the train parts.
 
-Reads ``~/.cache/polanon/verifier/spans.jsonl``, written by verifier_data.py. The verifier is a
-logistic regression: a weight per feature, a copy of it per type, a weight per number of the
-span's vector (:func:`polanon.guards._span_features.span_vector`) and a bias, fitted by gradient
-descent on the train parts with an L2 penalty that keeps a weight small unless the data asks for
-it. The masking reads the weights in plain Python; numpy only fits them.
+Reads ``~/.cache/polanon/verifier/spans.jsonl``, written by verifier_data.py, and uses only its
+train part: dev chooses the thresholds (verifier_tune.py), test is the benchmarks', and final is
+measured once, at the end. Every configuration is scored by five-fold cross-validation, the folds
+cut by document, so no text has spans on both sides.
 
-The threshold of each type is chosen on the dev parts, OpenPII's and every fifth span of KPWr's
-train part, which then trains nothing: the highest that keeps all the names the filters keep, in
-each source, but for people one. KPWr calls "Stwórca" and "Śpiąca Królewna" people too, and with
-no such allowance one of them holds the threshold for people down so far that months and the
-words of forms are masked as people again. Places and companies get none. The test parts are
-measured with those thresholds.
+A configuration is a set of inputs and a model. The inputs: the features of
+:func:`polanon.guards._span_features.span_features`, each also per type; the span's vector
+(:func:`~polanon.guards._span_features.span_vector`); and its context
+(:func:`~polanon.guards._span_features.span_context`), the words around it and its ending, kept
+when they come up at least `MIN_CONTEXT` times. The model: a logistic regression, which the
+masking reads in plain Python, at three strengths of the L2 penalty; and, to see what it would
+add, a network with one hidden layer.
 
-Two ways to use it are measured. "Instead" keeps what the verifier keeps, the filters aside.
-"After" keeps what the filters keep and the verifier keeps too, so it can only drop more.
+The verifier works after the hand-written filters, so it is scored on the spans they keep: how
+many of the spans that are no names it drops while dropping at most one name in a thousand. The
+best configuration is fitted on the whole train part and written with ``--module``; the
+thresholds it is written with are placeholders until verifier_tune.py sets them.
 
-    python benchmarks/verifier_train.py [--module polanon/guards/_verifier_weights.py]
+    python benchmarks/verifier_train.py --module polanon/guards/_verifier_weights.py
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import zlib
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,125 +35,182 @@ import numpy as np
 
 from polanon.guards._span_features import span_vector
 
-#: Names of each type a threshold may lose on the dev parts: see the module's description.
-TOLERANCE = {"PERSON": 1, "LOCATION": 0, "ORG": 0}
-
-#: The penalty on the weights, and the steps of gradient descent.
-L2 = 1e-3
-STEPS = 800
-RATE = 0.05
 TYPES = ("PERSON", "LOCATION", "ORG")
+#: A word around a span or an ending gets a weight when it comes up this often in training.
+MIN_CONTEXT = 10
+#: Names the verifier may drop of those the filters keep, in a fold: one in a thousand.
+NAMES_DROPPED = 0.001
+FOLDS = 5
 
 
 @dataclass
 class Spans:
-    """The labelled spans as arrays: one row of features each, and what is known of them."""
+    """The labelled spans of the train part as arrays."""
 
     names: list[str]
-    features: np.ndarray
+    binary: np.ndarray
     vectors: np.ndarray
     label: np.ndarray
     kept: np.ndarray
-    source: np.ndarray
-    part: np.ndarray
-    type: np.ndarray
+    fold: np.ndarray
     text: np.ndarray
 
-    @property
-    def matrix(self) -> np.ndarray:
-        """The features and the vector of every span, side by side."""
-        return np.hstack([self.features, self.vectors])
 
-
-def load(path: Path, vocab: object) -> Spans:
-    """Read the spans with a label; KPWr's every fifth train span becomes dev."""
+def read(path: Path, parts: tuple[str, ...]) -> list[dict]:
+    """The labelled spans of `parts`."""
     rows = [json.loads(line) for line in path.open(encoding="utf-8")]
-    rows = [row for row in rows if row["label"] is not None]
-    kpwr = [row for row in rows if row["source"] == "kpwr" and row["part"] == "train"]
-    for row in kpwr[::5]:
-        row["part"] = "dev"
+    return [row for row in rows if row["label"] is not None and row["part"] in parts]
+
+
+def columns(rows: list[dict], *, context: bool) -> list[str]:
+    """The names of the binary inputs: every feature, per type, and the frequent context."""
     base = sorted(rows[0]["features"])
     names = base + [f"{kind}:{name}" for kind in TYPES for name in base]
+    if context:
+        counts = Counter(name for row in rows for name in row["context"])
+        names += sorted(name for name, count in counts.items() if count >= MIN_CONTEXT)
+    return names
+
+
+def arrays(rows: list[dict], names: list[str], vocab: object) -> Spans:
+    """The binary inputs, the vectors and the labels of `rows`."""
     column = {name: index for index, name in enumerate(names)}
-    features = np.zeros((len(rows), len(names)), dtype=np.float32)
+    binary = np.zeros((len(rows), len(names)), dtype=np.float32)
     vectors = np.zeros((len(rows), 300), dtype=np.float32)
     for index, row in enumerate(rows):
-        on = [name for name in base if row["features"][name]]
-        for name in on + [f"{row['type']}:{name}" for name in on]:
-            features[index, column[name]] = 1.0
+        on = [name for name, value in row["features"].items() if value]
+        for name in on + [f"{row['type']}:{name}" for name in on] + row["context"]:
+            if name in column:
+                binary[index, column[name]] = 1.0
         vector = span_vector(row["text"], vocab)  # type: ignore[arg-type]
         if vector:
             vectors[index] = vector
     return Spans(
         names,
-        features,
+        binary,
         vectors,
         np.array([row["label"] for row in rows], dtype=np.float32),
         np.array([row["kept_by_filters"] for row in rows]),
-        np.array([row["source"] for row in rows]),
-        np.array([row["part"] for row in rows]),
-        np.array([row["type"] for row in rows]),
+        np.array([zlib.crc32(str(row["doc"]).encode()) % FOLDS for row in rows]),
         np.array([row["text"] for row in rows]),
     )
 
 
-def fit(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float]:
-    """Fit the weights and the bias by gradient descent with Adam on the mean logistic loss."""
-    weights = np.zeros(x.shape[1])
-    bias = 0.0
-    m = np.zeros(x.shape[1] + 1)
-    v = np.zeros(x.shape[1] + 1)
-    for step in range(1, STEPS + 1):
+def _adam(
+    gradient: Callable[[list[np.ndarray]], list[np.ndarray]],
+    params: list[np.ndarray],
+    steps: int,
+    rate: float,
+) -> list[np.ndarray]:
+    m = [np.zeros_like(p) for p in params]
+    v = [np.zeros_like(p) for p in params]
+    for step in range(1, steps + 1):
+        for i, g in enumerate(gradient(params)):
+            m[i] = 0.9 * m[i] + 0.1 * g
+            v[i] = 0.999 * v[i] + 0.001 * g * g
+            params[i] = params[i] - rate * (m[i] / (1 - 0.9**step)) / (
+                np.sqrt(v[i] / (1 - 0.999**step)) + 1e-8
+            )
+    return params
+
+
+def fit_logistic(x: np.ndarray, y: np.ndarray, l2: float) -> tuple[np.ndarray, float]:
+    """A logistic regression, fitted by Adam on the mean logistic loss with an L2 penalty."""
+
+    def gradient(params: list[np.ndarray]) -> list[np.ndarray]:
+        weights, bias = params
         p = 1 / (1 + np.exp(-(x @ weights + bias)))
-        gradient = np.concatenate([x.T @ (p - y) / len(y) + L2 * weights, [np.mean(p - y)]])
-        m = 0.9 * m + 0.1 * gradient
-        v = 0.999 * v + 0.001 * gradient**2
-        update = RATE * (m / (1 - 0.9**step)) / (np.sqrt(v / (1 - 0.999**step)) + 1e-8)
-        weights -= update[:-1]
-        bias -= float(update[-1])
-    return weights, bias
+        return [x.T @ (p - y) / len(y) + l2 * weights, np.array([np.mean(p - y)])]
+
+    weights, bias = _adam(gradient, [np.zeros(x.shape[1]), np.zeros(1)], 800, 0.05)
+    return weights, float(bias[0])
 
 
-def thresholds(spans: Spans, scores: np.ndarray, tolerance: dict[str, int]) -> dict[str, float]:
-    """Per type, the highest threshold that keeps all but its `tolerance` of the filters' names."""
-    found = {}
-    for kind in TYPES:
-        best = 0.0
-        groups = [
-            (spans.part == "dev") & (spans.source == source) & (spans.type == kind)
-            for source in ("openpii", "kpwr")
-        ]
-        for t in np.arange(0.01, 1.0, 0.01):
-            if all(
-                np.sum(group & (spans.label == 1) & (scores >= t))
-                >= np.sum(group & (spans.label == 1) & spans.kept) - tolerance[kind]
-                for group in groups
-            ):
-                best = float(t)
-        found[kind] = round(best, 2)
-    return found
+def fit_network(x: np.ndarray, y: np.ndarray, l2: float, hidden: int = 32) -> Callable:
+    """A network with one hidden layer of ReLUs, for comparison; returns its scoring function."""
+    rng = np.random.default_rng(2026)
+    params = [
+        rng.normal(0, np.sqrt(2 / x.shape[1]), (x.shape[1], hidden)),
+        np.zeros(hidden),
+        rng.normal(0, np.sqrt(1 / hidden), hidden),
+        np.zeros(1),
+    ]
+
+    def forward(params: list[np.ndarray], data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        w1, b1, w2, b2 = params
+        h = np.maximum(0, data @ w1 + b1)
+        return h, 1 / (1 + np.exp(-(h @ w2 + b2)))
+
+    def gradient(params: list[np.ndarray]) -> list[np.ndarray]:
+        w1, _b1, w2, _b2 = params
+        h, p = forward(params, x)
+        d = (p - y) / len(y)
+        dh = np.outer(d, w2) * (h > 0)
+        return [x.T @ dh + l2 * w1, dh.sum(0), h.T @ d + l2 * w2, np.array([d.sum()])]
+
+    params = _adam(gradient, params, 600, 0.01)
+    return lambda data: forward(params, data)[1]
 
 
-def write_module(
-    path: Path, spans: Spans, weights: np.ndarray, bias: float, cuts: dict[str, float]
-) -> None:
-    """Write the weights as the module the NER guard reads, rounded."""
-    count = len(spans.names)
+def dropped_at(scores: np.ndarray, spans: Spans, chosen: np.ndarray) -> tuple[int, int]:
+    """Non-names dropped, and names, at the highest cut that drops at most 1 in 1000 names."""
+    kept = chosen & spans.kept
+    names = np.sort(scores[kept & (spans.label == 1)])
+    allowed = int(NAMES_DROPPED * len(names))
+    cut = names[allowed] if len(names) > allowed else 1.0
+    others = kept & (spans.label == 0)
+    return int(np.sum(others & (scores < cut))), int(
+        np.sum(kept & (spans.label == 1) & (scores < cut))
+    )
+
+
+def cross_validate(spans: Spans, inputs: str, model: str, l2: float) -> tuple[int, int, int]:
+    """Non-names and names dropped over the folds, and non-names the filters keep."""
+    x = spans.binary if inputs == "binary" else np.hstack([spans.binary, spans.vectors])
+    dropped = names = 0
+    for fold in range(FOLDS):
+        train, held = spans.fold != fold, spans.fold == fold
+        if model == "logistic":
+            weights, bias = fit_logistic(x[train], spans.label[train], l2)
+            scores = 1 / (1 + np.exp(-(x @ weights + bias)))
+        else:
+            scores = fit_network(x[train], spans.label[train], l2)(x)
+        d, n = dropped_at(scores, spans, held)
+        dropped += d
+        names += n
+    total = int(np.sum(spans.kept & (spans.label == 0)))
+    return dropped, names, total
+
+
+def _literal(name: str) -> str:
+    """A feature's name as a string literal, every character but a letter or ASCII escaped."""
+    escaped = "".join(
+        char if char.isalnum() or (char.isascii() and char not in '"\\') else f"\\u{ord(char):04x}"
+        for char in name
+    )
+    return f'"{escaped}"'
+
+
+def write_module(path: Path, names: list[str], weights: np.ndarray, bias: float) -> None:
+    """Write the weights as the module the NER guard reads; verifier_tune.py sets thresholds."""
+    count = len(names)
     table = "\n".join(
-        f"    {name!r}: {weight:.4f},"
-        for name, weight in sorted(zip(spans.names, weights[:count], strict=True))
+        f"    {_literal(name)}: {weight:.4f},"
+        for name, weight in sorted(zip(names, weights[:count], strict=True))
         if round(float(weight), 4)
     )
-    vector = ", ".join(f"{weight:.4f}" for weight in weights[count:])
-    limits = "\n".join(f"    {kind!r}: {cut:.2f}," for kind, cut in sorted(cuts.items()))
-    trained = int(np.sum(spans.part == "train"))
+    numbers = [f"{weight:.4f}" for weight in weights[count:]]
+    vector = "\n".join(
+        "    " + ", ".join(numbers[start : start + 8]) + "," for start in range(0, len(numbers), 8)
+    )
     path.write_text(
         f'''"""Weights of the learned verifier, written by benchmarks/verifier_train.py.
 
-Fitted on {trained} spans the Polish spaCy model found in OpenPII's and KPWr's train parts. A
-weight named "TYPE:feature" counts for spans of that type only, and VECTOR weighs the numbers of
-the span's vector. A span is kept when the logistic of the bias and the weights of its features
-reaches the threshold of its type.
+A logistic regression chosen by cross-validation on the train parts of OpenPII and KPWr. A weight
+named "TYPE:feature" counts for spans of that type only, one named "before:", "after:", "end:" or
+"end2:" for a span with that context, and VECTOR weighs the numbers of the span's vector. A span
+is kept when the logistic of the bias and its weights reaches the threshold of its type, which
+benchmarks/verifier_tune.py chooses end to end on the dev parts.
 """
 
 BIAS = {bias:.4f}
@@ -158,10 +219,14 @@ WEIGHTS: dict[str, float] = {{
 {table}
 }}
 
-VECTOR: list[float] = [{vector}]
+VECTOR: list[float] = [
+{vector}
+]
 
 THRESHOLDS: dict[str, float] = {{
-{limits}
+    "LOCATION": 0.0,
+    "ORG": 0.0,
+    "PERSON": 0.0,
 }}
 ''',
         encoding="utf-8",
@@ -169,55 +234,51 @@ THRESHOLDS: dict[str, float] = {{
     )
 
 
-def row(name: str, spans: Spans, chosen: np.ndarray, keep: np.ndarray) -> str:
-    """One line of a markdown table: names and non-names kept and dropped."""
-    names, others = chosen & (spans.label == 1), chosen & (spans.label == 0)
-    return (
-        f"| {name} | {np.sum(names & keep)} | {np.sum(names & ~keep)} | "
-        f"{np.sum(others & keep)} | {np.sum(others & ~keep)} |"
-    )
-
-
 def main() -> int:
-    """Fit on the train parts, choose the thresholds on dev, report the test parts."""
+    """Cross-validate the configurations, fit the best and write it."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--data", type=Path, default=Path.home() / ".cache/polanon/verifier")
     parser.add_argument("--spacy-model", default="pl_core_news_md")
-    parser.add_argument("--module", type=Path, help="also write the weights as a module")
+    parser.add_argument("--module", type=Path, help="write the best configuration's weights")
+    parser.add_argument("--network", action="store_true", help="also cross-validate a network")
     args = parser.parse_args()
 
     import spacy
 
     vocab = spacy.load(args.spacy_model, exclude=["lemmatizer", "tagger"]).vocab
-    spans = load(args.data / "spans.jsonl", vocab)
-    train = spans.part == "train"
-    weights, bias = fit(spans.matrix[train], spans.label[train])
-    scores = 1 / (1 + np.exp(-(spans.matrix @ weights + bias)))
-    cuts = thresholds(spans, scores, TOLERANCE)
-    keep = scores >= np.array([cuts[kind] for kind in spans.type])
+    rows = read(args.data / "spans.jsonl", ("train",))
+    print(f"{len(rows)} labelled spans in the train part, {FOLDS} folds by document\n")
+    print("| Inputs | Model | L2 | Non-names dropped | Names dropped |")
+    print("|---|---|---:|---:|---:|")
+    results = []
+    for context in (False, True):
+        spans = arrays(rows, columns(rows, context=context), vocab)
+        for inputs in ("binary", "binary+vector"):
+            label = inputs + ("+context" if context else "")
+            for l2 in (1e-5, 3e-5, 1e-4, 1e-3):
+                dropped, names, total = cross_validate(spans, inputs, "logistic", l2)
+                results.append((dropped, -names, context, inputs, l2))
+                print(f"| {label} | logistic | {l2:g} | {dropped} of {total} | {names} |")
+    if args.network:
+        spans = arrays(rows, columns(rows, context=True), vocab)
+        for l2 in (1e-4, 1e-3):
+            dropped, names, total = cross_validate(spans, "binary+vector", "network", l2)
+            print(f"| binary+vector+context | network | {l2:g} | {dropped} of {total} | {names} |")
 
-    print(f"{int(np.sum(train))} spans trained, thresholds {cuts} from dev\n")
-    for source in ("openpii", "kpwr"):
-        test = (spans.part == "test") & (spans.source == source)
-        print(f"### {source}, test part ({int(np.sum(test))} spans)\n")
-        print("| Way | Names kept | Names dropped | Non-names kept | Non-names dropped |")
-        print("|---|---:|---:|---:|---:|")
-        print(row("filters (today)", spans, test, spans.kept))
-        print(row("verifier instead", spans, test, keep))
-        print(row("verifier after", spans, test, spans.kept & keep))
-        print()
-        lost = Counter(spans.text[test & spans.kept & ~keep & (spans.label == 1)])
-        print("Names the filters keep and the verifier drops:", lost.most_common(10))
-        left = Counter(spans.text[test & keep & (spans.label == 0)])
-        print("Non-names the verifier keeps:", left.most_common(10), "\n")
-
-    count = len(spans.names)
-    ranked = sorted(zip(spans.names, weights[:count], strict=True), key=lambda item: item[1])
-    print("Weights against a name:", ", ".join(f"{n} {w:.2f}" for n, w in ranked[:10]))
-    print("Weights for a name:", ", ".join(f"{n} {w:.2f}" for n, w in ranked[::-1][:10]))
+    dropped, _, context, inputs, l2 = max(results)
+    print(f"\nBest logistic: {inputs}{'+context' if context else ''}, L2 {l2:g}")
+    names = columns(rows, context=context)
+    spans = arrays(rows, names, vocab)
+    x = spans.binary if inputs == "binary" else np.hstack([spans.binary, spans.vectors])
+    weights, bias = fit_logistic(x, spans.label, l2)
+    ranked = sorted(zip(names, weights[: len(names)], strict=True), key=lambda item: item[1])
+    print("Weights against a name:", ", ".join(f"{n} {w:.2f}" for n, w in ranked[:15]))
+    print("Weights for a name:", ", ".join(f"{n} {w:.2f}" for n, w in ranked[::-1][:15]))
     if args.module is not None:
-        write_module(args.module, spans, weights, bias, cuts)
-        print(f"\nModule written to {args.module}")
+        if inputs == "binary":
+            weights = np.concatenate([weights, np.zeros(300)])
+        write_module(args.module, names, weights, bias)
+        print(f"\nModule written to {args.module}; set its thresholds with verifier_tune.py")
     return 0
 
 

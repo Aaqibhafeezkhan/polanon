@@ -71,6 +71,7 @@ class Word:
 
 
 _PREVIOUS_WORD = re.compile(r"(\S+)\s*$")
+_NEXT_WORD = re.compile(r"\s*(\S+)")
 
 #: The features in a fixed order, as a verifier's weights are stored.
 FEATURES: tuple[str, ...] = (
@@ -260,26 +261,56 @@ def span_vector(fragment: str, vocab: Vocab) -> list[float]:
     return [float(value) / length for value in mean]
 
 
+def span_context(text: str, span: Span) -> list[str]:
+    """Return the word before a span, the word after it and the ending of its last word.
+
+    Each comes as the name of a feature, "before:ul", "after:sp", "end:ski", "end2:ka": the
+    verifier has a weight for those that came up often enough in its training texts, and none
+    for the rest. A street follows "ul." and a company comes before "sp.", while a form's field
+    comes after its label; Polish surnames and places end in "-ski", "-owo" or "-ice".
+    """
+    before = _PREVIOUS_WORD.search(text, max(0, span.start - 40), span.start)
+    after = _NEXT_WORD.match(text, span.end)
+    previous = ner._bare(before[1]).lower() if before is not None else ""
+    following = ner._bare(after[1]).lower() if after is not None else ""
+    letters = _LETTERS.findall(text[span.start : span.end])
+    last = letters[-1].lower() if letters else ""
+    return [
+        f"before:{previous or '^'}",
+        f"after:{following or '$'}",
+        f"end:{last[-3:]}",
+        f"end2:{last[-2:]}",
+    ]
+
+
 def verifier_score(
-    features: Mapping[str, int], entity_type: str, vector: Sequence[float] = ()
+    features: Mapping[str, int],
+    entity_type: str,
+    vector: Sequence[float] = (),
+    context: Sequence[str] = (),
 ) -> float:
     """Return the learned verifier's probability that a span with these features is a name.
 
     A feature counts with its own weight and with the weight it has for spans of `entity_type`;
-    the span's :func:`span_vector` with the weights of its numbers.
+    the span's :func:`span_vector` with the weights of its numbers, and its
+    :func:`span_context` with the weights of the words and endings the verifier knows.
     """
     z = fitted.BIAS + sum(
         fitted.WEIGHTS.get(name, 0.0) + fitted.WEIGHTS.get(f"{entity_type}:{name}", 0.0)
         for name, value in features.items()
         if value
     )
+    z += sum(fitted.WEIGHTS.get(name, 0.0) for name in context)
     z += sum(weight * value for weight, value in zip(fitted.VECTOR, vector, strict=False))
     return 1 / (1 + math.exp(-z)) if z >= 0 else math.exp(z) / (1 + math.exp(z))
 
 
 def verifier_keeps(
-    features: Mapping[str, int], entity_type: str, vector: Sequence[float] = ()
+    features: Mapping[str, int],
+    entity_type: str,
+    vector: Sequence[float] = (),
+    context: Sequence[str] = (),
 ) -> bool:
     """Return whether the verifier keeps a span: its probability reaches its type's threshold."""
-    score = verifier_score(features, entity_type, vector)
+    score = verifier_score(features, entity_type, vector, context)
     return score >= fitted.THRESHOLDS.get(entity_type, 0.5)
