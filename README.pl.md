@@ -14,7 +14,7 @@ nie potrzebuje niczego poza biblioteką standardową.
 polanon trafił do [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A),
 cotygodniowego newslettera Jakuba Mrugalskiego dla ludzi z branży IT, 13 listopada 2026.
 
-[![Wypróbuj polanon w przeglądarce](https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.pl.svg)](https://boromat.github.io/demo/)
+<p align="center"><a href="https://boromat.github.io/demo/"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.pl.svg" alt="Wypróbuj polanon w przeglądarce"></a></p>
 
 **Bez pisania kodu**, z bramką w Dockerze. Claude Code, n8n, Open WebUI, LibreChat, Hermes Agent
 i każde inne narzędzie, które mówi API OpenAI albo Anthropic, działają jak dotąd, a każde

@@ -13,7 +13,7 @@ while it streams. Pure Python: the standard library is the whole core.
 Featured in [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A), Jakub
 Mrugalski's weekly newsletter for people in IT, on 13 November 2026.
 
-[![Try polanon in your browser](https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.svg)](https://boromat.github.io/en/demo/)
+<p align="center"><a href="https://boromat.github.io/en/demo/"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.svg" alt="Try polanon in your browser"></a></p>
 
 **Without writing code**, with the gateway in Docker. Claude Code, n8n, Open WebUI, LibreChat,
 Hermes Agent and any other tool that speaks the OpenAI or Anthropic API keep working as they did,
