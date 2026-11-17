@@ -103,16 +103,17 @@ made a token is a word it cannot read, and a value masked once is masked whereve
 
 | Configuration | Leaked | Tokens that hide nothing | Their uses |
 |---|---:|---:|---:|
-| polanon, guards only, no model | 37 of 243 | 0 | 0 of 263 |
+| polanon, guards only, no model | 35 of 243 | 0 | 0 of 266 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
-| polanon, guards + `pl_core_news_md` | **3 of 243** | 5 | **5 of 307** |
-| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 696 |
+| polanon, guards + `pl_core_news_md` | **2 of 243** | 5 | **5 of 309** |
+| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 697 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
-nothing is masked for nothing. With the model two values leak by design: "sopotu", a place typed
+nothing is masked for nothing. With the model one value leaks by design: "sopotu", a place typed
 in lowercase in a chat, dropped since a place in lowercase stopped being one, so that "text" and
-"service" of a manual are not, and "Erik Holm" opening an English sentence, where a capitalised
-word is read as English. No guard finds the third in any mode, a name written in Cyrillic.
+"service" of a manual are not. "Erik Holm" opening an English sentence, where a capitalised word
+is read as English, leaked too until Erik joined the first names of the PESEL register. No guard
+finds the second in any mode, a name written in Cyrillic.
 Two birthdays under a contact's `birthday` key and a login made of a surname in a path,
 `/home/tmalinowski`, leaked too until a key that names a birthday was read as its label and a
 login made of a known surname was masked with the person. `mode="paranoid"` takes every name the
@@ -141,7 +142,7 @@ or is wrong:
 Nothing comes back wrong, and no token is left in an answer. What comes back as written is a
 name polanon cannot decline for sure, "Olena Kovalenko" asked for in the genitive. A value that
 leaked reached the model as it is, so the model writes its case itself and the line counts as
-exact: the rules alone score 40 of 40, which says little.
+exact: the rules alone score 39 of 40, which says little.
 [`tests/test_agent_benchmark.py`](../tests/test_agent_benchmark.py) holds these numbers as
 bounds both ways.
 

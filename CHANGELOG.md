@@ -25,7 +25,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   A form that is also an ordinary word, "inna", "melisa", "sylwestra", "idę", is treated as
   "Kalina" is, and Max, Mark, Frank, Roger, Pascal, Christian and Aurora are left out as the
   English words an agent's tools and logs are full of. Without the model, people found whole in
-  the training part of CLARIN-PL's KPWr rise from 39% to 45%.
+  the training part of CLARIN-PL's KPWr rise from 39% to 45%, and in the agent benchmark
+  "Erik Holm" opening an English sentence no longer leaks: 2 of 243 values reach the model with
+  `pl_core_news_md`, down from 3.
 - **A benchmark on public Polish data polanon was never tuned on**, `benchmarks/run_external.py`.
   It downloads the Polish rows of ai4privacy's OpenPII (CC-BY-4.0), the test part of CLARIN-PL's
   KPWr (CC-BY-3.0) and GUS's TERYT street catalogue (CC-BY-4.0) on first use, keeps none of them
