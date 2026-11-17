@@ -1,13 +1,13 @@
-"""What a span the language model found looks like, as numbers a learned verifier can weigh.
+"""What a span the language model found looks like, as numbers the ML filter can weigh.
 
 The Polish spaCy model tags words that name nobody: English of software, code, a product's tier,
-a label before a colon. The normal mode drops them by rules written one at a time. A learned
-verifier would weigh the same signs, and more, with weights fitted on annotated text instead.
+a label before a colon. The normal mode drops them by rules written one at a time. The ML
+filter weighs the same signs, and more, with weights fitted on annotated text instead.
 
-``benchmarks/verifier_data.py`` writes these features for every span the model finds in the
-benchmarks' texts, with whether the span covers an annotated value, ``verifier_train.py`` fits a
-logistic regression on them and writes its weights to :mod:`polanon.guards._verifier_weights`, and
-:func:`verifier_keeps` reads those when the NER guard asks for its verifier. Every feature is 0
+``benchmarks/ml_filter_data.py`` writes these features for every span the model finds in the
+benchmarks' texts, with whether the span covers an annotated value, ``ml_filter_train.py`` fits a
+logistic regression on them and writes its weights to :mod:`polanon.guards._ml_filter_weights`, and
+:func:`ml_filter_keeps` reads those when the NER guard's ML filter is on. Every feature is 0
 or 1, so a weight reads as how much the sign counts, and :data:`FEATURES` fixes their order.
 """
 
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from polanon._canonical import _surname
-from polanon.guards import _verifier_weights as fitted
+from polanon.guards import _ml_filter_weights as fitted
 from polanon.guards import ner
 from polanon.guards._software_english import SOFTWARE_WORDS
 from polanon.guards.names_pl import HONORIFICS, fold, is_common_adjective
@@ -62,18 +62,32 @@ class Vocab(Protocol):
 
 @dataclass(frozen=True)
 class Word:
-    """What the language model read in one word of a span: its part of speech and lemma."""
+    """What the language model read in one word of a span, without the word itself.
 
-    text: str
+    The NER guard remembers it for thousands of texts, which it otherwise remembers by digest
+    only, so no letter of the word is kept: its part of speech, whether the model has a vector
+    for it, and whether a word written with a capital has a lemma in lowercase.
+    """
+
     pos: str
-    lemma: str
     has_vector: bool
+    lowercase_lemma: bool
+
+    @classmethod
+    def of(cls, token: object) -> Word:
+        """What a spaCy token tells of its word."""
+        text, lemma = str(getattr(token, "text", "")), str(getattr(token, "lemma_", ""))
+        return cls(
+            str(getattr(token, "pos_", "")),
+            bool(getattr(token, "has_vector", False)),
+            text[:1].isupper() and lemma[:1].islower(),
+        )
 
 
 _PREVIOUS_WORD = re.compile(r"(\S+)\s*$")
 _NEXT_WORD = re.compile(r"\s*(\S+)")
 
-#: The features in a fixed order, as a verifier's weights are stored.
+#: The features in a fixed order, as the ML filter's weights are stored.
 FEATURES: tuple[str, ...] = (
     # what the model called it
     "type_person",
@@ -166,7 +180,6 @@ def span_features(
     letters = _LETTERS.findall(text[span.start : span.end])
     known = vocab.has_vector if vocab is not None else lambda _word: False
     tags = {word.pos for word in words}
-    capitalised = [word for word in words if word.text[:1].isupper()]
     written = _WORD.findall(fragment)
     bare = [ner._bare(word) for word in written]
     folded = [word.lower() for word in bare if word]
@@ -230,7 +243,7 @@ def span_features(
         "pos_a_verb": "VERB" in tags,
         "pos_a_function_word": bool(tags & _FUNCTION_POS),
         "pos_other": bool(tags - {"PROPN", "NOUN", "ADJ", "VERB", "PUNCT"} - _FUNCTION_POS),
-        "lemma_in_lowercase": any(word.lemma[:1].islower() for word in capitalised),
+        "lemma_in_lowercase": any(word.lowercase_lemma for word in words),
         "a_word_without_vector": any(not word.has_vector for word in words),
         "a_capitalised_common_word": any(
             word[:1].isupper() and not known(word) and known(word.lower()) for word in letters
@@ -246,7 +259,7 @@ def span_vector(fragment: str, vocab: Vocab) -> list[float]:
 
     A word the vocabulary knows only in lowercase counts with that vector. Names lie in one part
     of the space, common words, months and the words of forms in others, which is what the
-    verifier's weights for these numbers read. A span with no known word gives zeros.
+    ML filter's weights for these numbers read. A span with no known word gives zeros.
     """
     vectors = []
     for word in _LETTERS.findall(fragment):
@@ -265,7 +278,7 @@ def span_context(text: str, span: Span) -> list[str]:
     """Return the word before a span, the word after it and the ending of its last word.
 
     Each comes as the name of a feature, "before:ul", "after:sp", "end:ski", "end2:ka": the
-    verifier has a weight for those that came up often enough in its training texts, and none
+    ML filter has a weight for those that came up often enough in its training texts, and none
     for the rest. A street follows "ul." and a company comes before "sp.", while a form's field
     comes after its label; Polish surnames and places end in "-ski", "-owo" or "-ice".
     """
@@ -283,17 +296,17 @@ def span_context(text: str, span: Span) -> list[str]:
     ]
 
 
-def verifier_score(
+def ml_filter_score(
     features: Mapping[str, int],
     entity_type: str,
     vector: Sequence[float] = (),
     context: Sequence[str] = (),
 ) -> float:
-    """Return the learned verifier's probability that a span with these features is a name.
+    """Return the ML filter's probability that a span with these features is a name.
 
     A feature counts with its own weight and with the weight it has for spans of `entity_type`;
     the span's :func:`span_vector` with the weights of its numbers, and its
-    :func:`span_context` with the weights of the words and endings the verifier knows.
+    :func:`span_context` with the weights of the words and endings the ML filter knows.
     """
     z = fitted.BIAS + sum(
         fitted.WEIGHTS.get(name, 0.0) + fitted.WEIGHTS.get(f"{entity_type}:{name}", 0.0)
@@ -305,12 +318,12 @@ def verifier_score(
     return 1 / (1 + math.exp(-z)) if z >= 0 else math.exp(z) / (1 + math.exp(z))
 
 
-def verifier_keeps(
+def ml_filter_keeps(
     features: Mapping[str, int],
     entity_type: str,
     vector: Sequence[float] = (),
     context: Sequence[str] = (),
 ) -> bool:
-    """Return whether the verifier keeps a span: its probability reaches its type's threshold."""
-    score = verifier_score(features, entity_type, vector, context)
+    """Return whether the ML filter keeps a span: its probability reaches its type's threshold."""
+    score = ml_filter_score(features, entity_type, vector, context)
     return score >= fitted.THRESHOLDS.get(entity_type, 0.5)

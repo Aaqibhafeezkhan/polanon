@@ -1,7 +1,7 @@
-"""Set the learned verifier's thresholds end to end on the dev parts, and measure the final part.
+"""Set the ML filter's thresholds end to end on the dev parts, and measure the final part.
 
 For each text, the rules' spans and the NER guard's spans after its filters are found once, with
-the verifier's probability for each NER span, computed as the guard computes it. A set of
+the ML filter's probability for each NER span, computed as the guard computes it. A set of
 thresholds then decides which NER spans stay, and the text is scored as benchmarks/run.py scores
 it: the spans merged, a value counted when every character of it is covered, a span over no
 annotated value counted as outside.
@@ -12,10 +12,10 @@ checked the same way, and then multiplied by MARGIN, so that a name a little les
 dev still stays. ``--write`` puts them into the weights module.
 
 ``--final`` measures the final part, which nothing else reads: OpenPII's last 1,290 rows and every
-tenth document of KPWr's train-tune file. Run it once, when the verifier is done.
+tenth document of KPWr's train-tune file. Run it once, when the ML filter is done.
 
-    python benchmarks/verifier_tune.py --write polanon/guards/_verifier_weights.py
-    python benchmarks/verifier_tune.py --final
+    python benchmarks/ml_filter_tune.py --write polanon/guards/_ml_filter_weights.py
+    python benchmarks/ml_filter_tune.py --final
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from ml_filter_data import kpwr_part, openpii_part
 from run import EVALUATED, GoldEntity, evaluate, guards_for
 from run_external import (
     SEED,
@@ -35,10 +36,9 @@ from run_external import (
     openpii_gold,
     openpii_rows,
 )
-from verifier_data import kpwr_part, openpii_part
 
+from polanon.guards import _ml_filter_weights as fitted
 from polanon.guards import _span_features as features
-from polanon.guards import _verifier_weights as fitted
 from polanon.guards.base import Guard
 from polanon.guards.ner import NerGuard
 from polanon.types import Span
@@ -109,7 +109,7 @@ def read(data: Path, part: str, guard: NerGuard, rules: list[Guard]) -> list[Tex
 
 
 def _score(guard: NerGuard, text: str, span: Span, others: list[Span], vocab: object) -> float:
-    """The verifier's probability for one span, computed as the NER guard computes it."""
+    """The ML filter's probability for one span, computed as the NER guard computes it."""
     digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
     words = guard._words.get(digest, ())
     found = features.span_features(
@@ -120,7 +120,7 @@ def _score(guard: NerGuard, text: str, span: Span, others: list[Span], vocab: ob
         vocab=vocab,  # type: ignore[arg-type]
     )
     vector = features.span_vector(text[span.start : span.end], vocab)  # type: ignore[arg-type]
-    return features.verifier_score(
+    return features.ml_filter_score(
         found, span.entity_type, vector, features.span_context(text, span)
     )
 
@@ -160,10 +160,10 @@ def tune(texts: list[Text]) -> dict[str, float]:
 
 
 def report(title: str, texts: list[Text], cuts: dict[str, float]) -> None:
-    """Values masked whole and spans outside, with the filters alone and with the verifier."""
+    """Values masked whole and spans outside, with the filters alone and with the ML filter."""
     base, verified = totals(texts, None), totals(texts, cuts)
     print(f"\n### {title}\n")
-    print("| Source | Texts | Masked whole: filters | verifier | Outside: filters | verifier |")
+    print("| Source | Texts | Masked whole: filters | ML filter | Outside: filters | ML filter |")
     print("|---|---:|---:|---:|---:|---:|")
     for source in sorted(base):
         count = sum(1 for item in texts if item.source == source)
@@ -194,7 +194,7 @@ def main() -> int:
     parser.add_argument("--final", action="store_true", help="measure the final part, once")
     args = parser.parse_args()
 
-    guard = NerGuard(verifier="after")
+    guard = NerGuard()
     rules = guards_for(False, "")
     if args.final:
         report(

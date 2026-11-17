@@ -1,10 +1,10 @@
-"""Weights of the learned verifier, written by benchmarks/verifier_train.py.
+"""Weights of the ML filter, written by benchmarks/ml_filter_train.py.
 
 A logistic regression chosen by cross-validation on the train parts of OpenPII and KPWr. A weight
 named "TYPE:feature" counts for spans of that type only, one named "before:", "after:", "end:" or
 "end2:" for a span with that context, and VECTOR weighs the numbers of the span's vector. A span
 is kept when the logistic of the bias and its weights reaches the threshold of its type, which
-benchmarks/verifier_tune.py chooses end to end on the dev parts.
+benchmarks/ml_filter_tune.py chooses end to end on the dev parts.
 """
 
 BIAS = 0.1315

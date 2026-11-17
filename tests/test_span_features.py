@@ -1,4 +1,4 @@
-"""The features a learned verifier would weigh, and the labels its training data gets.
+"""The features the ML filter weighs, and the labels its training data gets.
 
 Stdlib only: the spans are made up, as the language model would return them.
 """
@@ -11,8 +11,8 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "benchmarks"))
 
+from ml_filter_data import kpwr_part, label_of, openpii_part  # noqa: E402
 from run import GoldEntity  # noqa: E402
-from verifier_data import kpwr_part, label_of, openpii_part  # noqa: E402
 
 from polanon.guards._span_features import (  # noqa: E402
     FEATURES,
@@ -79,11 +79,11 @@ def test_a_span_over_a_value_is_one_over_another_name_ignored_and_over_nothing_z
     assert label_of(Span(40, 45, "ORG", 0.85, "spacy_ner"), [person], [country]) == 0
 
 
-def test_the_verifier_learns_a_sign_from_its_features():
+def test_the_ml_filter_learns_a_sign_from_its_features():
     """A feature that every name has and one that every non-name has: the fitted weights tell
     them apart."""
     np = pytest.importorskip("numpy")
-    from verifier_train import fit_logistic
+    from ml_filter_train import fit_logistic
 
     x = np.array([[1.0, 0.0]] * 20 + [[0.0, 1.0]] * 20)
     y = np.array([1.0] * 20 + [0.0] * 20)

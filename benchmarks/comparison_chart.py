@@ -32,7 +32,7 @@ BY_TYPE = [
 ]
 KPWR = [("people", 90, 90), ("streets", 69, 59), ("cities", 93, 93), ("companies", 83, 86)]
 WHOLE = (100 * 3733 / 5255, 100 * 3456 / 5255)  # OpenPII test part: values masked whole
-FALSE_ALARMS = (435, 2641)  # spans over nothing the annotations mark
+FALSE_ALARMS = (306, 2641)  # spans over nothing the annotations mark
 
 TEXT = {
     "en": {

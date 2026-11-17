@@ -1,7 +1,7 @@
-"""The spans the Polish spaCy model finds in the benchmarks' texts, labelled for a verifier.
+"""The spans the Polish spaCy model finds in the benchmarks' texts, labelled for the ML filter.
 
 Every span the model finds, as the paranoid mode keeps it, becomes one line of
-``~/.cache/polanon/verifier/spans.jsonl``: its source and part, its type, whether the hand-written
+``~/.cache/polanon/ml-filter/spans.jsonl``: its source and part, its type, whether the hand-written
 filters of the normal mode keep it, the features of :mod:`polanon.guards._span_features`, and its
 label. The label is 1 when the span covers a name the benchmark annotates (a person, a place, a
 street, a company), 0 when it covers nothing annotated, and null when it covers only something
@@ -10,7 +10,7 @@ the benchmark does not read, such as a country or an institution in KPWr. Those 
 
 The parts keep the measurement honest. OpenPII's Polish rows are shuffled as run_external.py
 shuffles them: its dev part (the first 1,000) tunes, its test part (the next 1,000) is the
-benchmark's, the next 6,000 train, and the last 1,290 are "final": held out until the verifier is
+benchmark's, the next 6,000 train, and the last 1,290 are "final": held out until the ML filter is
 done and measured once. KPWr's train-tune file is split by document, so no text has sentences on
 both sides: every tenth document is final, every tenth from the fifth on is dev, the rest train;
 its test file is the benchmark's. Neither source was used to build the spaCy model, which learned
@@ -20,7 +20,7 @@ OpenPII does not annotate every name its texts hold: "Kasia" or "Marek" in a sen
 language model wrote around the annotated values. A span over a first name the rules know that
 covers nothing annotated is no evidence that it is no name, so its label is null too.
 
-    python benchmarks/verifier_data.py
+    python benchmarks/ml_filter_data.py
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ def rows_of(
         (
             token.idx,
             token.idx + len(token),
-            Word(token.text, token.pos_, token.lemma_, token.has_vector),
+            Word.of(token),
         )
         for token in read
         if not token.is_space
@@ -164,7 +164,7 @@ def rows_of(
 
 
 def summary(lines: list[dict]) -> None:
-    """How the hand-written filters do on each part: what a verifier has to beat."""
+    """How the hand-written filters do on each part: what the ML filter has to beat."""
     print(
         "| Source | Part | Spans | Values | Not values | Ignored | Filters keep values | "
         "Filters drop values | Filters keep non-values |"
@@ -192,7 +192,7 @@ def main() -> int:
     """Read every text, write the spans and print how the filters do."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--data", type=Path, default=Path.home() / ".cache/polanon/benchmarks")
-    parser.add_argument("--out", type=Path, default=Path.home() / ".cache/polanon/verifier")
+    parser.add_argument("--out", type=Path, default=Path.home() / ".cache/polanon/ml-filter")
     parser.add_argument("--spacy-model", default="pl_core_news_md")
     args = parser.parse_args()
 

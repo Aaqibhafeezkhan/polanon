@@ -65,6 +65,9 @@ class _Document:
     def __init__(self, ents: list[_Entity]) -> None:
         self.ents = ents
 
+    def __iter__(self):
+        return iter(())  # no words: these tests read the filters, not the ML filter
+
 
 def test_a_lowercase_adjective_tagged_as_a_place_is_dropped():
     """Typed in lowercase, the Polish model tagged "polskiej" and "angielskiej" as places."""
@@ -773,7 +776,7 @@ def test_a_long_text_reaches_spacy_in_pieces_with_spans_mapped_back(monkeypatch)
         entity = SimpleNamespace(label_="persName", start_char=start, end_char=start + 12)
         return SimpleNamespace(ents=[entity] if start >= 0 else [])
 
-    fresh = NerGuard()
+    fresh = NerGuard(ml_filter=False)
     monkeypatch.setattr(fresh, "_get_pipeline", lambda: model)
     text = "Spotkanie w biurze o dziewiątej.\n" * 5 + "Wczoraj dzwonił Jan Kowalski.\n"
     spans = fresh.detect(text, {"PERSON"})

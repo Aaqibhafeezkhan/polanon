@@ -16,7 +16,7 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from polanon.guards._software_english import SOFTWARE_WORDS
 from polanon.guards.base import Guard
@@ -65,11 +65,7 @@ _LOAD_LOCK = threading.Lock()
 CACHE_TEXTS = 20_000
 _CACHE_LOCK = threading.Lock()
 
-#: How the learned verifier is used: not at all, after the filters, or in place of their test of a
-#: line's language. See :class:`NerGuard`.
-Verifier = Literal["off", "after", "hybrid"]
-VERIFIERS: tuple[Verifier, ...] = ("off", "after", "hybrid")
-#: Texts whose words a guard remembers for the verifier when it remembers no spans.
+#: Texts whose words a guard remembers for the ML filter when it remembers no spans.
 _WORDS_KEPT = 64
 
 #: The parties of a Polish contract in their cases, which it writes with a capital letter.
@@ -768,15 +764,8 @@ def _named_without_language(fragment: str) -> bool:
     return all(not word[0].islower() for word in words) or _holds_a_first_name(fragment)
 
 
-def _without_english_misreadings(
-    text: str, spans: list[Span], *, by_language: bool = True
-) -> list[Span]:
-    """Drop what the Polish model read as a name where the text is not Polish, unless it is one.
-
-    With `by_language` False the last test, whether a span reads as a name in the language of its
-    line, is left to the learned verifier, which weighs the same signs with the rest; code,
-    identifiers and the English of software are still dropped here.
-    """
+def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
+    """Drop what the Polish model read as a name where the text is not Polish, unless it is one."""
     languages: dict[int, str] = {}
     english_text: bool | None = None
     kept = []
@@ -808,9 +797,6 @@ def _without_english_misreadings(
         language = languages[line_start]
         if language == _CODE:
             continue
-        if not by_language:
-            kept.append(span)
-            continue
         if language == _UNKNOWN:
             if english_text is None:
                 english_text = _is_english_text(text)
@@ -841,15 +827,27 @@ def _is_lowercase_adjective(fragment: str) -> bool:
     return " " not in fragment and fragment.islower() and is_common_adjective(fragment)
 
 
-def _words_of(document: Any, offset: int) -> Iterator[tuple[int, int, Any]]:
-    """Yield where each word of a piece the model read stands, with what the model read in it."""
+def _words_of(
+    document: Any, offset: int, ranges: list[tuple[int, int]]
+) -> Iterator[tuple[int, int, Any]]:
+    """Yield the words of a piece inside the model's entities, with what the model read in them.
+
+    `ranges` are the entities' characters in the piece. Only their words are kept: the ML filter
+    reads no other, and a guard remembers thousands of texts, an agent's long tool results among
+    them.
+    """
     from polanon.guards._span_features import Word
 
+    ranges = sorted(ranges)
+    at = 0
     for token in document:
-        if not token.is_space:
-            start = offset + token.idx
-            word = Word(token.text, token.pos_, token.lemma_, token.has_vector)
-            yield start, start + len(token.text), word
+        if token.is_space:
+            continue
+        start, end = token.idx, token.idx + len(token.text)
+        while at < len(ranges) and ranges[at][1] <= start:
+            at += 1
+        if at < len(ranges) and ranges[at][0] < end:
+            yield offset + start, offset + end, Word.of(token)
 
 
 def _join_hyphenated(text: str, spans: list[Span]) -> list[Span]:
@@ -928,7 +926,7 @@ class NerGuard(Guard):
         spacy_model: str = "pl_core_news_md",
         cache_texts: int = CACHE_TEXTS,
         mode: Mode = "normal",
-        verifier: Verifier = "off",
+        ml_filter: bool = True,
     ) -> None:
         """Store the model name; the pipeline itself loads on first use.
 
@@ -943,28 +941,29 @@ class NerGuard(Guard):
                 out as written. "paranoid" keeps every span with a letter in it. In the calls of
                 an AI agent in ``benchmarks/run_agent.py``, "normal" lets 3 of 243 values
                 through and 2% of the token uses hide nothing, "paranoid" 1 and more than half.
-            verifier: in the normal mode only. "after" lets the learned verifier of
-                :mod:`polanon.guards._span_features` drop more of what the filters keep, weighing
-                the span, its words, the words around it, their vectors and what the other
-                guards found there. On OpenPII's test part it leaves 306 spans outside the
-                annotations instead of 434 and masks the same 3,733 values whole; on a part held
-                out until it was done, 400 instead of 539, no value lost. "hybrid", an
-                experiment for the benchmarks, also leaves the test of a line's language to it,
-                and wastes tokens on an agent's English. "off" is the filters alone.
+            ml_filter: in the normal mode, let the ML filter of
+                :mod:`polanon.guards._span_features`, a logistic regression, drop more of what the
+                hand-written filters keep, weighing the span, its words, the words around it,
+                their vectors and what the other guards found there. On OpenPII's test part it
+                leaves 306 spans outside the annotations instead of 434 and masks the same 3,733
+                values whole; on a part held out until it was done, 400 instead of 539, no value
+                lost. It adds about half a millisecond to a text the model takes 12 to read. On
+                by default; False leaves the decision to the hand-written filters alone.
 
         Raises:
-            ValueError: for a mode that is neither "normal" nor "paranoid", or an unknown verifier.
+            ValueError: for a mode that is neither "normal" nor "paranoid".
+            TypeError: for an `ml_filter` that is not True or False.
         """
         check_mode(mode)
-        if verifier not in VERIFIERS:
-            raise ValueError(f"verifier must be one of {', '.join(VERIFIERS)}, not {verifier!r}")
+        if not isinstance(ml_filter, bool):
+            raise TypeError(f"ml_filter is True or False, not {ml_filter!r}")
         self.spacy_model = spacy_model
         self.cache_texts = cache_texts
         self.mode = mode
-        self.verifier = verifier
+        self.ml_filter = ml_filter
         self._nlp: Any | None = None
         self._found: OrderedDict[tuple[str, frozenset[str]], tuple[Span, ...]] = OrderedDict()
-        #: What the model read in every word of the texts it read lately, for the verifier.
+        #: What the model read in every word of the texts it read lately, for the ML filter.
         self._words: OrderedDict[str, tuple[tuple[int, int, Any], ...]] = OrderedDict()
 
     def _get_pipeline(self) -> Any:
@@ -1017,9 +1016,10 @@ class NerGuard(Guard):
                     self._found.popitem(last=False)
         return spans
 
-    def _verifies(self) -> bool:
+    def _filters_by_ml(self) -> bool:
+        """Whether the ML filter reviews the spans: on, in the normal mode, with a Polish model."""
         return (
-            self.verifier != "off"
+            self.ml_filter
             and self.mode == "normal"
             and getattr(self._get_pipeline(), "lang", "pl") == "pl"
         )
@@ -1027,20 +1027,22 @@ class NerGuard(Guard):
     def _read(self, text: str, wanted: frozenset[str] | set[str], digest: str = "") -> list[Span]:
         """Run the model over `text` and keep what reads as a name."""
         nlp = self._get_pipeline()
-        verifies = self._verifies()
+        keeps_words = self._filters_by_ml()
         spans: list[Span] = []
         words: list[tuple[int, int, Any]] = []
         for offset, piece in _chunks(text, CHUNK_CHARS):
             document = nlp(piece)
+            ranges = []
             for entity in document.ents:
                 entity_type = LABEL_MAP.get(entity.label_)
                 if entity_type not in wanted:
                     continue
+                ranges.append((entity.start_char, entity.end_char))
                 start, end = offset + entity.start_char, offset + entity.end_char
                 spans.extend(self._line_spans(text, start, end, str(entity_type)))
-            if verifies:
-                words.extend(_words_of(document, offset))
-        if verifies:
+            if keeps_words and ranges:
+                words.extend(_words_of(document, offset, ranges))
+        if keeps_words:
             with _CACHE_LOCK:
                 self._words[digest] = tuple(words)
                 while len(self._words) > max(self.cache_texts, _WORDS_KEPT):
@@ -1049,24 +1051,22 @@ class NerGuard(Guard):
         if self.mode == "paranoid":
             return [span for span in spans if _has_a_letter(text[span.start : span.end])]
         if getattr(nlp, "lang", "pl") == "pl":
-            spans = _without_english_misreadings(
-                text, spans, by_language=not (verifies and self.verifier == "hybrid")
-            )
+            spans = _without_english_misreadings(text, spans)
         return spans
 
     def _review(self, text: str, spans: list[Span], others: list[Span]) -> list[Span]:
-        """Keep the spans the learned verifier keeps, knowing what the other guards found.
+        """Keep the spans the ML filter keeps, knowing what the other guards found.
 
         Called by the pipeline once every guard has read `text`. A text whose words are no longer
         remembered keeps every span: more masked, nothing let through.
         """
-        if not spans or not self._verifies():
+        if not spans or not self._filters_by_ml():
             return spans
         from polanon.guards._span_features import (
+            ml_filter_keeps,
             span_context,
             span_features,
             span_vector,
-            verifier_keeps,
         )
 
         digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
@@ -1086,7 +1086,7 @@ class NerGuard(Guard):
             )
             vector = span_vector(text[span.start : span.end], vocab) if vocab is not None else []
             context = span_context(text, span)
-            if verifier_keeps(features, span.entity_type, vector, context):
+            if ml_filter_keeps(features, span.entity_type, vector, context):
                 kept.append(span)
         return kept
 

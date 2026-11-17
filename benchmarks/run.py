@@ -48,7 +48,6 @@ from polanon import (
     merge_spans,
 )
 from polanon._detection import detect
-from polanon.guards.ner import Verifier
 from polanon.policy import ENTITY_TYPES, Mode
 
 SAMPLES = Path(__file__).parent / "samples"
@@ -133,7 +132,7 @@ def evaluate(
     `union`, it is every character any detection covers, which is at least what another tool's
     own conflict resolution would mask, so a comparison never scores it below its best. The
     guards run as the pipeline runs them, so one that reviews its spans once it knows what the
-    others found, as the NER guard's learned verifier does, does so here too.
+    others found, as the NER guard's ML filter does, does so here too.
     """
     detected = detect(text, None, enabled, guards)
     spans = merge_spans(detected, text)
@@ -182,7 +181,7 @@ def run(guards: list[Guard], *, union: bool = False) -> tuple[dict[str, Score], 
 
 
 def guards_for(
-    with_ner: bool, spacy_model: str, mode: Mode = "normal", verifier: Verifier = "off"
+    with_ner: bool, spacy_model: str, mode: Mode = "normal", ml_filter: bool = True
 ) -> list[Guard]:
     """Build the guard stack for one configuration."""
     guards: list[Guard] = [
@@ -196,7 +195,7 @@ def guards_for(
     if with_ner:
         from polanon.guards.ner import NerGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model, mode=mode, verifier=verifier))
+        guards.append(NerGuard(spacy_model=spacy_model, mode=mode, ml_filter=ml_filter))
     return guards
 
 
@@ -250,15 +249,14 @@ def main() -> int:
         "--paranoid", action="store_true", help='the spaCy guard in mode="paranoid"'
     )
     parser.add_argument(
-        "--verifier",
-        choices=("off", "after", "hybrid"),
-        default="off",
-        help="the learned verifier of the spaCy guard, an experiment",
+        "--no-ml-filter", action="store_true", help="the spaCy guard with its ML filter off"
     )
     args = parser.parse_args()
 
     mode: Mode = "paranoid" if args.paranoid else "normal"
-    totals, extra, documents = run(guards_for(args.ner, args.spacy_model, mode, args.verifier))
+    totals, extra, documents = run(
+        guards_for(args.ner, args.spacy_model, mode, not args.no_ml_filter)
+    )
     model = f" + spaCy NER, {mode}" if args.ner else ""
     print(f"configuration: guards without a model{model}\n")
     report(totals, extra, documents, args.markdown)

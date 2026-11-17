@@ -1,7 +1,7 @@
-"""Choose and fit the learned verifier by cross-validation on the train parts.
+"""Choose and fit the ML filter by cross-validation on the train parts.
 
-Reads ``~/.cache/polanon/verifier/spans.jsonl``, written by verifier_data.py, and uses only its
-train part: dev chooses the thresholds (verifier_tune.py), test is the benchmarks', and final is
+Reads ``~/.cache/polanon/ml-filter/spans.jsonl``, written by ml_filter_data.py, and uses only its
+train part: dev chooses the thresholds (ml_filter_tune.py), test is the benchmarks', and final is
 measured once, at the end. Every configuration is scored by five-fold cross-validation, the folds
 cut by document, so no text has spans on both sides.
 
@@ -13,12 +13,12 @@ when they come up at least `MIN_CONTEXT` times. The model: a logistic regression
 masking reads in plain Python, at three strengths of the L2 penalty; and, to see what it would
 add, a network with one hidden layer.
 
-The verifier works after the hand-written filters, so it is scored on the spans they keep: how
+The ML filter works after the hand-written filters, so it is scored on the spans they keep: how
 many of the spans that are no names it drops while dropping at most one name in a thousand. The
 best configuration is fitted on the whole train part and written with ``--module``; the
-thresholds it is written with are placeholders until verifier_tune.py sets them.
+thresholds it is written with are placeholders until ml_filter_tune.py sets them.
 
-    python benchmarks/verifier_train.py --module polanon/guards/_verifier_weights.py
+    python benchmarks/ml_filter_train.py --module polanon/guards/_ml_filter_weights.py
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from polanon.guards._span_features import span_vector
 TYPES = ("PERSON", "LOCATION", "ORG")
 #: A word around a span or an ending gets a weight when it comes up this often in training.
 MIN_CONTEXT = 10
-#: Names the verifier may drop of those the filters keep, in a fold: one in a thousand.
+#: Names the ML filter may drop of those the filters keep, in a fold: one in a thousand.
 NAMES_DROPPED = 0.001
 FOLDS = 5
 
@@ -192,7 +192,7 @@ def _literal(name: str) -> str:
 
 
 def write_module(path: Path, names: list[str], weights: np.ndarray, bias: float) -> None:
-    """Write the weights as the module the NER guard reads; verifier_tune.py sets thresholds."""
+    """Write the weights as the module the NER guard reads; ml_filter_tune.py sets thresholds."""
     count = len(names)
     table = "\n".join(
         f"    {_literal(name)}: {weight:.4f},"
@@ -204,13 +204,13 @@ def write_module(path: Path, names: list[str], weights: np.ndarray, bias: float)
         "    " + ", ".join(numbers[start : start + 8]) + "," for start in range(0, len(numbers), 8)
     )
     path.write_text(
-        f'''"""Weights of the learned verifier, written by benchmarks/verifier_train.py.
+        f'''"""Weights of the ML filter, written by benchmarks/ml_filter_train.py.
 
 A logistic regression chosen by cross-validation on the train parts of OpenPII and KPWr. A weight
 named "TYPE:feature" counts for spans of that type only, one named "before:", "after:", "end:" or
 "end2:" for a span with that context, and VECTOR weighs the numbers of the span's vector. A span
 is kept when the logistic of the bias and its weights reaches the threshold of its type, which
-benchmarks/verifier_tune.py chooses end to end on the dev parts.
+benchmarks/ml_filter_tune.py chooses end to end on the dev parts.
 """
 
 BIAS = {bias:.4f}
@@ -237,7 +237,7 @@ THRESHOLDS: dict[str, float] = {{
 def main() -> int:
     """Cross-validate the configurations, fit the best and write it."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--data", type=Path, default=Path.home() / ".cache/polanon/verifier")
+    parser.add_argument("--data", type=Path, default=Path.home() / ".cache/polanon/ml-filter")
     parser.add_argument("--spacy-model", default="pl_core_news_md")
     parser.add_argument("--module", type=Path, help="write the best configuration's weights")
     parser.add_argument("--network", action="store_true", help="also cross-validate a network")
@@ -278,7 +278,7 @@ def main() -> int:
         if inputs == "binary":
             weights = np.concatenate([weights, np.zeros(300)])
         write_module(args.module, names, weights, bias)
-        print(f"\nModule written to {args.module}; set its thresholds with verifier_tune.py")
+        print(f"\nModule written to {args.module}; set its thresholds with ml_filter_tune.py")
     return 0
 
 

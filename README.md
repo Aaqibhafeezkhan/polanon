@@ -92,7 +92,7 @@ Plusgiro and sort codes, international phone numbers, street addresses and postc
 | Polish identifiers with a checksum | PESEL, NIP, REGON, ID card, IBAN, payment cards | PESEL; IBAN and payment cards in general | PESEL, NIP, REGON, IBAN, payment cards; ID card and passport by pattern only | None; IBAN and payment cards in general |
 | Polish names in every grammatical case | For listed first names and the surnames that agree with them, without a language model; spaCy adds the rest | With a Polish spaCy model and its `persName` label mapped | Not detected | Not detected; its README suggests adding an NER model |
 | What the core needs | Nothing beyond the standard library | spaCy, numpy, pydantic and a few more; a language model only for names and places | pii-core and typer | Nothing beyond the standard library |
-| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% of 5,255 values masked whole with `pl_core_news_md`, 435 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
+| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% of 5,255 values masked whole with `pl_core_news_md`, 306 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
 | On polanon's own [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md), tuned on | 98% fully masked with `pl_core_news_md`, 86% with rules alone | 67% with the same model | Not measured | Not measured |
 | License | MIT | MIT | Apache-2.0 | MIT |
 
@@ -101,7 +101,7 @@ November 2026. Only Presidio was run, with the scripts in `benchmarks/`. polanon
 documents are not neutral ground: its author wrote them and tuned its rules on them, and Presidio
 had only the Polish model, also for the three invoices from abroad. The Polish rows of ai4privacy's
 OpenPII and CLARIN-PL's KPWr are: polanon was never tuned on the parts measured, and on them the
-gap narrows to five points and six times fewer false alarms, with a tie on people, where the same
+gap narrows to five points and eight times fewer false alarms, with a tie on people, where the same
 spaCy model does the work. Presidio wins on random codes written without a label, which it reads
 with low-score patterns that also mark product codes and order numbers. Each has its place:
 Presidio for many languages, structured data and its Azure integration; pii-veil for Polish
@@ -666,16 +666,18 @@ and 2% of the token uses hide nothing; "paranoid" lets 1 through, a name in Cyri
 finds, and more than half of the token uses hide nothing. The rules are the same in both, so without the model
 the mode changes nothing.
 
-With `verifier="after"`, a learned verifier drops more of what the model reads as a name in the
-normal mode: a logistic regression that weighs the span, its words and the words around it, their
-vectors and what the rules found there, fitted on public Polish data. It masks the same values
-whole on every benchmark and leaves about a quarter fewer spans that hide nothing: on a part of
-OpenPII held out until it was done, 400 instead of 539. It is off by default; the
-[benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#a-learned-verifier)
-tell how it was fitted and measured.
+In the normal mode, an ML filter drops more of what the model reads as a name: a logistic
+regression that weighs the span, its words and the words around it, their vectors and what the
+rules found there, fitted on public Polish data. It masks the same values whole on every
+benchmark and leaves about a quarter fewer spans that hide nothing: on a part of OpenPII held out
+until it was done, 400 instead of 539. It adds about half a millisecond to a text the model takes
+twelve to read, and it learns nothing from the texts it masks: it ships as fixed weights. It is
+on by default; the
+[benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-ml-filter)
+tell how it was fitted and measured, and this leaves the decision to the hand-written filters:
 
 ```python
-guards = default_guards(verifier="after")
+guards = default_guards(ml_filter=False)
 ```
 
 ## A second opinion: the judge

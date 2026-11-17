@@ -54,7 +54,6 @@ from polanon.gateway.payloads import (
     restore_responses_response,
 )
 from polanon.guards.names_pl import fold
-from polanon.guards.ner import NerGuard, Verifier
 from polanon.policy import CASED_TOKEN_PATTERN, Mode
 
 #: ``{{value}}`` or ``{{value|case=form}}`` in an answer.
@@ -342,13 +341,12 @@ def anonymizer_for(
     with_ner: bool,
     spacy_model: str = "pl_core_news_md",
     mode: Mode = "normal",
-    verifier: Verifier = "off",
+    ml_filter: bool = True,
 ) -> Anonymizer:
     """The guards the gateway masks with, and its list of well-known names."""
-    guards = default_guards(with_ner=with_ner, spacy_model=spacy_model, mode=mode)
-    for guard in guards:
-        if isinstance(guard, NerGuard):
-            guard.verifier = verifier
+    guards = default_guards(
+        with_ner=with_ner, spacy_model=spacy_model, mode=mode, ml_filter=ml_filter
+    )
     return Anonymizer(guards, allowlist=Allowlist(WELL_KNOWN_NAMES))
 
 
@@ -457,15 +455,12 @@ def main() -> None:
         "--paranoid", action="store_true", help='the spaCy guard in mode="paranoid"'
     )
     parser.add_argument(
-        "--verifier",
-        choices=("off", "after", "hybrid"),
-        default="off",
-        help="the learned verifier of the spaCy guard, an experiment",
+        "--no-ml-filter", action="store_true", help="the spaCy guard with its ML filter off"
     )
     args = parser.parse_args()
     mode: Mode = "paranoid" if args.paranoid else "normal"
     anonymizer = anonymizer_for(
-        with_ner=args.ner, spacy_model=args.spacy_model, mode=mode, verifier=args.verifier
+        with_ner=args.ner, spacy_model=args.spacy_model, mode=mode, ml_filter=not args.no_ml_filter
     )
     _report(run(anonymizer), markdown=args.markdown, show=args.show)
 

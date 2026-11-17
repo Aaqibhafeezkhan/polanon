@@ -29,7 +29,7 @@ def detect(text: str, view: View | None, enabled: set[str], guards: list[Guard])
 
     `view` is the text's :func:`~polanon._view.detection_view`, computed once by the caller. A
     guard that reviews its spans once it knows what the others found, as the NER guard with its
-    learned verifier does, gets to do so before they are returned.
+    ML filter does, gets to do so before they are returned.
     """
     seen = text if view is None else view.text
     found = [

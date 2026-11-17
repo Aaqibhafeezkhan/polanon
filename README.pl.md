@@ -96,7 +96,7 @@ pocztowe.
 | Polskie identyfikatory z sumą kontrolną | PESEL, NIP, REGON, dowód osobisty, IBAN, karty płatnicze | PESEL; IBAN i karty płatnicze w wersji ogólnej | PESEL, NIP, REGON, IBAN, karty płatnicze; dowód osobisty i paszport tylko według wzorca | Brak; IBAN i karty płatnicze w wersji ogólnej |
 | Polskie imiona i nazwiska w każdym przypadku gramatycznym | Dla imion z listy i zgodnych z nimi nazwisk, bez modelu językowego; resztę dokłada spaCy | Z polskim modelem spaCy i zmapowaną etykietą `persName` | Nie są wykrywane | Nie są wykrywane; jego README sugeruje dodanie modelu NER |
 | Czego potrzebuje rdzeń | Niczego poza biblioteką standardową | spaCy, numpy, pydantic i kilku innych pakietów; modelu językowego tylko do imion i nazwisk oraz miejsc | pii-core i typer | Niczego poza biblioteką standardową |
-| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 435 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
+| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 306 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
 | Na własnych [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon, na których była strojona | 98% zamaskowanych w całości z `pl_core_news_md`, 86% przy samych regułach | 67% z tym samym modelem | Nie mierzono | Nie mierzono |
 | Licencja | MIT | MIT | Apache-2.0 | MIT |
 
@@ -106,7 +106,7 @@ z `benchmarks/`. Trzynaście własnych dokumentów biblioteki polanon nie jest n
 napisał je jej autor i dostrajał na nich reguły, a Presidio dostał tylko polski model, także do
 trzech faktur z zagranicy. Neutralne są polskie wiersze OpenPII od ai4privacy i KPWr od CLARIN-PL:
 na mierzonych częściach polanon nigdy nie był strojony, a różnica maleje tam do pięciu punktów
-i sześć razy mniej fałszywych alarmów, z remisem na osobach, gdzie pracuje ten sam model spaCy.
+i osiem razy mniej fałszywych alarmów, z remisem na osobach, gdzie pracuje ten sam model spaCy.
 Presidio wygrywa na losowych kodach bez etykiety, które czyta wzorcami o niskiej pewności,
 oznaczającymi też kody produktów i numery zamówień. Każde z tych narzędzi ma swoje miejsce. Presidio
 służy do wielu języków, danych ustrukturyzowanych i integracji z Azure, pii-veil do polskich
@@ -693,16 +693,19 @@ a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 1, imię zapisan
 znajduje żaden strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
 tryb niczego nie zmienia.
 
-Z `verifier="after"` uczony weryfikator odrzuca więcej z tego, co model uznaje za nazwę w trybie
-normalnym: to regresja logistyczna, która waży fragment, jego słowa i słowa wokół niego, ich
-wektory oraz to, co znalazły tam reguły, dopasowana na publicznych polskich danych. Na każdym
-benchmarku maskuje w całości te same wartości, a fragmentów, które niczego nie ukrywają, zostawia
-mniej więcej o jedną czwartą mniej: na części OpenPII odłożonej do samego końca 400 zamiast 539.
-Domyślnie jest wyłączony; jak go dopasowano i zmierzono, opisują
-[notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#a-learned-verifier).
+W trybie normalnym filtr ML odrzuca więcej z tego, co model uznaje za nazwę: to regresja
+logistyczna, która waży fragment, jego słowa i słowa wokół niego, ich wektory oraz to, co
+znalazły tam reguły, dopasowana na publicznych polskich danych. Na każdym benchmarku maskuje
+w całości te same wartości, a fragmentów, które niczego nie ukrywają, zostawia mniej więcej
+o jedną czwartą mniej: na części OpenPII odłożonej do samego końca 400 zamiast 539. Dokłada około
+pół milisekundy do tekstu, który model czyta dwanaście, i niczego nie uczy się z maskowanych
+tekstów: trafia do paczki jako gotowe wagi. Jest domyślnie włączony; jak go dopasowano
+i zmierzono, opisują
+[notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-ml-filter),
+a tak zostawia się decyzję samym ręcznym filtrom:
 
 ```python
-guards = default_guards(verifier="after")
+guards = default_guards(ml_filter=False)
 ```
 
 ## Druga opinia: sędzia

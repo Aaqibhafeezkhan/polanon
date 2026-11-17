@@ -389,11 +389,13 @@ def score(
     return totals, extra, time.perf_counter() - started
 
 
-def configurations(presidio: bool, verifier: bool = False) -> list[tuple[str, list[Guard], bool]]:
+def configurations(
+    presidio: bool, without_ml_filter: bool = False
+) -> list[tuple[str, list[Guard], bool]]:
     """The rules alone, with the spaCy model and paranoid when it is installed, and Presidio.
 
-    With `verifier`, the spaCy model with the learned verifier after its filters and in place of
-    their test of a line's language too.
+    The spaCy model runs with its ML filter, as it does by default; with `without_ml_filter`, also
+    without it, for comparison.
     """
     from polanon import ner_available
 
@@ -401,10 +403,9 @@ def configurations(presidio: bool, verifier: bool = False) -> list[tuple[str, li
     if ner_available("pl_core_news_md"):
         found.append(("polanon + pl_core_news_md", guards_for(True, "pl_core_news_md"), False))
         found.append(("polanon paranoid", guards_for(True, "pl_core_news_md", "paranoid"), False))
-        if verifier:
-            for way in ("after", "hybrid"):
-                guards = guards_for(True, "pl_core_news_md", "normal", way)
-                found.append((f"polanon + verifier {way}", guards, False))
+        if without_ml_filter:
+            guards = guards_for(True, "pl_core_news_md", "normal", ml_filter=False)
+            found.append(("polanon, ML filter off", guards, False))
     if presidio:
         from compare_presidio import PresidioGuard
 
@@ -483,9 +484,11 @@ def main() -> int:
     parser.add_argument("--part", choices=("test", "dev"), default="test")
     parser.add_argument("--presidio", action="store_true", help="also score Presidio")
     parser.add_argument("--teryt", action="store_true", help="also score every TERYT street")
-    parser.add_argument("--verifier", action="store_true", help="also the learned verifier")
+    parser.add_argument(
+        "--without-ml-filter", action="store_true", help="also with the ML filter off"
+    )
     args = parser.parse_args()
-    setups = configurations(args.presidio, args.verifier)
+    setups = configurations(args.presidio, args.without_ml_filter)
 
     rows = openpii_rows(args.data)
     random.Random(SEED).shuffle(rows)  # noqa: S311 - a fixed sample, not a secret
