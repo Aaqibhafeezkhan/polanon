@@ -189,13 +189,16 @@ _STREET_WORDS = 8
 _TITLES = 3
 #: The words of a street's name after its first one: "Pawła II", "im. Jana", "pod Lipami".
 _MORE_STREET_WORDS = rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}"
+#: "nr" or "numer" written between a street and its house number: "przy ulicy Długiej nr 36".
+#: It ended the street, and the street with its number went out in clear.
+_HOUSE_NR = r"(?i:nr|numer)\.?"
 
 ADDRESS_PATTERN = re.compile(
     # The word boundary matters: without it the "al" at the end of "TOTAL" reads as "al." (aleja),
     # and an invoice line such as "TOTAL M0061 Catalyst 1" became an address cut mid-word.
     # PDF output and quick typing drop the space after the prefix's dot: "ul.Długa 5".
     rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:{_TITLE}\s+){{0,{_TITLES}}}{_NAME_PART}"
-    rf"{_MORE_STREET_WORDS}\s+{_HOUSE}"
+    rf"{_MORE_STREET_WORDS}\s+(?:{_HOUSE_NR}\s*)?{_HOUSE}"
 )
 
 #: A short house number of a street written without its prefix, with a flat number if any.
@@ -211,7 +214,7 @@ _SHORT_HOUSE = (
 ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
     rf"(?<![\w.]){_NAME_PART}"
     rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}[ \t]+"
-    rf"{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
+    rf"(?:{_HOUSE_NR}[ \t]*)?{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
 )
 
 #: A street without its prefix that a sentence names: "Adres: Japczaka 17", "zam. Długa 5",
@@ -222,7 +225,7 @@ ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
 _STREET_WITHOUT_PREFIX = (
     rf"(?:{_TITLE}[ \t]+){{0,{_TITLES}}}{_NAME_PART}"
     rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE})){{0,{_STREET_WORDS - 1}}}?"
-    rf"[ \t]+(?P<house>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
+    rf"[ \t]+(?:(?P<nr>{_HOUSE_NR})[ \t]*)?(?P<house>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
 )
 ADDRESS_AFTER_LABEL_PATTERN = re.compile(
     r"(?<![\w.])(?i:adres|zam\.|zamieszka[łl][aey]|mieszka(?:[ \t]+(?:przy|na))?)(?!\w)"
@@ -231,6 +234,19 @@ ADDRESS_AFTER_LABEL_PATTERN = re.compile(
 ADDRESS_BEFORE_TOWN_PATTERN = re.compile(
     rf"(?<![\w.])(?i:z|ze|na|przy|do)[ \t]+(?P<value>{_STREET_WITHOUT_PREFIX})"
     r"(?=[ \t]+w[ \t]+(?P<town>[A-ZŁŚŻŹĆÓĄĘŃ][\w-]*))"
+)
+#: A street and its house number in fields of their own, as a form or a CRM export writes them:
+#: "Ulica: Kwiatowa", "Numer domu: 8A", "house number: 5". The colon makes it a field; without
+#: one, "ulica handlowa nr 1" or "numer domu 5 osób" is a sentence.
+ADDRESS_STREET_FIELD_PATTERN = re.compile(
+    r"(?<![\w.])(?i:ulica|street)[ \t]*:[ \t]*"
+    rf"(?P<value>{_NAME_PART}"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}})"
+)
+ADDRESS_NUMBER_FIELD_PATTERN = re.compile(
+    r"(?<![\w.])(?i:(?:nr|numer)\.?[ \t]+(?:domu|budynku|lokalu|mieszkania)"
+    r"|(?:house|building|flat|apartment)[ \t]+(?:no|number)\.?)[ \t]*:[ \t]*"
+    rf"(?P<value>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
 )
 #: The endings of a street after "z", "na", "przy" or "do": "Długiej", "Mickiewicza",
 #: "Piłsudskiego", "Kościuszki", "Rynku", "Kwiatów". A product's name has none: "Windows".
@@ -514,6 +530,8 @@ PATTERNS: list[Rule] = [
     ("ADDRESS", ADDRESS_BEFORE_POSTCODE_PATTERN, None),
     ("ADDRESS", ADDRESS_AFTER_LABEL_PATTERN, None),
     ("ADDRESS", ADDRESS_BEFORE_TOWN_PATTERN, None),
+    ("ADDRESS", ADDRESS_STREET_FIELD_PATTERN, None),
+    ("ADDRESS", ADDRESS_NUMBER_FIELD_PATTERN, None),
     ("VIN", re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"), is_valid_vin),
     # A lowercase VIN only after its label: seventeen lowercase letters and digits are a request
     # id, a session key or a hash far more often, and a European VIN carries no check digit.
@@ -791,6 +809,8 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     after the label, and one before a town counts only when the street and the town are in the
     cases a sentence puts them in, "z Długiej 17 w Białymstoku", unlike "na Windows 11 w Polsce".
     """
+    if match.re in (ADDRESS_STREET_FIELD_PATTERN, ADDRESS_NUMBER_FIELD_PATTERN):
+        return [match.span("value")]
     if match.re in (ADDRESS_AFTER_LABEL_PATTERN, ADDRESS_BEFORE_TOWN_PATTERN):
         before_postcode = ADDRESS_BEFORE_POSTCODE_PATTERN.match(text, match.start("value"))
         if before_postcode is not None and before_postcode.end() == match.end("value"):
@@ -798,7 +818,8 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     if match.re is ADDRESS_AFTER_LABEL_PATTERN:
         return [match.span("value")]
     if match.re is ADDRESS_BEFORE_TOWN_PATTERN:
-        street = text[match.start("value") : match.start("house")].split()[-1].lower()
+        street_end = match.start("nr") if match.group("nr") else match.start("house")
+        street = text[match.start("value") : street_end].split()[-1].lower()
         town = match.group("town").lower()
         if (
             _STREET_IN_AN_OBLIQUE_CASE.search(street) is None

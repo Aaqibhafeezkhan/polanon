@@ -1114,6 +1114,51 @@ def test_a_street_without_its_prefix_or_postcode_is_masked_after_a_label_or_befo
 
 
 @pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Biuro mieści się przy ulicy Długiej nr 36, 00-950 Warszawa.", "ulicy Długiej nr 36"),
+        ("Adres: ul. Kwiatowa nr 12/4", "ul. Kwiatowa nr 12/4"),
+        ("Spotkanie na placu Wolności nr 2.", "placu Wolności nr 2"),
+        ("Dom przy al. Adama Mickiewicza numer 228.", "al. Adama Mickiewicza numer 228"),
+        ("Klient zam. Polna nr 5.", "Polna nr 5"),
+        ("Kurier odbierze paczkę z Długiej nr 17 w Białymstoku.", "Długiej nr 17"),
+    ],
+)
+def test_an_address_with_nr_before_its_house_number_is_masked_whole(text, address):
+    """ "przy ulicy Długiej nr 36": the "nr" in front of the number ended the street, and the
+    street with its number went out in clear."""
+    assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    ("text", "values"),
+    [
+        ("Ulica: Kwiatowa\nNumer domu: 8A\nMiasto: Kraków", ["Kwiatowa", "8A"]),
+        ("Ulica: Jana Pawła II, nr budynku: 17/3", ["Jana Pawła II", "17/3"]),
+        ("street: Długa; house number: 5", ["Długa", "5"]),
+        ("Numer lokalu: 12", ["12"]),
+    ],
+)
+def test_a_street_and_its_number_in_form_fields_are_masked(text, values):
+    """A form or a CRM export puts the street and the house number in fields of their own,
+    with no "ul." and no postcode next to them."""
+    assert _found(text, "ADDRESS") == values
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ulica handlowa nr 1 w rankingu.",
+        "Numer domu: brak",
+        "Plac budowy nr 3 zamknięty.",
+        "Ulica: do ustalenia",
+    ],
+)
+def test_words_like_a_street_field_without_a_street_are_no_address(text):
+    assert _found(text, "ADDRESS") == []
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "Działa na Windows 11 w Polsce.",

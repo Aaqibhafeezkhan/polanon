@@ -20,6 +20,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   off its real value after "NIP:", "numer dowodu osobistego:" or "numer karty kredytowej" went
   out in clear. "Numer ubezpieczenia społecznego", which a translated form writes for the PESEL,
   is read as a PESEL label too. The same numbers without a label are left as they were.
+- **A street with "nr" before its house number, and a street in form fields, are masked.**
+  "przy ulicy Długiej nr 36" or "al. Mickiewicza numer 228": the "nr" ended the street, and the
+  street with its number went out in clear. A form or a CRM export writes the street and the
+  number in fields of their own, "Ulica: Kwiatowa", "Numer domu: 8A", "house number: 5", with
+  no "ul." and no postcode next to them; such a field is masked once it has its colon, so
+  "ulica handlowa nr 1" in a sentence stays as it is.
 
 ## [0.3.8] - 2026-11-17
 
