@@ -93,7 +93,51 @@ def merge_spans(spans: list[Span], text: str | None = None) -> list[Span]:
     for _, candidate in ranked:
         for piece in _uncovered_parts(candidate, kept, text):
             insort(kept, piece)
-    return kept
+    return _with_initials_joined(kept, text)
+
+
+def _with_initials_joined(spans: list[Span], text: str | None) -> list[Span]:
+    """Join a person's initials to the rest of the name across the one space between them.
+
+    "George W. Bush" went out as "<OSOBA_1> <OSOBA_2>" and "C. Alexander i S. Ishikawa" as four
+    people: one detector stopped at an initial, another started after it, and the model read two
+    people where there was one. Two person spans one space apart are one person when the space
+    follows an initial or comes right before one; side by side without an initial they stay two.
+    """
+    if text is None:
+        return spans
+    joined: list[Span] = []
+    for span in spans:
+        previous = joined[-1] if joined else None
+        if (
+            previous is not None
+            and previous.entity_type == span.entity_type == "PERSON"
+            and text[previous.end : span.start] == " "
+            and (
+                _ends_with_initial(text[previous.start : previous.end])
+                or _starts_with_initial(text[span.start : span.end])
+            )
+        ):
+            score = max(previous.score, span.score)
+            joined[-1] = Span(previous.start, span.end, "PERSON", score, previous.source)
+            continue
+        joined.append(span)
+    return joined
+
+
+def _ends_with_initial(name: str) -> bool:
+    """Whether a name ends with an initial: a capital letter and its dot, alone, as in "W."."""
+    return (
+        len(name) >= 2
+        and name[-1] == "."
+        and name[-2].isupper()
+        and (len(name) == 2 or not name[-3].isalnum())
+    )
+
+
+def _starts_with_initial(name: str) -> bool:
+    """Whether a name starts with an initial followed by more of it: "W. Bush"."""
+    return len(name) >= 4 and name[0].isupper() and name[1] == "." and name[2] == " "
 
 
 #: Types masked whole, with every detection inside them.

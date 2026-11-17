@@ -34,6 +34,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   number in fields of their own, "Ulica: Kwiatowa", "Numer domu: 8A", "house number: 5", with
   no "ul." and no postcode next to them; such a field is masked once it has its colon, so
   "ulica handlowa nr 1" in a sentence stays as it is.
+- **A name with initials is one person**: "George W. Bush" went out as `<OSOBA_1> <OSOBA_2>`
+  and "C. Alexander i S. Ishikawa" as four people, since one detector stopped at an initial and
+  another started after it. Nothing leaked, but the model read two people where there was one.
+  Two person spans one space apart are now joined when the space follows an initial or comes
+  right before one; two names side by side without an initial stay two.
 
 ## [0.3.8] - 2026-11-17
 
