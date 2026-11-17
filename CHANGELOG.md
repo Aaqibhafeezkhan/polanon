@@ -15,6 +15,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   same way, and one made of such letters alone was not masked at all. Every letter of any
   alphabet now counts, in the local part, the domain and the bracketed `[at]` form. Found by
   measuring on the Polish rows of ai4privacy's OpenPII, where 24 of 537 addresses leaked so.
+- **A NIP, ID card or payment card number right after its label is masked with a typo in it**,
+  as a PESEL already was. Without the label the checksum decides, and a number one keystroke
+  off its real value after "NIP:", "numer dowodu osobistego:" or "numer karty kredytowej" went
+  out in clear. "Numer ubezpieczenia społecznego", which a translated form writes for the PESEL,
+  is read as a PESEL label too. The same numbers without a label are left as they were.
 
 ## [0.3.8] - 2026-11-17
 

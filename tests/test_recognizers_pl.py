@@ -820,6 +820,40 @@ def test_a_pesel_with_a_typo_right_after_its_label_is_masked(text):
 
 
 @pytest.mark.parametrize(
+    ("text", "enabled", "expected"),
+    [
+        # Social insurance in Poland is the PESEL, and a translated form calls it so.
+        ("numer ubezpieczenia społecznego: 15501416181", {"PESEL"}, "<PESEL_1>"),
+        ("numeru ubezpieczenia (78059938421)", {"PESEL"}, "<PESEL_1>)"),
+        # The check digit is wrong in each: one keystroke off a real number.
+        ("NIP: 123-456-32-19", {"NIP"}, "<NIP_1>"),
+        ("nr NIP 1234563219", {"NIP"}, "<NIP_1>"),
+        ("numer dowodu osobistego: ABA300001", {"PL_ID"}, "<DOWOD_1>"),
+        ("Dowód osobisty nr XYZ123456", {"PL_ID"}, "<DOWOD_1>"),
+        ("numer karty kredytowej 4111 1111 1111 1112", {"CREDIT_CARD"}, "<KARTA_1>"),
+        ("card number: 5500-0000-0000-0005", {"CREDIT_CARD"}, "<KARTA_1>"),
+    ],
+)
+def test_an_identifier_with_a_typo_right_after_its_label_is_masked(text, enabled, expected):
+    """A number its label names is someone's even when a digit is wrong: without the label the
+    checksum decides, and a mistyped NIP, ID card or card number after its label went out."""
+    assert masked(text, enabled).endswith(expected)
+
+
+@pytest.mark.parametrize(
+    ("text", "enabled"),
+    [
+        ("Faktura 123-456-32-19 opłacona.", {"NIP"}),
+        ("Kod produktu XYZ123456 w magazynie.", {"PL_ID"}),
+        ("Zamówienie 4111 1111 1111 1112 wysłane.", {"CREDIT_CARD"}),
+        ("numer ubezpieczenia pojazdu 15501416181", {"PESEL"}),
+    ],
+)
+def test_the_same_numbers_without_their_label_are_left_alone(text, enabled):
+    assert masked(text, enabled) == text
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("nr zamówienia 15501416181", "nr zamówienia 15501416181"),

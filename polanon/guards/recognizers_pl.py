@@ -373,8 +373,21 @@ _ID_CARD_LABEL = re.compile(
 _PASSPORT_LABEL = re.compile(
     r"(?i)(?:paszport\w*|passport)(?:\s+(?:nr|no|numer|number|to))?\.?\s*[:-]?\s*$"
 )
-#: Words that end right before a PESEL: "PESEL:", "nr PESEL", "numer PESEL to".
-_PESEL_LABEL = re.compile(r"(?i)pesel\w*(?:\s+(?:nr|numer|to))?\.?\s*[:-]?\s*$")
+#: Words that end right before a PESEL: "PESEL:", "nr PESEL", "numer PESEL to", and the social
+#: insurance number a translated form asks for, which in Poland is the PESEL.
+_PESEL_LABEL = re.compile(
+    r"(?i)(?:pesel\w*|(?:nr|numer\w*)\.?\s+ubezpieczenia(?:\s+społeczn\w*)?)"
+    r"(?:\s+(?:nr|numer|to))?\.?\s*[:(-]?\s*$"
+)
+#: Words that end right before a NIP: "NIP:", "nr NIP", "NIP UE". A label starts a word.
+_NIP_LABEL = re.compile(r"(?i)(?<![^\W\d_])nip(?:\s+(?:ue|nr|numer|to))?\.?\s*[:(-]?\s*$")
+#: Words that end right before a payment card's number: "numer karty kredytowej", "nr karty:",
+#: "karta płatnicza nr", "card number".
+_CARD_LABEL = re.compile(
+    r"(?i)(?:(?:nr|numer\w*)\.?\s+kart\w*(?:\s+(?:kredytow|płatnicz|debetow)\w*)?"
+    r"|kart[aą]\s+(?:kredytow|płatnicz|debetow)\w*(?:\s+(?:nr|numer))?"
+    r"|(?:credit\s+|debit\s+)?card\s+(?:no|number))\.?\s*[:(-]?\s*$"
+)
 #: Phone labels: a nine-digit REGON-looking number after these is a phone (#8). A label starts a
 #: word, so the "tel" that ends "hotel" is none.
 _PHONE_LABEL = re.compile(
@@ -605,6 +618,9 @@ def _locate_cards(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     groups = [m.span() for m in re.finditer(r"\d+", run)]
     if _account_shaped(text, match.start(), groups):
         return []
+    # Right after "numer karty" the run is the card, its checksum broken by a typo or not.
+    if _follows(_CARD_LABEL, text, match) and 12 <= sum(_width(g) for g in groups) <= 19:
+        return [match.span()]
     found: list[tuple[int, int]] = []
     first = 0
     while first < len(groups):
@@ -696,11 +712,22 @@ def _locate_pl_id(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     "PLN 100000" is an amount however the checksum falls, unless an ID card label stands before it.
     """
     value = match.group()
-    if not is_valid_pl_id(value):
-        return []
-    if value[:3].upper() in _NOT_AN_ID_SERIES and not _follows(_ID_CARD_LABEL, text, match):
+    if _follows(_ID_CARD_LABEL, text, match):
+        return [match.span()]  # its label names it, typo or not, as with a PESEL
+    if not is_valid_pl_id(value) or value[:3].upper() in _NOT_AN_ID_SERIES:
         return []
     return [match.span()]
+
+
+def _locate_nip(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return a NIP: right after a NIP label always, elsewhere only with its checksum.
+
+    A NIP mistyped by one digit after "NIP:" is still the company's or the person's, and went out
+    in clear; a number without the label is a NIP only when its checksum says so.
+    """
+    if _follows(_NIP_LABEL, text, match) or is_valid_nip(match.group()):
+        return [match.span()]
+    return []
 
 
 def _locate_passport(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
@@ -817,6 +844,7 @@ _LOCATORS: dict[str, Locator] = {
     "ADDRESS": _locate_address,
     "LINK": _locate_profile_link,
     "PESEL": _locate_pesel,
+    "NIP": _locate_nip,
     "REGON": _locate_regon,
     "IBAN": _locate_iban,
     "CREDIT_CARD": _locate_cards,
