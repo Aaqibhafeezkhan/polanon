@@ -44,6 +44,7 @@ from typing import Any
 from agent_corpus import ANSWERS, Answer, Marked, calls
 
 from polanon import Allowlist, Anonymizer, MaskedTurn, default_guards
+from polanon._inflection import CASE_NAMES, inflected
 from polanon.allowlist import WELL_KNOWN_NAMES
 from polanon.gateway.payloads import (
     ChatStream,
@@ -53,7 +54,7 @@ from polanon.gateway.payloads import (
     restore_responses_response,
 )
 from polanon.guards.names_pl import fold
-from polanon.policy import TOKEN_PATTERN, Mode
+from polanon.policy import CASED_TOKEN_PATTERN, Mode
 
 #: ``{{value}}`` or ``{{value|case=form}}`` in an answer.
 PLACEHOLDER = re.compile(r"\{\{([^{}|]+)(?:\|([^{}=]+)=([^{}]+))?\}\}")
@@ -155,11 +156,35 @@ def _forms(template: str, tokens: dict[str, str]) -> tuple[str, str, str]:
         token = tokens.get(value)
         if token is None:  # sent in the clear, so the model writes it in the right form itself
             return form or value
-        return f"{token[:-1]}:{case}>" if case else token
+        base = token.split(":")[0].removesuffix(">") + ">"
+        return f"{base[:-1]}:{case}>" if case else token
 
     ideal = PLACEHOLDER.sub(lambda match: match[3] or match[1], template)
     as_written = PLACEHOLDER.sub(lambda match: match[1], template)
     return PLACEHOLDER.sub(model, template), ideal, as_written
+
+
+def _with_cases(mapping: dict[str, str], templates: list[str]) -> dict[str, str]:
+    """Value -> the token the masked text gave it, a person's with a case included.
+
+    A form of a person in another case is no value of the mapping: it went out as the token of
+    the form kept, with its case, ``<OSOBA_1:celownik>``, and the model copies that.
+    """
+    tokens = {value: token for token, value in mapping.items() if value != token}
+    people = [(token, kept) for token, kept in mapping.items() if token.startswith("<OSOBA_")]
+    for template in templates:
+        for match in PLACEHOLDER.finditer(template):
+            value = match[1]
+            if value in tokens:
+                continue
+            for token, kept in people:
+                case = next(
+                    (name for name in CASE_NAMES if inflected(kept, "PERSON", name) == value), None
+                )
+                if case is not None and kept != token:
+                    tokens[value] = f"{token[:-1]}:{case}>"
+                    break
+    return tokens
 
 
 def _pieces(text: str) -> Iterator[str]:
@@ -236,7 +261,7 @@ def _response(responses_api: bool, content: str, answer: Answer, arguments: str 
 
 def score_restore(turn: MaskedTurn, answer: Answer, *, responses_api: bool) -> RestoreScore:
     """Put one answer back every way the gateway does, and score each line and argument."""
-    tokens = {value: token for token, value in turn.mapping.items() if value != token}
+    tokens = _with_cases(turn.mapping, [*answer.lines, *(answer.arguments or {}).values()])
     lines = [_forms(line, tokens) for line in answer.lines]
     content = "\n".join(model for model, _, _ in lines)
     argument_forms = {key: _forms(value, tokens) for key, value in (answer.arguments or {}).items()}
@@ -295,8 +320,10 @@ def score_call(
     for value, count in leaked.items():
         score.leaked += count
         score.leaked_values[(types[value], value)] += count
-    token = re.compile(TOKEN_PATTERN)
-    used = Counter(match[0] for text in texts for match in token.finditer(text))
+    token = re.compile(CASED_TOKEN_PATTERN)
+    used = Counter(
+        f"<{match['label']}_{match['n']}>" for text in texts for match in token.finditer(text)
+    )
     for name, value in turn.mapping.items():
         if value == name:
             continue
@@ -310,13 +337,17 @@ def score_call(
 
 
 def anonymizer_for(
-    *, with_ner: bool, spacy_model: str = "pl_core_news_md", mode: Mode = "normal"
+    *,
+    with_ner: bool,
+    spacy_model: str = "pl_core_news_md",
+    mode: Mode = "normal",
+    ml_filter: bool = True,
 ) -> Anonymizer:
     """The guards the gateway masks with, and its list of well-known names."""
-    return Anonymizer(
-        default_guards(with_ner=with_ner, spacy_model=spacy_model, mode=mode),
-        allowlist=Allowlist(WELL_KNOWN_NAMES),
+    guards = default_guards(
+        with_ner=with_ner, spacy_model=spacy_model, mode=mode, ml_filter=ml_filter
     )
+    return Anonymizer(guards, allowlist=Allowlist(WELL_KNOWN_NAMES))
 
 
 def run(anonymizer: Anonymizer) -> dict[str, CallScore]:
@@ -423,9 +454,14 @@ def main() -> None:
     parser.add_argument(
         "--paranoid", action="store_true", help='the spaCy guard in mode="paranoid"'
     )
+    parser.add_argument(
+        "--no-ml-filter", action="store_true", help="the spaCy guard with its ML filter off"
+    )
     args = parser.parse_args()
     mode: Mode = "paranoid" if args.paranoid else "normal"
-    anonymizer = anonymizer_for(with_ner=args.ner, spacy_model=args.spacy_model, mode=mode)
+    anonymizer = anonymizer_for(
+        with_ner=args.ner, spacy_model=args.spacy_model, mode=mode, ml_filter=not args.no_ml_filter
+    )
     _report(run(anonymizer), markdown=args.markdown, show=args.show)
 
 

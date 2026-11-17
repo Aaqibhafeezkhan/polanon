@@ -13,7 +13,7 @@ from typing import Any
 from polanon._matching import reading
 from polanon.judge.base import JudgeError, JudgeFinding
 from polanon.judge.prompt import ALLOWED_TYPES
-from polanon.policy import TOKEN_PATTERN
+from polanon.policy import CASED_TOKEN_PATTERN
 
 #: Shortest finding worth acting on. A finding is masked wherever it stands as a word, so a one- or
 #: two-letter answer from a small model ("i", "w") would mask every such word in the message, and
@@ -24,7 +24,8 @@ MIN_FINDING_CHARS = 3
 #: and a reply is untrusted, so the search is bounded.
 _MAX_JSON_STARTS = 50
 
-_TOKEN_RE = re.compile(TOKEN_PATTERN)
+#: A token in a finding, with a case or without: a quote of masked text, never data.
+_TOKEN_RE = re.compile(CASED_TOKEN_PATTERN)
 #: A Markdown code fence, as chat models wrap JSON even when told not to.
 _FENCE = "```"
 

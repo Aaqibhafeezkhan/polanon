@@ -76,6 +76,8 @@ _INSTRUCTIONS = {
         "w nawiasach ostrych, takimi jak <OSOBA_1>, <EMAIL_1> albo <FIRMA_1>. Traktuj token jak "
         "prawdziwą wartość. Gdy przekazujesz go do narzędzia albo cytujesz w odpowiedzi, przepisz "
         "go dokładnie tak, jak jest zapisany: bez odmiany, bez zmiany liter i bez spacji w środku. "
+        "Token z przypadkiem po dwukropku, taki jak <OSOBA_1:celownik>, to ta sama osoba co "
+        "<OSOBA_1>, wymieniona w tym przypadku. "
         "Do tokenu osoby dopisz po dwukropku przypadek, w jakim osoba stoi w Twoim zdaniu, "
         "a imię i nazwisko wrócą odmienione: „Szanowny Panie <OSOBA_1:wołacz>”, „wniosek "
         "<OSOBA_1:dopełniacz>”, „rozmawiałem z <OSOBA_1:narzędnik>”. W argumentach narzędzi "
@@ -85,9 +87,10 @@ _INSTRUCTIONS = {
     "en": (
         "Personal data in this conversation, tool results included, is replaced by tokens in "
         "angle brackets, such as <OSOBA_1>, <EMAIL_1> or <FIRMA_1>. Treat a token as the real "
-        "value. When you pass one to a tool or quote it in your answer, copy it exactly as "
-        "written: do not inflect it, change its letters or put spaces inside. Do not create new "
-        "tokens, and never guess the value behind one."
+        "value. A person's token may carry a Polish grammatical case after a colon: it is the "
+        "same person as the token without it. When you pass one to a tool or quote it in your "
+        "answer, copy it exactly as written: do not inflect it, change its letters or put "
+        "spaces inside. Do not create new tokens, and never guess the value behind one."
     ),
 }
 

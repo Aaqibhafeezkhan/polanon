@@ -5,6 +5,84 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+## [0.4.0] - 2026-11-18
+
+A minor release, since masked text changes shape: a person named again in another case goes out
+as `<OSOBA_1:celownik>`, which `TOKEN_PATTERN` does not match. Code that reads masked text for
+its tokens should use the new `CASED_TOKEN_PATTERN`; restoring needs no change, as every restore
+already understood such tokens. The spaCy guard gets an ML filter, on by default: on OpenPII's
+test part polanon still masks 3,733 of 5,255 values whole and raises 306 false alarms instead of
+434, eight times fewer than Presidio's 2,641, and `ml_filter=False` switches it off. Logins
+written from a name are masked whole, with their surname, and English words that are forms of a
+first name stay words.
+
+### Added
+
+- **An ML filter for the spaCy guard, on by default.** In the normal mode a logistic regression
+  drops more of what the Polish model reads as a name; `default_guards(ml_filter=False)` or
+  `NerGuard(ml_filter=False)` leaves the decision to the hand-written filters alone. It weighs the span's shape, its words and the words around
+  it, their vectors in the spaCy model, and whether a rule found something there, once every
+  guard has read the text. It was fitted on OpenPII's Polish rows and KPWr's train part, which
+  no benchmark reads, chosen by cross-validation by document, and its thresholds were set end to
+  end on dev parts, with a margin. On a part held out until it was done, measured once, it masks
+  the same 4,878 values whole and leaves 400 spans outside the annotations instead of 539; on
+  OpenPII's test part, 306 instead of 434, the same 3,733 values; KPWr, the agent's calls and the
+  sample documents are unchanged. It costs about half a millisecond a text, against twelve for
+  the spaCy model, and it learns nothing from the texts it masks. `benchmarks/ml_filter_data.py`,
+  `ml_filter_train.py` and `ml_filter_tune.py` rebuild it, and `run.py`, `run_agent.py` and
+  `run_external.py` take `--no-ml-filter` or `--without-ml-filter` to compare. The masking reads
+  its weights in plain Python; numpy only fits them. With it, polanon has 306 false alarms on
+  OpenPII's test part to Presidio's 2,641, eight times fewer.
+
+### Changed
+
+- **One person is one number in every case, also without a key.** Each case of a name went out
+  as a token of its own: "Jan Kowalski złożył wniosek. Proszę odpisać Janowi Kowalskiemu" became
+  `<OSOBA_1> złożył wniosek. Proszę odpisać <OSOBA_2>`, and the model read two people. A form of
+  a person who already has a token now takes that token with its case after a colon,
+  `<OSOBA_1:celownik>`, so the model sees one person in the case the text used. Restoring already
+  understood such tokens and declines the name back; a case is written only where declining the
+  kept form gives exactly the text's spelling, so restoring the masked text still gives the text
+  back, and any other form, one in capitals for instance, keeps a token of its own. The mapping
+  holds no new entries for the other cases. Masked text may now hold such tokens:
+  `CASED_TOKEN_PATTERN`, new in the package, matches a token with a case or without, where
+  `TOKEN_PATTERN` matches one without. Text masked before and sent again keeps them whole, the
+  token instructions tell the model what they mean, and a stable token from a key carries no
+  case, since an index searches for it as it is.
+
+### Fixed
+
+- **English words that are forms of a first name stay words.** Three of the names 0.3.9 took
+  from the PESEL register have a form that reads as an English word once a chat drops its
+  Polish letters: Alona's "Alonę" is "alone", Nika's "Nice" is "nice" and Maxim's "Maxima" is
+  "maxima". In lowercase text, an agent's English tools and logs among it, "alone", every word
+  holding it such as "standalone", and "nice" were masked as people. Nothing leaked, but the
+  model read a token where a word stood. Such forms are now treated as "Kalina" is, a name next
+  to its surname and a word on its own, and every form of the register's names was checked
+  against the English of Python's documentation. No benchmark loses a value, and on OpenPII one
+  span outside the values goes.
+- **A login written from a name is masked whole, and so is the surname in it.** "jan.nowak",
+  "anna.kowalczyk", "t.malinowski" or "jan_kowalski", the way an account, a home directory or an
+  address book writes a person, went out as `<OSOBA_1>.nowak`: the first name was masked and the
+  dot ended it, so the surname reached the model next to the person's token, and a check that
+  looks for the masked values in the outgoing text could not see it. A lowercase login of a first
+  name or an initial, one dot, "_" or "-", and a word that reads as a surname is now one person.
+  The surname in it, and in the local part of an e-mail address shaped the same way,
+  "anna.kowalczyk@example.com", joins the known values, so "Kowalczyk" further down and the other
+  logins made of it, "akowalczyk", are masked as well. A surname of five letters now gives a
+  login when a dot, "_" or "-" stands next to it, "nowak_j"; glued straight on it still takes
+  six, so "nowakowie" stays a word.
+- **The label of a field no longer goes inside a person's token.** The Polish spaCy model reads
+  a word of software English before a surname as a first name: "Login Kowalski", "Email Nowaka"
+  and "Admin: Ola Kowalska" came back as one person each, so the model saw `<OSOBA_1> nie
+  działa` where the text said that a login does not work. Nothing leaked, but the label was
+  hidden with the name. Such words at the front of a person are now cut off, and the rest of the
+  span is masked as before. The list of those words leaves out every word that is also a first
+  name or a surname, so "Grant Nowak" stays whole, and the paranoid mode keeps the span as the
+  model found it.
+
 ## [0.3.9] - 2026-11-17
 
 What public Polish data showed polanon missing, fixed, and a benchmark that keeps measuring on

@@ -65,6 +65,9 @@ class _Document:
     def __init__(self, ents: list[_Entity]) -> None:
         self.ents = ents
 
+    def __iter__(self):
+        return iter(())  # no words: these tests read the filters, not the ML filter
+
 
 def test_a_lowercase_adjective_tagged_as_a_place_is_dropped():
     """Typed in lowercase, the Polish model tagged "polskiej" and "angielskiej" as places."""
@@ -441,6 +444,34 @@ def test_the_english_of_software_is_no_name():
     assert {"Uncheck", "Privacy Policy", "Scheduling", "Switch"} <= set(paranoid)
 
 
+def test_the_english_of_software_in_front_of_a_person_is_cut_off():
+    """The Polish model read the label of a field as a first name before a surname: "Login
+    Kowalski", "Email Nowaka" and "Admin: Ola Kowalska" came back as one person each, and the
+    label went to the model inside the token. Such a word is cut off and the person is kept. The
+    list leaves out words that are also names, so Grant of "Grant Nowak" stays, and the paranoid
+    mode keeps the span whole."""
+    text = (
+        "Login Kowalski nie działa, a Email Nowaka jest nieaktualny.\n"
+        "Admin: Ola Kowalska zatwierdziła zmianę, a konto Login jkowalski wygasło.\n"
+        "Raport przysłał Grant Nowak."
+    )
+    entities = [
+        _Entity(text, "Login Kowalski", "persName"),
+        _Entity(text, "Email Nowaka", "persName"),
+        _Entity(text, "Admin: Ola Kowalska", "persName"),
+        _Entity(text, "Login jkowalski", "persName"),
+        _Entity(text, "Grant Nowak", "persName"),
+    ]
+    assert _found(NerGuard(), text, entities) == [
+        "Kowalski",
+        "Nowaka",
+        "Ola Kowalska",
+        "jkowalski",
+        "Grant Nowak",
+    ]
+    assert "Login Kowalski" in _found(NerGuard(mode="paranoid"), text, entities)
+
+
 def test_chinese_text_is_no_name_and_its_punctuation_is_not_part_of_one():
     """A page in Chinese in an agent's results gave the Polish model a "person" of Chinese
     characters, and "Home Assistant。" with the full stop, which the list of well-known names no
@@ -745,7 +776,7 @@ def test_a_long_text_reaches_spacy_in_pieces_with_spans_mapped_back(monkeypatch)
         entity = SimpleNamespace(label_="persName", start_char=start, end_char=start + 12)
         return SimpleNamespace(ents=[entity] if start >= 0 else [])
 
-    fresh = NerGuard()
+    fresh = NerGuard(ml_filter=False)
     monkeypatch.setattr(fresh, "_get_pipeline", lambda: model)
     text = "Spotkanie w biurze o dziewiątej.\n" * 5 + "Wczoraj dzwonił Jan Kowalski.\n"
     spans = fresh.detect(text, {"PERSON"})

@@ -27,14 +27,22 @@ _BUILT_IN_LABELS = frozenset(ENTITY_TYPES.values()) - frozenset(ENTITY_TYPES)
 def detect(text: str, view: View | None, enabled: set[str], guards: list[Guard]) -> list[Span]:
     """Run every guard over the text and return their spans, unmerged, in original coordinates.
 
-    `view` is the text's :func:`~polanon._view.detection_view`, computed once by the caller.
+    `view` is the text's :func:`~polanon._view.detection_view`, computed once by the caller. A
+    guard that reviews its spans once it knows what the others found, as the NER guard with its
+    ML filter does, gets to do so before they are returned.
     """
     seen = text if view is None else view.text
+    found = [
+        [span for span in guard.detect(seen, enabled) if _usable(span, guard, len(seen))]
+        for guard in guards
+    ]
     detected: list[Span] = []
-    for guard in guards:
-        for span in guard.detect(seen, enabled):
-            if _usable(span, guard, len(seen)):
-                detected.append(span if view is None else view.to_original(span))
+    for index, (guard, spans) in enumerate(zip(guards, found, strict=True)):
+        review = getattr(guard, "_review", None)
+        if review is not None:
+            others = [span for at, other in enumerate(found) if at != index for span in other]
+            spans = review(seen, spans, others)
+        detected.extend(spans if view is None else [view.to_original(span) for span in spans])
     return detected
 
 

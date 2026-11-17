@@ -199,3 +199,34 @@ def test_a_surname_with_letters_glued_on_is_no_login():
     masked = mask(text).anonymized
     assert "odmiany malinowskie" in masked
     assert "malinowski.t" not in masked
+
+
+def test_a_login_names_its_person_wherever_the_surname_stands():
+    """A login the name rule reads, "t.malinowski", gives the surname as a known value, so the
+    surname written as a name and the other logins made of it are masked as well."""
+    text = "Login t.malinowski. Potem Malinowski zalogował się jako tmalinowski."
+    masked = mask(text).anonymized
+    assert "malinowski" not in masked.lower(), masked
+
+
+def test_an_e_mail_made_of_a_name_gives_its_login_and_surname():
+    """The address was masked whole, but its local part, a first name and a surname, was no known
+    value: the login and the surname went out further down the text, next to the person's
+    token."""
+    text = (
+        "Pisała anna.kowalczyk@example.com. Konto akowalczyk ma dostęp, a Kowalczyk prosi o hasło."
+    )
+    result = mask(text)
+    assert "kowalczyk" not in result.anonymized.lower(), result.anonymized
+    assert "Kowalczyk" in result.mapping.values()
+
+
+def test_a_five_letter_surname_gives_logins_written_with_a_separator():
+    """A login of a five-letter surname with a dot, "_" or "-" is the person too: "nowak" was
+    below the six letters the rule asked for. Glued straight on, a short surname stays a word,
+    since "nowakowie" or "kotek" are ordinary ones."""
+    text = "Pisze Jan Nowak; konta nowak_j i nowak.j, a nowakowie przyjdą."
+    masked = mask(text).anonymized
+    assert "nowak_j" not in masked, masked
+    assert "nowak.j" not in masked, masked
+    assert "nowakowie" in masked

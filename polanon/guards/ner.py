@@ -14,6 +14,7 @@ import re
 import threading
 from collections import OrderedDict
 from collections.abc import Iterator
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,9 @@ _LOAD_LOCK = threading.Lock()
 #: texts a call, nearly all of them read in the call before.
 CACHE_TEXTS = 20_000
 _CACHE_LOCK = threading.Lock()
+
+#: Texts whose words a guard remembers for the ML filter when it remembers no spans.
+_WORDS_KEPT = 64
 
 #: The parties of a Polish contract in their cases, which it writes with a capital letter.
 _CONTRACT_PARTIES = """
@@ -593,6 +597,29 @@ def _software_english(fragment: str) -> bool:
     )
 
 
+def _without_software_words_in_front(text: str, span: Span) -> Span:
+    """Cut the English of software off the front of a person, as "Login" of "Login Kowalski".
+
+    The Polish model reads the label of a field before a surname as a first name: "Login
+    Kowalski", "Email Nowaka" and "Admin: Ola Kowalska" came back as one person each, and the
+    label went to the model inside the token. :data:`SOFTWARE_WORDS` leaves out every word that is
+    also a first name or a surname, so such a word in front names nobody, and the rest of the
+    span is the person. The last word is never cut, so the span keeps something to mask.
+    """
+    if span.entity_type != "PERSON":
+        return span
+    fragment = text[span.start : span.end]
+    words = list(re.finditer(r"\S+", fragment))
+    cut = 0
+    for word, following in pairwise(words):
+        if _bare(word[0]).lower() not in SOFTWARE_WORDS or _holds_a_first_name(word[0]):
+            break
+        cut = following.start()
+    if cut == 0:
+        return span
+    return Span(span.start + cut, span.end, span.entity_type, span.score, span.source)
+
+
 def _has_a_letter(fragment: str) -> bool:
     return any(char.isalpha() for char in fragment)
 
@@ -746,7 +773,7 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
         piece
         for span in spans
         if not _opens_with_an_english_word(text[span.start : span.end])
-        for piece in _cut_at_english_words(text, span)
+        for piece in _cut_at_english_words(text, _without_software_words_in_front(text, span))
     )
     for span in pieces:
         fragment = text[span.start : span.end]
@@ -798,6 +825,29 @@ def _is_lowercase_adjective(fragment: str) -> bool:
     only the lowercase spelling is dropped.
     """
     return " " not in fragment and fragment.islower() and is_common_adjective(fragment)
+
+
+def _words_of(
+    document: Any, offset: int, ranges: list[tuple[int, int]]
+) -> Iterator[tuple[int, int, Any]]:
+    """Yield the words of a piece inside the model's entities, with what the model read in them.
+
+    `ranges` are the entities' characters in the piece. Only their words are kept: the ML filter
+    reads no other, and a guard remembers thousands of texts, an agent's long tool results among
+    them.
+    """
+    from polanon.guards._span_features import Word
+
+    ranges = sorted(ranges)
+    at = 0
+    for token in document:
+        if token.is_space:
+            continue
+        start, end = token.idx, token.idx + len(token.text)
+        while at < len(ranges) and ranges[at][1] <= start:
+            at += 1
+        if at < len(ranges) and ranges[at][0] < end:
+            yield offset + start, offset + end, Word.of(token)
 
 
 def _join_hyphenated(text: str, spans: list[Span]) -> list[Span]:
@@ -876,6 +926,7 @@ class NerGuard(Guard):
         spacy_model: str = "pl_core_news_md",
         cache_texts: int = CACHE_TEXTS,
         mode: Mode = "normal",
+        ml_filter: bool = True,
     ) -> None:
         """Store the model name; the pipeline itself loads on first use.
 
@@ -890,16 +941,30 @@ class NerGuard(Guard):
                 out as written. "paranoid" keeps every span with a letter in it. In the calls of
                 an AI agent in ``benchmarks/run_agent.py``, "normal" lets 3 of 243 values
                 through and 2% of the token uses hide nothing, "paranoid" 1 and more than half.
+            ml_filter: in the normal mode, let the ML filter of
+                :mod:`polanon.guards._span_features`, a logistic regression, drop more of what the
+                hand-written filters keep, weighing the span, its words, the words around it,
+                their vectors and what the other guards found there. On OpenPII's test part it
+                leaves 306 spans outside the annotations instead of 434 and masks the same 3,733
+                values whole; on a part held out until it was done, 400 instead of 539, no value
+                lost. It adds about half a millisecond to a text the model takes 12 to read. On
+                by default; False leaves the decision to the hand-written filters alone.
 
         Raises:
             ValueError: for a mode that is neither "normal" nor "paranoid".
+            TypeError: for an `ml_filter` that is not True or False.
         """
         check_mode(mode)
+        if not isinstance(ml_filter, bool):
+            raise TypeError(f"ml_filter is True or False, not {ml_filter!r}")
         self.spacy_model = spacy_model
         self.cache_texts = cache_texts
         self.mode = mode
+        self.ml_filter = ml_filter
         self._nlp: Any | None = None
         self._found: OrderedDict[tuple[str, frozenset[str]], tuple[Span, ...]] = OrderedDict()
+        #: What the model read in every word of the texts it read lately, for the ML filter.
+        self._words: OrderedDict[str, tuple[tuple[int, int, Any], ...]] = OrderedDict()
 
     def _get_pipeline(self) -> Any:
         """Load and cache the spaCy pipeline, once even when several threads ask at the same time.
@@ -943,7 +1008,7 @@ class NerGuard(Guard):
             if found is not None:
                 self._found.move_to_end(key)
                 return list(found)
-        spans = self._read(text, wanted)
+        spans = self._read(text, wanted, digest)
         if self.cache_texts > 0:
             with _CACHE_LOCK:
                 self._found[key] = tuple(spans)
@@ -951,23 +1016,79 @@ class NerGuard(Guard):
                     self._found.popitem(last=False)
         return spans
 
-    def _read(self, text: str, wanted: frozenset[str] | set[str]) -> list[Span]:
+    def _filters_by_ml(self) -> bool:
+        """Whether the ML filter reviews the spans: on, in the normal mode, with a Polish model."""
+        return (
+            self.ml_filter
+            and self.mode == "normal"
+            and getattr(self._get_pipeline(), "lang", "pl") == "pl"
+        )
+
+    def _read(self, text: str, wanted: frozenset[str] | set[str], digest: str = "") -> list[Span]:
         """Run the model over `text` and keep what reads as a name."""
         nlp = self._get_pipeline()
+        keeps_words = self._filters_by_ml()
         spans: list[Span] = []
+        words: list[tuple[int, int, Any]] = []
         for offset, piece in _chunks(text, CHUNK_CHARS):
-            for entity in nlp(piece).ents:
+            document = nlp(piece)
+            ranges = []
+            for entity in document.ents:
                 entity_type = LABEL_MAP.get(entity.label_)
                 if entity_type not in wanted:
                     continue
+                ranges.append((entity.start_char, entity.end_char))
                 start, end = offset + entity.start_char, offset + entity.end_char
                 spans.extend(self._line_spans(text, start, end, str(entity_type)))
+            if keeps_words and ranges:
+                words.extend(_words_of(document, offset, ranges))
+        if keeps_words:
+            with _CACHE_LOCK:
+                self._words[digest] = tuple(words)
+                while len(self._words) > max(self.cache_texts, _WORDS_KEPT):
+                    self._words.popitem(last=False)
         spans = _join_hyphenated(text, spans)
         if self.mode == "paranoid":
             return [span for span in spans if _has_a_letter(text[span.start : span.end])]
         if getattr(nlp, "lang", "pl") == "pl":
             spans = _without_english_misreadings(text, spans)
         return spans
+
+    def _review(self, text: str, spans: list[Span], others: list[Span]) -> list[Span]:
+        """Keep the spans the ML filter keeps, knowing what the other guards found.
+
+        Called by the pipeline once every guard has read `text`. A text whose words are no longer
+        remembered keeps every span: more masked, nothing let through.
+        """
+        if not spans or not self._filters_by_ml():
+            return spans
+        from polanon.guards._span_features import (
+            ml_filter_keeps,
+            span_context,
+            span_features,
+            span_vector,
+        )
+
+        digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        with _CACHE_LOCK:
+            words = self._words.get(digest)
+        if words is None:
+            return spans
+        vocab = getattr(self._get_pipeline(), "vocab", None)
+        kept = []
+        for span in spans:
+            features = span_features(
+                text,
+                span,
+                rules_found_it=any(o.start < span.end and span.start < o.end for o in others),
+                words=[word for start, end, word in words if start < span.end and span.start < end],
+                vocab=vocab,
+            )
+            vector = span_vector(text[span.start : span.end], vocab) if vocab is not None else []
+            context = span_context(text, span)
+            if ml_filter_keeps(features, span.entity_type, vector, context):
+                kept.append(span)
+        return kept
 
     def _line_spans(self, text: str, start: int, end: int, entity_type: str) -> list[Span]:
         """Split an entity at line breaks and the columns of a table, and trim the whitespace.

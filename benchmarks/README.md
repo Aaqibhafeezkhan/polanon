@@ -167,7 +167,8 @@ On the 1,000 OpenPII texts never read, with 5,255 values:
 | Configuration | Masked whole | Spans outside the values |
 |---|---:|---:|
 | polanon, guards only, no model | 2,668 (51%) | 105 |
-| polanon, guards + `pl_core_news_md` | **3,733 (71%)** | **435** |
+| polanon, guards + `pl_core_news_md` | **3,733 (71%)** | **306** |
+| the same with its ML filter off | 3,733 (71%) | 434 |
 | the same, `mode="paranoid"` | 3,780 (72%) | 868 |
 | Presidio 2.2.366, set up for Polish with the same model | 3,456 (66%) | 2,641 |
 
@@ -197,6 +198,41 @@ masks 1,393 (89.5%) and Presidio 1,384 (88.9%), ahead on streets, 66 of 95 again
 behind on companies, 63 of 76 against 65. Of the 50,449 streets in TERYT, written with a house
 number in a form, before a postcode and in a sentence, the rules mask 95.3% whole in all three,
 98.0% of those with "ul.".
+
+## The ML filter
+
+The normal mode drops what the Polish model reads as a name in English, code and identifiers by
+rules written one at a time. The ML filter, on by default, adds a logistic regression that weighs,
+for every span those rules keep, its shape, its words and the words around it, their vectors in the spaCy
+model, and whether a rule of polanon found something there. It is fitted on data the benchmarks
+above never use, and measured on data nothing else read:
+
+- [`ml_filter_data.py`](ml_filter_data.py) runs the model over OpenPII's Polish rows and KPWr's
+  train part and writes every span it finds with its features and a label taken from the
+  annotations. OpenPII's rows after the two parts above are split into 6,000 that train and
+  1,290 held out; KPWr's train part is split by document, a tenth held out and a tenth for
+  tuning. A first name OpenPII left unannotated teaches nothing.
+- [`ml_filter_train.py`](ml_filter_train.py) chooses the inputs and the penalty by five-fold
+  cross-validation, the folds cut by document, and writes the weights to
+  `polanon/guards/_ml_filter_weights.py`.
+- [`ml_filter_tune.py`](ml_filter_tune.py) sets the threshold of each type end to end on the dev
+  parts, the highest with which no value is masked whole less often than with the filters alone,
+  times 0.75, and measures the held-out part once.
+
+| | Masked whole | Spans outside the values |
+|---|---:|---:|
+| OpenPII held out, 1,290 texts: the hand-written filters alone | 4,878 | 539 |
+| the same with the ML filter | 4,878 | **400** |
+| OpenPII test part above: the hand-written filters alone | 3,733 | 434 |
+| the same with the ML filter | 3,733 | **306** |
+
+On KPWr's test part and its held-out documents it masks the same values whole, and on the agent's
+calls and the sample documents it changes nothing: what wastes tokens there, the English of
+software, the filters already drop. In cross-validation the word vectors and the context counted
+most; a network with one hidden layer did 3% better than the regression and is not worth what it
+would cost to read and to run in plain Python. The filter costs about half a millisecond a text,
+against twelve for the spaCy model, and it remembers what the model read in the words of the
+names it reviews, never the words themselves.
 
 ## Running it
 

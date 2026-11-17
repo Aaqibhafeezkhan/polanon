@@ -212,6 +212,23 @@ async def test_a_detection_inside_a_token_is_dropped_and_one_across_it_keeps_the
     )
 
 
+async def test_a_detection_inside_a_token_with_a_case_is_dropped_too():
+    """Masked text sent again holds tokens with a case, which are as whole as any other."""
+    text = "Umowę podpisał Kowalski <OSOBA_8:dopełniacz> wczoraj."
+    guard = FixedGuard(Span(25, 43, "LOCATION", 0.85), Span(15, 44, "PERSON", 0.85))
+    result = await mask(text, [guard], mapping={"<OSOBA_8>": "Jan Nowak"})
+    assert result.anonymized == "Umowę podpisał <OSOBA_9> <OSOBA_8:dopełniacz> wczoraj."
+    assert Anonymizer.restore(result.anonymized, result.mapping) == (
+        "Umowę podpisał Kowalski Jana Nowaka wczoraj."
+    )
+
+
+async def test_a_known_value_is_not_found_inside_a_token_with_a_case():
+    mapping = {"<OSOBA_1>": "Jan Nowak", "<SEKRET_1>": "celownik"}
+    result = await mask("Odpisz <OSOBA_1:celownik>, hasło celownik.", [], mapping=mapping)
+    assert result.anonymized == "Odpisz <OSOBA_1:celownik>, hasło <SEKRET_1>."
+
+
 @pytest.mark.parametrize(
     ("text", "mapping", "expected"),
     [
@@ -408,8 +425,9 @@ async def test_four_letter_known_value_inside_a_word_masks_the_whole_word():
     """ "Adam" known from an earlier turn: "Adamem" is the same man and must not go out."""
     text = "Spotkanie z Adamem."
     result = await mask(text, [], mapping={"<OSOBA_1>": "Adam"})
-    assert result.anonymized == "Spotkanie z <OSOBA_2>."
-    assert result.mapping["<OSOBA_2>"] == "Adamem"
+    assert result.anonymized == "Spotkanie z <OSOBA_1:narzędnik>."
+    assert result.mapping == {"<OSOBA_1>": "Adam"}
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
 
 
 def test_mask_known_values_masks_a_value_right_after_a_token():
@@ -485,8 +503,8 @@ async def test_known_value_inside_the_last_word_takes_all_of_it():
     """Masking "Kowalskieg" leaves "o" glued to the token and garbles the inflected name."""
     text = "Nie było Kowalskiego"
     result = await mask(text, [], mapping={"<OSOBA_1>": "Kowalski"})
-    assert result.anonymized == "Nie było <OSOBA_2>"
-    assert result.mapping["<OSOBA_2>"] == "Kowalskiego"
+    assert result.anonymized == "Nie było <OSOBA_1:dopełniacz>"
+    assert Anonymizer.restore(result.anonymized, result.mapping) == text
 
 
 async def test_known_value_that_only_partly_overlaps_a_detection_is_masked_whole():

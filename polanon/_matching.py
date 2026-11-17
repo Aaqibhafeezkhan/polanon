@@ -20,9 +20,11 @@ from dataclasses import dataclass
 from functools import cached_property, lru_cache
 
 from polanon._view import DASHES, INVISIBLE, View, as_read
-from polanon.policy import ENTITY_TYPES, LABEL_TO_ENTITY, TOKEN_PATTERN
+from polanon.policy import CASED_TOKEN_PATTERN, ENTITY_TYPES, LABEL_TO_ENTITY, TOKEN_PATTERN
 
 TOKEN_RE = re.compile(TOKEN_PATTERN)
+#: A token in a text, with its case if it has one: ``<OSOBA_1>`` or ``<OSOBA_1:celownik>``.
+CASED_TOKEN_RE = re.compile(CASED_TOKEN_PATTERN)
 
 #: Translates a range of a searched text to the same characters of the original.
 _ToOriginal = Callable[[int, int], tuple[int, int]]
@@ -121,12 +123,21 @@ _JOINED_BEFORE = re.compile(rf"[\d{re.escape(NUMBER_JOINERS)}]*\Z")
 
 
 def type_of(token: str) -> str | None:
-    """Return the entity type a token stands for, or None when the string is not a token."""
+    """Return the entity type a token stands for, or None when the string is not a token.
+
+    A mapping holds tokens without a case, so a token with one, ``<OSOBA_1:celownik>``, is no
+    token here; :func:`base_token` gives the token it declines.
+    """
     match = TOKEN_RE.fullmatch(token)
     if match is None:
         return None
     label = match.group("label")
     return LABEL_TO_ENTITY.get(label, label)
+
+
+def base_token(match: re.Match[str]) -> str:
+    """Return the token a match of :data:`CASED_TOKEN_RE` declines: ``<OSOBA_1>`` for either."""
+    return f"<{match['label']}_{match['n']}>"
 
 
 def fold(text: str) -> str:

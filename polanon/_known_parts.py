@@ -13,7 +13,7 @@ import re
 from collections.abc import Iterable
 
 from polanon.allowlist import WELL_KNOWN_NAMES
-from polanon.guards.names_pl import fold, person_name_parts
+from polanon.guards.names_pl import fold, login_name_parts, person_name_parts
 from polanon.guards.recognizers_pl import profile_handle
 
 #: A handle shorter than this is not masked on its own: "jk" or "ab" stand for nobody in prose.
@@ -36,7 +36,7 @@ def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
             its surname only next to a first name the name guard knows.
     """
     if entity_type == "PERSON":
-        return person_name_parts(value, needs_first_name=not trusted)
+        return person_name_parts(value, needs_first_name=not trusted) or login_name_parts(value)
     if entity_type == "LINK":
         handle = profile_handle(value)
         if (
@@ -49,8 +49,25 @@ def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
     return []
 
 
-#: A surname shorter than this gives no login: "nowak" or "kot" stand in too many other words.
+def person_parts(value: str, entity_type: str) -> list[str]:
+    """Return the parts of a value of another type that name a person, to mask as ``PERSON``.
+
+    An e-mail address whose local part is a login written from a name, "anna.kowalczyk@...",
+    names Anna Kowalczyk: the address was masked whole, and the login and the surname went out
+    further down the text, next to her token. Its surname joins the known values, so the surname
+    written as a name and the logins made of it are masked as well.
+    """
+    if entity_type != "EMAIL" or "@" not in value:
+        return []
+    return login_name_parts(value.split("@", 1)[0].lower())
+
+
+#: A surname shorter than this gives no login glued to an initial or digits: "nowakowie" or
+#: "kotek" are ordinary words.
 MIN_LOGIN_SURNAME = 6
+#: With a dot, "_" or "-" between them, a shorter surname gives a login too: "nowak_j", "j.nowak".
+MIN_SEPARATED_LOGIN_SURNAME = 5
+_SEPARATORS = (".", "_", "-")
 
 #: A word written as a login or a handle is: small letters and digits, with dots, "_" or "-".
 _LOGIN = re.compile(r"(?<![\w.-])[a-z0-9ąćęłńóśźż][a-z0-9ąćęłńóśźż._-]*[a-z0-9ąćęłńóśźż](?![\w-])")
@@ -67,8 +84,9 @@ def logins_of(text: str, values: Iterable[tuple[str, str]]) -> list[str]:
     A backup's settings an agent read held "user.name=Tomasz Malinowski" and the directory
     "/home/tmalinowski": the surname was masked, the login made of it went out. A word in
     lowercase that is a known surname of six letters or more with an initial, a dot, "_", "-" or
-    digits around it, "tmalinowski", "t.malinowski", "malinowski85", is the person too. The
-    surname alone in lowercase is left as it is, since Zima, Kot or Wilk are ordinary words.
+    digits around it, "tmalinowski", "t.malinowski", "malinowski85", is the person too, and so is
+    one of five letters with a dot, "_" or "-": "nowak_j". The surname alone in lowercase is left
+    as it is, since Zima, Kot or Wilk are ordinary words.
 
     Args:
         text: the text being masked.
@@ -77,7 +95,7 @@ def logins_of(text: str, values: Iterable[tuple[str, str]]) -> list[str]:
     surnames = {
         fold(value.lower())
         for value, entity_type in values
-        if entity_type == "PERSON" and value.isalpha() and len(value) >= MIN_LOGIN_SURNAME
+        if entity_type == "PERSON" and value.isalpha() and len(value) >= MIN_SEPARATED_LOGIN_SURNAME
     }
     if not surnames:
         return []
@@ -89,6 +107,9 @@ def logins_of(text: str, values: Iterable[tuple[str, str]]) -> list[str]:
             if at < 0:
                 continue
             before, after = word[:at], word[at + len(surname) :]
+            separated = before.endswith(_SEPARATORS) or after.startswith(_SEPARATORS)
+            if len(surname) < MIN_LOGIN_SURNAME and not separated:
+                continue
             if (
                 (before or after)
                 and _LOGIN_BEFORE.fullmatch(before)

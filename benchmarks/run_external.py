@@ -48,7 +48,11 @@ OPENPII = (
     "https://huggingface.co/datasets/ai4privacy/pii-masking-openpii-1m/resolve/main/data/"
     "validation.jsonl"
 )
-KPWR = "https://huggingface.co/datasets/clarin-pl/kpwr-ner/resolve/main/data/kpwr-ner-n82-test.iob"
+KPWR = (
+    "https://huggingface.co/datasets/clarin-pl/kpwr-ner/resolve/main/data/kpwr-ner-n82-{part}.iob"
+)
+#: KPWr's parts as its files name them: the test part, and the part meant for training.
+KPWR_PARTS = {"test": "test", "train": "train-tune"}
 TERYT = (
     "https://eteryt.stat.gov.pl/eTeryt/rejestr_teryt/udostepnianie_danych/baza_teryt/"
     "uzytkownicy_indywidualni/pobieranie/pliki_pelne.aspx?contrast=default"
@@ -171,27 +175,37 @@ def openpii_rows(data: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.open(encoding="utf-8")]
 
 
-def kpwr_sentences(data: Path) -> list[dict[str, list[str]]]:
-    """KPWr's test sentences as tokens and their IOB tags, downloaded once."""
-    path = data / "kpwr-ner-n82-test.iob"
+def kpwr_sentences(data: Path, part: str = "test") -> list[dict[str, Any]]:
+    """KPWr's sentences of one part, "test" or "train", as tokens and IOB tags, downloaded once.
+
+    Each sentence carries the name of the document it comes from under "doc", so that the
+    sentences of one text can be kept together.
+    """
+    name = KPWR_PARTS[part]
+    path = data / f"kpwr-ner-n82-{name}.iob"
     if not path.exists():
-        print("downloading KPWr's test part...", file=sys.stderr)
+        print(f"downloading KPWr's {part} part...", file=sys.stderr)
         data.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(_get(KPWR))
-    sentences, tokens, tags = [], [], []
+        path.write_bytes(_get(KPWR.format(part=name)))
+    sentences: list[dict[str, Any]] = []
+    tokens: list[str] = []
+    tags: list[str] = []
+    doc = ""
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("-DOCSTART"):
+            if line.startswith("-DOCSTART FILE"):
+                doc = line.split(maxsplit=2)[-1]
             continue
         if not line.strip():
             if tokens:
-                sentences.append({"tokens": tokens, "ner": tags})
+                sentences.append({"tokens": tokens, "ner": tags, "doc": doc})
                 tokens, tags = [], []
             continue
         parts = line.split("\t")
         tokens.append(parts[0])
         tags.append(parts[-1])
     if tokens:
-        sentences.append({"tokens": tokens, "ner": tags})
+        sentences.append({"tokens": tokens, "ner": tags, "doc": doc})
     return sentences
 
 
@@ -311,8 +325,13 @@ def _written_together(tokens: list[str], index: int) -> bool:
     return word in _NO_SPACE_BEFORE or previous in _NO_SPACE_AFTER
 
 
-def kpwr_sentence(row: dict[str, list[str]]) -> tuple[str, list[GoldEntity]]:
-    """A sentence as written, rebuilt from its tokens, and the values of KPWR_TYPES in it."""
+def kpwr_sentence(
+    row: dict[str, Any], types: dict[str, str] | None = KPWR_TYPES
+) -> tuple[str, list[GoldEntity]]:
+    """A sentence as written, rebuilt from its tokens, and the values of `types` in it.
+
+    With `types` None every name KPWr annotates is returned, under its own label.
+    """
     tokens = row["tokens"]
     text, starts = "", []
     for index, token in enumerate(tokens):
@@ -323,7 +342,8 @@ def kpwr_sentence(row: dict[str, list[str]]) -> tuple[str, list[GoldEntity]]:
     gold: list[list[Any]] = []
     current: list[Any] | None = None
     for index, (token, tag) in enumerate(zip(tokens, row["ner"], strict=True)):
-        kind = KPWR_TYPES.get(tag[2:]) if tag != "O" else None
+        label = tag[2:]
+        kind = None if tag == "O" else label if types is None else types.get(label)
         if tag.startswith("I-") and current and current[2] == kind:
             current[1] = starts[index] + len(token)
             continue
@@ -369,14 +389,23 @@ def score(
     return totals, extra, time.perf_counter() - started
 
 
-def configurations(presidio: bool) -> list[tuple[str, list[Guard], bool]]:
-    """The rules alone, with the spaCy model and paranoid when it is installed, and Presidio."""
+def configurations(
+    presidio: bool, without_ml_filter: bool = False
+) -> list[tuple[str, list[Guard], bool]]:
+    """The rules alone, with the spaCy model and paranoid when it is installed, and Presidio.
+
+    The spaCy model runs with its ML filter, as it does by default; with `without_ml_filter`, also
+    without it, for comparison.
+    """
     from polanon import ner_available
 
     found: list[tuple[str, list[Guard], bool]] = [("polanon, rules", guards_for(False, ""), False)]
     if ner_available("pl_core_news_md"):
         found.append(("polanon + pl_core_news_md", guards_for(True, "pl_core_news_md"), False))
         found.append(("polanon paranoid", guards_for(True, "pl_core_news_md", "paranoid"), False))
+        if without_ml_filter:
+            guards = guards_for(True, "pl_core_news_md", "normal", ml_filter=False)
+            found.append(("polanon, ML filter off", guards, False))
     if presidio:
         from compare_presidio import PresidioGuard
 
@@ -455,8 +484,11 @@ def main() -> int:
     parser.add_argument("--part", choices=("test", "dev"), default="test")
     parser.add_argument("--presidio", action="store_true", help="also score Presidio")
     parser.add_argument("--teryt", action="store_true", help="also score every TERYT street")
+    parser.add_argument(
+        "--without-ml-filter", action="store_true", help="also with the ML filter off"
+    )
     args = parser.parse_args()
-    setups = configurations(args.presidio)
+    setups = configurations(args.presidio, args.without_ml_filter)
 
     rows = openpii_rows(args.data)
     random.Random(SEED).shuffle(rows)  # noqa: S311 - a fixed sample, not a secret

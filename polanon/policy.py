@@ -58,6 +58,11 @@ def check_mode(mode: str) -> None:
 #: Matches a complete token and captures its label and number.
 TOKEN_PATTERN = r"<(?P<label>[A-Z_]+)_(?P<n>\d+)>"  # noqa: S105 - a regex, not a secret
 
+#: Matches a token with or without a grammatical case after a colon, ``<OSOBA_1:celownik>``, and
+#: captures the case too. Masked text holds such a token where a person is named in another case
+#: than the form the mapping keeps, and a model may write one in its answer.
+CASED_TOKEN_PATTERN = r"<(?P<label>[A-Z_]+)_(?P<n>\d+)(?::(?P<case>[^\W\d_]+))?>"  # noqa: S105
+
 #: Token label -> canonical entity type, the inverse of :data:`ENTITY_TYPES`.
 LABEL_TO_ENTITY: dict[str, str] = {label: entity for entity, label in ENTITY_TYPES.items()}
 

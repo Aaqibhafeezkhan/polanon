@@ -134,7 +134,7 @@ def _scenes(language: str) -> list[list[Line]]:
             True,
             [
                 ("    ", "c"),
-                ("ghcr.io/boromat/polanon-gateway:0.3 --upstream https://api.openai.com/v1", "c"),
+                ("ghcr.io/boromat/polanon-gateway:0.4 --upstream https://api.openai.com/v1", "c"),
             ],
         ),
         (
@@ -196,7 +196,7 @@ def _scenes(language: str) -> list[list[Line]]:
     )
     rows = [
         ("values masked whole" if en else "zamaskowane w całości", "71%", "66%", True),
-        ("false alarms" if en else "fałszywe alarmy", "435", "2,641" if en else "2 641", True),
+        ("false alarms" if en else "fałszywe alarmy", "306", "2,641" if en else "2 641", True),
         ("postcodes" if en else "kody pocztowe", "98%", "0%", True),
         ("street addresses" if en else "adresy", "64%", "33%", True),
         ("phone numbers" if en else "telefony", "60%", "34%", True),
@@ -243,9 +243,9 @@ def _scenes(language: str) -> list[list[Line]]:
             False,
             [
                 (
-                    "# 6x fewer false alarms, and a tie where the same spaCy model does the work"
+                    "# 8x fewer false alarms, and a tie where the same spaCy model does the work"
                     if en
-                    else "# 6 razy mniej fałszywych alarmów, "
+                    else "# 8 razy mniej fałszywych alarmów, "
                     "remis tam, gdzie pracuje ten sam spaCy",
                     "m",
                 )

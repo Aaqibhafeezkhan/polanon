@@ -53,7 +53,14 @@ from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.mock import MockJudge
 from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
-from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, Mode, check_mode, token_for
+from polanon.policy import (
+    CASED_TOKEN_PATTERN,
+    ENTITY_TYPES,
+    TOKEN_PATTERN,
+    Mode,
+    check_mode,
+    token_for,
+)
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import StreamRestorer, restored
 from polanon.turn import MaskedTurn, UnknownBlocks, token_instructions
@@ -67,6 +74,7 @@ from polanon.types import (
 )
 
 __all__ = [
+    "CASED_TOKEN_PATTERN",
     "DEFAULT_ENABLED",
     "ENTITY_TYPES",
     "TOKEN_PATTERN",
@@ -109,7 +117,7 @@ __all__ = [
     "tokens_in",
 ]
 
-__version__ = "0.3.9"
+__version__ = "0.4.0"
 
 #: The entity types an Anonymizer masks unless told otherwise: every built-in type except DATE.
 #: A date rarely identifies anyone on its own, and masking every deadline and invoice date leaves
@@ -129,6 +137,7 @@ def default_guards(
     with_ner: bool = True,
     spacy_model: str = "pl_core_news_md",
     mode: Mode = "normal",
+    ml_filter: bool = True,
 ) -> list[Guard]:
     """Guards in recommended order. NER guard is imported lazily because spaCy is heavy/optional.
 
@@ -147,6 +156,10 @@ def default_guards(
             typed in lowercase; "paranoid" masks all of it, and many more words of an agent's
             English become tokens. The rules are the same in both, so without the model the
             mode changes nothing.
+        ml_filter: let the ML filter, a logistic regression, drop more of what the spaCy model
+            reads as a name in the normal mode, weighing the span, its words and what the rules
+            found; see :class:`polanon.guards.ner.NerGuard`. On by default; False leaves the
+            decision to the hand-written filters alone.
 
     Raises:
         TypeError: when `denylist` is a single string, which would be read letter by letter.
@@ -175,7 +188,7 @@ def default_guards(
             raise NerModelUnavailableError(str(exc)) from None
         from polanon.guards.ner import NerGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model, mode=mode))
+        guards.append(NerGuard(spacy_model=spacy_model, mode=mode, ml_filter=ml_filter))
     return guards
 
 

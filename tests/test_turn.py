@@ -350,8 +350,9 @@ def test_an_openai_history_keeps_its_arguments_and_tool_results_valid_json():
         "tool_call_id": "call_1",
         "content": '{"phone": "<TELEFON_1>"}',
     }
-    assert note["content"] == "Brak danych o <OSOBA_2>."
-    assert refusal["refusal"] == "Nie podam danych <OSOBA_3>."
+    # "Annie" is the dative and the locative alike; the first case that gives the form is written.
+    assert note["content"] == "Brak danych o <OSOBA_1:celownik>."
+    assert refusal["refusal"] == "Nie podam danych <OSOBA_1:dopełniacz>."
 
 
 def test_a_provider_s_reasoning_in_an_assistant_message_is_masked_and_sealed_parts_pass():
@@ -377,7 +378,7 @@ def test_a_provider_s_reasoning_in_an_assistant_message_is_masked_and_sealed_par
     assert answer["reasoning"] == "<OSOBA_1> to klientka."
     assert answer["reasoning_content"] == "Szukam: <OSOBA_1>."
     text, summary, sealed, odd = answer["reasoning_details"]
-    assert text == {**details[0], "text": "Pyta o <OSOBA_2>."}
+    assert text == {**details[0], "text": "Pyta o <OSOBA_1:biernik>."}
     assert summary == {**details[1], "summary": "<OSOBA_1>, telefon."}
     assert sealed == details[2]
     assert odd == "unknown"
@@ -553,7 +554,7 @@ def test_empty_tool_results_calls_without_arguments_and_json_scalars_pass_throug
 def test_the_token_instructions_name_tokens_the_library_hands_out(language):
     note = token_instructions(language)
     tokens = re.findall(TOKEN_PATTERN, note)
-    assert len(tokens) == 3
+    assert len(set(tokens)) == 3
     assert {label for label, _ in tokens} <= set(ENTITY_TYPES.values())
 
 
