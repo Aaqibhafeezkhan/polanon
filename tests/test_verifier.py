@@ -60,7 +60,7 @@ def seen(monkeypatch) -> list[dict[str, int]]:
     """Let the verifier keep a span only where a rule found something too, and record it."""
     features: list[dict[str, int]] = []
 
-    def keeps(found: dict[str, int], entity_type: str) -> bool:
+    def keeps(found: dict[str, int], entity_type: str, vector=()) -> bool:
         features.append(found)
         return bool(found["rules_found_it"])
 

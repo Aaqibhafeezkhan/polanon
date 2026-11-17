@@ -17,6 +17,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from polanon._canonical import _surname
 from polanon.guards import _verifier_weights as fitted
@@ -35,6 +36,28 @@ _PREPOSITIONS = frozenset(
 _FUNCTION_POS = frozenset({"ADP", "AUX", "CCONJ", "DET", "PART", "PRON", "SCONJ"})
 
 _WORD = re.compile(r"\S+")
+_LETTERS = re.compile(r"[^\W\d_]+")
+
+#: Months and days of the week, in Polish and English: written with a capital, they name nobody.
+#: "Maj" and "maja" are left out, since Maja is a first name and Maj a surname.
+_MONTHS_AND_DAYS_LISTED = """
+    january february march april may june july august september october november december
+    monday tuesday wednesday thursday friday saturday sunday
+    styczeń luty marzec kwiecień czerwiec lipiec sierpień wrzesień październik listopad
+    grudzień stycznia lutego marca kwietnia czerwca lipca sierpnia września października
+    listopada grudnia poniedziałek wtorek środa czwartek piątek sobota niedziela
+    """
+_MONTHS_AND_DAYS = frozenset(_MONTHS_AND_DAYS_LISTED.split())
+
+
+class Vocab(Protocol):
+    """The word vectors of a spaCy pipeline, as ``nlp.vocab`` gives them."""
+
+    def has_vector(self, word: str) -> bool:
+        """Whether the pipeline has a vector for `word`, as written."""
+
+    def get_vector(self, word: str) -> Sequence[float]:
+        """The vector of `word`, as written; zeros when it has none."""
 
 
 @dataclass(frozen=True)
@@ -110,11 +133,20 @@ FEATURES: tuple[str, ...] = (
     "pos_other",
     "lemma_in_lowercase",
     "a_word_without_vector",
+    # what the pipeline's vocabulary knows of its words
+    "a_capitalised_common_word",
+    "a_month_or_day",
+    "every_word_in_vocabulary",
 )
 
 
 def span_features(
-    text: str, span: Span, *, rules_found_it: bool, words: Sequence[Word] = ()
+    text: str,
+    span: Span,
+    *,
+    rules_found_it: bool,
+    words: Sequence[Word] = (),
+    vocab: Vocab | None = None,
 ) -> dict[str, int]:
     """Return the features of a span the model found in `text`, each 0 or 1.
 
@@ -125,8 +157,13 @@ def span_features(
         words: what the model read in the span's words. A name keeps its capital in its lemma,
             "Kowalskiego" is "Kowalski", while a word of a form written with a capital does not:
             "Nieokreślona" is "nieokreślony".
+        vocab: the pipeline's word vectors. A word it knows only in lowercase, "nieokreślona"
+            but not "Nieokreślona", is a common word written with a capital; a name it knows as
+            written, or not at all.
     """
     fragment = text[span.start : span.end]
+    letters = _LETTERS.findall(text[span.start : span.end])
+    known = vocab.has_vector if vocab is not None else lambda _word: False
     tags = {word.pos for word in words}
     capitalised = [word for word in words if word.text[:1].isupper()]
     written = _WORD.findall(fragment)
@@ -194,23 +231,55 @@ def span_features(
         "pos_other": bool(tags - {"PROPN", "NOUN", "ADJ", "VERB", "PUNCT"} - _FUNCTION_POS),
         "lemma_in_lowercase": any(word.lemma[:1].islower() for word in capitalised),
         "a_word_without_vector": any(not word.has_vector for word in words),
+        "a_capitalised_common_word": any(
+            word[:1].isupper() and not known(word) and known(word.lower()) for word in letters
+        ),
+        "a_month_or_day": any(word.lower() in _MONTHS_AND_DAYS for word in letters),
+        "every_word_in_vocabulary": bool(letters) and all(known(word) for word in letters),
     }
     return {name: int(bool(found[name])) for name in FEATURES}
 
 
-def verifier_score(features: Mapping[str, int], entity_type: str) -> float:
+def span_vector(fragment: str, vocab: Vocab) -> list[float]:
+    """Return the direction of a span's meaning: the mean vector of its words, of length one.
+
+    A word the vocabulary knows only in lowercase counts with that vector. Names lie in one part
+    of the space, common words, months and the words of forms in others, which is what the
+    verifier's weights for these numbers read. A span with no known word gives zeros.
+    """
+    vectors = []
+    for word in _LETTERS.findall(fragment):
+        if vocab.has_vector(word):
+            vectors.append(vocab.get_vector(word))
+        elif vocab.has_vector(word.lower()):
+            vectors.append(vocab.get_vector(word.lower()))
+    if not vectors:
+        return []
+    mean = [sum(column) / len(vectors) for column in zip(*vectors, strict=True)]
+    length = math.sqrt(sum(value * value for value in mean)) or 1.0
+    return [float(value) / length for value in mean]
+
+
+def verifier_score(
+    features: Mapping[str, int], entity_type: str, vector: Sequence[float] = ()
+) -> float:
     """Return the learned verifier's probability that a span with these features is a name.
 
-    A feature counts with its own weight and with the weight it has for spans of `entity_type`.
+    A feature counts with its own weight and with the weight it has for spans of `entity_type`;
+    the span's :func:`span_vector` with the weights of its numbers.
     """
     z = fitted.BIAS + sum(
         fitted.WEIGHTS.get(name, 0.0) + fitted.WEIGHTS.get(f"{entity_type}:{name}", 0.0)
         for name, value in features.items()
         if value
     )
+    z += sum(weight * value for weight, value in zip(fitted.VECTOR, vector, strict=False))
     return 1 / (1 + math.exp(-z)) if z >= 0 else math.exp(z) / (1 + math.exp(z))
 
 
-def verifier_keeps(features: Mapping[str, int], entity_type: str) -> bool:
+def verifier_keeps(
+    features: Mapping[str, int], entity_type: str, vector: Sequence[float] = ()
+) -> bool:
     """Return whether the verifier keeps a span: its probability reaches its type's threshold."""
-    return verifier_score(features, entity_type) >= fitted.THRESHOLDS.get(entity_type, 0.5)
+    score = verifier_score(features, entity_type, vector)
+    return score >= fitted.THRESHOLDS.get(entity_type, 0.5)

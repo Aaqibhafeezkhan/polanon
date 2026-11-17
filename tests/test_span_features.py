@@ -6,21 +6,25 @@ Stdlib only: the spans are made up, as the language model would return them.
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "benchmarks"))
 
 from run import GoldEntity  # noqa: E402
 from verifier_data import label_of  # noqa: E402
-from verifier_train import Example, fit, probability, threshold_on  # noqa: E402
 
-from polanon.guards._span_features import FEATURES, span_features  # noqa: E402
+from polanon.guards._span_features import FEATURES, span_features, span_vector  # noqa: E402
 from polanon.types import Span  # noqa: E402
 
 
-def _features(text: str, fragment: str, entity_type: str = "PERSON", **options: bool) -> dict:
+def _features(
+    text: str, fragment: str, entity_type: str = "PERSON", *, vocab=None, **options: bool
+) -> dict:
     start = text.index(fragment)
     span = Span(start, start + len(fragment), entity_type, 0.85, "spacy_ner")
-    return span_features(text, span, rules_found_it=options.get("rules_found_it", False))
+    found_it = options.get("rules_found_it", False)
+    return span_features(text, span, rules_found_it=found_it, vocab=vocab)
 
 
 def test_every_feature_is_there_in_its_order_and_is_zero_or_one():
@@ -70,14 +74,38 @@ def test_a_span_over_a_value_is_one_over_another_name_ignored_and_over_nothing_z
     assert label_of(Span(40, 45, "ORG", 0.85, "spacy_ner"), [person], [country]) == 0
 
 
-def test_the_verifier_learns_a_sign_and_its_threshold_keeps_the_names_the_filters_keep():
-    """A feature that every name has and a feature that every non-name has: the fitted weights
-    tell them apart, and the threshold keeps every name the filters kept."""
-    names = [Example((0,), 1, True, "openpii", "train", "Jan", "PERSON")] * 20
-    others = [Example((1,), 0, True, "openpii", "train", "Subject", "ORG")] * 20
-    weights, bias = fit(2, names + others)
-    assert probability(weights, bias, names[0]) > 0.9
-    assert probability(weights, bias, others[0]) < 0.1
-    scores = {e: probability(weights, bias, e) for e in names + others}
-    threshold = threshold_on(names + others, scores)
-    assert scores[names[0]] >= threshold > scores[others[0]]
+def test_the_verifier_learns_a_sign_from_its_features():
+    """A feature that every name has and one that every non-name has: the fitted weights tell
+    them apart."""
+    np = pytest.importorskip("numpy")
+    from verifier_train import fit
+
+    x = np.array([[1.0, 0.0]] * 20 + [[0.0, 1.0]] * 20)
+    y = np.array([1.0] * 20 + [0.0] * 20)
+    weights, bias = fit(x, y)
+    scores = 1 / (1 + np.exp(-(x @ weights + bias)))
+    assert scores[0] > 0.9 > 0.1 > scores[-1]
+
+
+class _Vocab:
+    """Vectors for a few words, as spaCy's vocabulary gives them."""
+
+    def __init__(self) -> None:
+        self.vectors = {"anna": [1.0, 0.0], "Anna": [1.0, 0.0], "nieokreślona": [0.0, 2.0]}
+
+    def has_vector(self, word: str) -> bool:
+        return word in self.vectors
+
+    def get_vector(self, word: str) -> list[float]:
+        return self.vectors.get(word, [0.0, 0.0])
+
+
+def test_a_capitalised_common_word_a_month_and_the_vector_of_a_span():
+    text = "Płeć: Nieokreślona. Anna pisała w February."
+    vocab = _Vocab()
+    assert _features(text, "Nieokreślona", vocab=vocab)["a_capitalised_common_word"] == 1
+    assert _features(text, "Anna", vocab=vocab)["a_capitalised_common_word"] == 0
+    assert _features(text, "Anna", vocab=vocab)["every_word_in_vocabulary"] == 1
+    assert _features(text, "February", vocab=vocab)["a_month_or_day"] == 1
+    assert span_vector("Nieokreślona", vocab) == [0.0, 1.0]
+    assert span_vector("Brzęczyszczykiewicz", vocab) == []

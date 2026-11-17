@@ -120,6 +120,7 @@ def rows_of(
                     span,
                     rules_found_it=any(overlaps(span, r.start, r.end) for r in by_rules),
                     words=words,
+                    vocab=guard._get_pipeline().vocab,
                 ),
             }
         )

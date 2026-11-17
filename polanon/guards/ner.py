@@ -1060,13 +1060,14 @@ class NerGuard(Guard):
         """
         if not spans or not self._verifies():
             return spans
-        from polanon.guards._span_features import span_features, verifier_keeps
+        from polanon.guards._span_features import span_features, span_vector, verifier_keeps
 
         digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
         with _CACHE_LOCK:
             words = self._words.get(digest)
         if words is None:
             return spans
+        vocab = getattr(self._get_pipeline(), "vocab", None)
         kept = []
         for span in spans:
             features = span_features(
@@ -1074,8 +1075,10 @@ class NerGuard(Guard):
                 span,
                 rules_found_it=any(o.start < span.end and span.start < o.end for o in others),
                 words=[word for start, end, word in words if start < span.end and span.start < end],
+                vocab=vocab,
             )
-            if verifier_keeps(features, span.entity_type):
+            vector = span_vector(text[span.start : span.end], vocab) if vocab is not None else []
+            if verifier_keeps(features, span.entity_type, vector):
                 kept.append(span)
         return kept
 
