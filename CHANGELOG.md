@@ -13,7 +13,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   token `<PRAWO_JAZDY_1>`: "Numer prawa jazdy: 01234/15/1234", "driver's license number:
   D1234-5678-9012". No rule knew them, and an HR record or a rental agreement sent them in
   clear. The shape differs by country, so the label is what makes a run of letters and digits
-  one, and it must hold a digit: "prawo jazdy kategorii B" names no number.
+  one, and it must hold a digit: "prawo jazdy kategorii B" names no number. The number may
+  stand in brackets or after a dash, after "kat. B" or a remark such as "(jeśli dotyczy)",
+  and a tachograph's driver card, "karta kierowcy", is read the same way.
 - **First names from the PESEL register**: the 630 names borne by at least 1 000 people in
   Poland that the hand-written lists lacked, from the register's lists of 22 January 2025 that
   the Ministry of Digital Affairs publishes on dane.gov.pl under CC0. The names polanon knows

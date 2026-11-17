@@ -1281,3 +1281,33 @@ def test_streets_as_the_teryt_register_names_them_are_masked_whole(text, address
 )
 def test_numbers_and_initials_outside_a_street_are_no_address(text):
     assert _found(text, "ADDRESS") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Prosimy o podanie numeru prawa jazdy (AB12345C78).",
+        "Przesyłam kopię prawa jazdy – 01234/15/1234 – w załączniku.",  # noqa: RUF001 - a dash, meant
+        "Numer prawa jazdy (jeśli dotyczy): XY98765Z43",
+        "Driver's License Number (if applicable): D1234-5678",
+        "prawo jazdy kat. B nr 00012/18/1465",
+        "Proszę o kartę kierowcy (PL0000012345678).",
+        "numer karty kierowcy: PL0000012345678",
+    ],
+)
+def test_a_driving_licence_number_after_its_label_in_other_forms_is_masked(text):
+    """The number came in brackets or after a dash, with "(jeśli dotyczy)" between the label and
+    the colon, after "kat. B", or as the number of a tachograph driver card, and went out."""
+    assert "<PRAWO_JAZDY_1>" in masked(text, {"DRIVING_LICENCE"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Prawo jazdy (kat. B) od 2015 roku.",
+        "Ma prawo jazdy (2015) i samochód.",
+        "Karta kierowcy jest ważna do końca roku.",
+    ],
+)
+def test_a_driving_licence_label_without_a_number_after_it_masks_nothing(text):
+    assert masked(text, {"DRIVING_LICENCE"}) == text

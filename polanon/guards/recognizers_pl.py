@@ -493,13 +493,18 @@ PATTERNS: list[Rule] = [
     ("PL_ID", re.compile(r"\b(?:[A-Z]{3} ?|[a-z]{3})\d{6}\b"), None),  # see _LOCATORS
     ("PL_PASSPORT", re.compile(r"\b(?:[A-Z]{2} ?|[a-z]{2})\d{7}\b"), None),  # see _LOCATORS
     # A driving licence number has a different shape in every country, "01234/15/1234" in Poland,
-    # so only its label makes a run of letters and digits one. It must hold a digit: "prawo
-    # jazdy kategorii B" or "prawo jazdy: tak" names no number.
+    # so only its label makes a run of letters and digits one, and so does the label of a
+    # tachograph's driver card. It must hold a digit: "prawo jazdy kategorii B" or "prawo jazdy:
+    # tak" names no number. Between the label and the number may stand the categories ("kat.
+    # B"), a remark in brackets ("(jeśli dotyczy)"), a colon, a dash or an opening bracket.
     (
         "DRIVING_LICENCE",
         re.compile(
-            r"(?i:\b(?:praw(?:o|a|em)\s+jazdy|driv(?:ing|er'?s|er\u2019s)\s+licen[cs]e)"
-            r"(?:\s+(?:nr|numer|no|number))?\.?)\s*[:#-]?\s*"
+            r"(?i:\b(?:praw(?:o|a|em)\s+jazdy|driv(?:ing|er'?s|er\u2019s)\s+licen[cs]e"
+            r"|kart(?:a|y|ę|ą|cie)\s+kierowcy)"
+            r"(?:\s+kat(?:\.|egorii)\s*[A-Z][A-Z0-9+]*(?:\s*,\s*[A-Z][A-Z0-9+]*)*)?"
+            r"(?:\s+(?:nr|numer|no|number))?\.?)"
+            r"(?:\s*\([^()\n]{1,30}\))?\s*[:#(\u2013\u2014-]?\s*"
             r"(?P<value>(?=[A-Za-z0-9/-]*\d)[A-Za-z0-9][A-Za-z0-9/-]{3,18}[A-Za-z0-9])(?![\w/-])"
         ),
         None,
