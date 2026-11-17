@@ -160,3 +160,52 @@ jobs:
           # Without its extra the gateway's command says what to install, and starts nothing.
           if /tmp/bare/bin/polanon-gateway --upstream http://localhost:1/v1 2> hint.txt; then exit 1; fi
           grep -q 'polanon\[gateway\]' hint.txt
+
+  docker:
+    name: The gateway's image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Built for this machine and kept here: the release publishes the image, this only tries it.
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: polanon-gateway:ci
+
+      # Inside a container the gateway listens on every interface, so without a key it must refuse.
+      - name: Refuse to start without a key
+        run: |
+          if docker run --rm polanon-gateway:ci --upstream http://127.0.0.1:9/v1 2> refusal.txt; then
+            exit 1
+          fi
+          grep -q POLANON_GATEWAY_KEY refusal.txt
+
+      - name: Mask a place with the model the image carries
+        run: |
+          docker run --rm --entrypoint python polanon-gateway:ci -c '
+          from polanon import Anonymizer, default_guards
+          masked = Anonymizer(default_guards()).anonymize_sync("Jan Kowalski mieszka w Gdańsku.")
+          print(masked.anonymized)
+          assert masked.anonymized == "<OSOBA_1> mieszka w <MIEJSCE_1>.", masked.anonymized
+          '
+
+      - name: Serve, report healthy, and refuse a call without the key
+        run: |
+          docker run -d --name gateway -p 127.0.0.1:8787:8787 -e POLANON_GATEWAY_KEY=ci-only-key \
+            polanon-gateway:ci --upstream http://127.0.0.1:9/v1
+          for attempt in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' gateway)" = healthy ] && break
+            sleep 2
+          done
+          docker logs gateway
+          test "$(docker inspect -f '{{.State.Health.Status}}' gateway)" = healthy
+          status="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/v1/chat/completions \
+            -H 'content-type: application/json' -d '{"model": "m", "messages": [{"role": "user", "content": "Hej"}]}')"
+          test "$status" = 401
+          if docker logs gateway 2>&1 | grep -q ci-only-key; then exit 1; fi
+          docker rm -f gateway
