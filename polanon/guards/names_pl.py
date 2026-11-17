@@ -441,6 +441,13 @@ _LINE_BREAK = re.compile(r"[ \t\u00a0]*\r?\n[ \t\u00a0]*")
 #: One ";", "," or "|", as a CSV line or a Markdown table puts between two cells.
 _CELL_BREAK = re.compile(r"[ \t\u00a0]*[;,|][ \t\u00a0]*")
 
+#: A login written from a name: a first name or an initial, one dot, "_" or "-", then a word,
+#: maybe with digits, standing on its own: not inside an e-mail address, a domain or a longer
+#: dotted or hyphenated handle. :func:`_login_names_a_person` decides whether it is a person.
+_NAME_LOGIN = re.compile(
+    r"(?<![\w.@-])(?P<first>[^\W\d_]+)[._-](?P<surname>[^\W\d_]+)\d{0,4}(?![\w@-]|\.[^\W\d_])"
+)
+
 #: A Roman numeral, which follows a name in capitals without being one: "Jana Pawła II".
 _ROMAN = re.compile(r"[IVXLCDM]+")
 
@@ -542,6 +549,45 @@ def person_name_parts(name: str, *, needs_first_name: bool = False) -> list[str]
     return parts
 
 
+def _login_names_a_person(login: re.Match[str]) -> bool:
+    """Whether a login written from a name, "jan.nowak" or "t.malinowski", names a person.
+
+    The whole login is in lowercase, the way a login is written, and the word after the separator
+    reads as a surname. After a first name this guard knows, any surname reading will do, unless
+    the first name is also an ordinary word ("inna"); after a lone initial it must be a strong
+    one, a telling ending or a common surname, since "e.kot" names nobody for sure.
+    """
+    if not login[0].islower():
+        return False
+    first, surname = fold(login["first"]), login["surname"]
+    if fold(surname) in NAME_FORMS:
+        return False
+    reading = surname_reading(surname)
+    if reading is None:
+        return False
+    if len(first) == 1:
+        return reading.strong
+    if first not in NAME_FORMS:
+        return False
+    return reading.strong or first not in AMBIGUOUS_FORMS
+
+
+def login_name_parts(login: str) -> list[str]:
+    """Return the surname in a login written from a name, written as a name: "Malinowski".
+
+    "t.malinowski" or "anna.kowalczyk" is one person, and the surname in it points to the same
+    person wherever it is written as a name, and in the other logins made of it ("tmalinowski").
+    The surname is given capitalised, so a lowercase word that is also a surname elsewhere in the
+    text is left as the ordinary word it may be.
+    """
+    match = _NAME_LOGIN.fullmatch(login)
+    if match is None or not _login_names_a_person(match):
+        return []
+    surname = match["surname"]
+    capitalised = surname[:1].upper() + surname[1:]
+    return [capitalised, *_feminine_oblique_forms(capitalised)]
+
+
 @dataclass(frozen=True, slots=True)
 class _Word:
     start: int
@@ -637,11 +683,21 @@ class PersonNameGuard(Guard):
         """Return one span per person: first names with their surname, or an addressed surname."""
         if "PERSON" not in enabled:
             return []
+        # A login written from a name is one person: the dot used to end the first name, and the
+        # surname after it went out next to its token.
+        logins = [
+            (match.start(), match.end())
+            for match in _NAME_LOGIN.finditer(text)
+            if _login_names_a_person(match)
+        ]
         words = [
             _Word(match.start(), match.end(), match.group(), fold(match.group()))
             for match in _WORD.finditer(text)
+            if not any(start <= match.start() < end for start, end in logins)
         ]
-        spans: list[Span] = []
+        spans: list[Span] = [
+            Span(start, end, "PERSON", NAME_SCORE, self.name) for start, end in logins
+        ]
         index = 0
         taken = 0
         while index < len(words):
@@ -659,7 +715,7 @@ class PersonNameGuard(Guard):
                 )
                 last = cell
             index = taken = last + 1
-        return spans
+        return sorted(spans, key=lambda span: span.start)
 
 
 def _capitalised(word: str) -> bool:

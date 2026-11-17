@@ -18,6 +18,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   to its surname and a word on its own, and every form of the register's names was checked
   against the English of Python's documentation. No benchmark loses a value, and on OpenPII one
   span outside the values goes.
+- **A login written from a name is masked whole, and so is the surname in it.** "jan.nowak",
+  "anna.kowalczyk", "t.malinowski" or "jan_kowalski", the way an account, a home directory or an
+  address book writes a person, went out as `<OSOBA_1>.nowak`: the first name was masked and the
+  dot ended it, so the surname reached the model next to the person's token, and a check that
+  looks for the masked values in the outgoing text could not see it. A lowercase login of a first
+  name or an initial, one dot, "_" or "-", and a word that reads as a surname is now one person.
+  The surname in it, and in the local part of an e-mail address shaped the same way,
+  "anna.kowalczyk@example.com", joins the known values, so "Kowalczyk" further down and the other
+  logins made of it, "akowalczyk", are masked as well. A surname of five letters now gives a
+  login when a dot, "_" or "-" stands next to it, "nowak_j"; glued straight on it still takes
+  six, so "nowakowie" stays a word.
 
 ## [0.3.9] - 2026-11-17
 

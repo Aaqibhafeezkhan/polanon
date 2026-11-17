@@ -667,3 +667,37 @@ def test_register_name_forms_that_are_english_words_stay_words(text):
 
 def test_a_register_name_whose_form_is_an_english_word_is_still_a_name_with_its_surname():
     assert _found("Wczoraj spotkałem Alonę Kowalczuk w biurze.") == ["Alonę Kowalczuk"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Potem jan.nowak odpisze.", ["jan.nowak"]),
+        ("Login anna.kowalczyk jest w systemie.", ["anna.kowalczyk"]),
+        ("Login anna.wisniewska ma dostęp do panelu.", ["anna.wisniewska"]),
+        (
+            "Konta piotr.zielinski, jan_kowalski i anna-nowak.",
+            ["piotr.zielinski", "jan_kowalski", "anna-nowak"],
+        ),
+        ("Login t.malinowski oraz a.kowalczyk.", ["t.malinowski", "a.kowalczyk"]),
+        ("Katalog /home/jan.nowak2/ jest pusty.", ["jan.nowak2"]),
+    ],
+)
+def test_a_login_of_a_first_name_and_a_surname_is_one_person(text, expected):
+    """A login writes the name in lowercase with a dot, "_" or "-" between its parts: the first
+    name was masked and the surname after the dot went out next to its token."""
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Napisz na anna.kowalczyk@example.com w sprawie umowy.",  # the e-mail rule takes it whole
+        "Strona jan.nowak.example działa.",  # a domain, not a login
+        "Pole e.kot w formularzu.",  # an initial needs a surname that reads as one for sure
+        "Klasa Jan.Nowak w kodzie.",  # a login is written in lowercase
+    ],
+)
+def test_what_only_looks_like_a_login_is_no_login(text):
+    """No span runs across the dot: a first name in it may still be masked alone, as before."""
+    assert not any(mark in found for found in _found(text) for mark in "._-@")

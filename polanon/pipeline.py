@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from polanon._detection import detect
-from polanon._known_parts import known_parts, logins_of
+from polanon._known_parts import known_parts, logins_of, person_parts
 from polanon._matching import (
     TOKEN_RE,
     Haystack,
@@ -360,6 +360,8 @@ def _remember(
     known.setdefault((value.strip(), folds(entity_type)), (value, entity_type))
     for part in known_parts(value, entity_type, trusted=trusted):
         known.setdefault((part, folds(entity_type)), (part, entity_type))
+    for part in person_parts(value, entity_type):
+        known.setdefault((part, folds("PERSON")), (part, "PERSON"))
 
 
 def _mask_stage1(
