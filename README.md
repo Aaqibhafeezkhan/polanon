@@ -555,11 +555,11 @@ On the annotated sample documents in the repository, the rules alone fully mask 
 values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Thirteen short
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
-missed and why, and for Presidio on the first eleven of them with the same model: 66% fully
-masked, 76% at its most lenient. Eight invented calls of an AI agent, with its English prompt,
+missed and why, and for Presidio on them with the same model: 67% fully masked, 77% at its
+most lenient. Eight invented calls of an AI agent, with its English prompt,
 its tools and their JSON, code, logs, a lease and mail in three languages, measure what an
-agent's traffic costs: with `pl_core_news_md`, 3 of the 243 marked occurrences reach the model,
-and 5 of 307 uses of a token hide nothing, a word the model could not read. The model's answers
+agent's traffic costs: with `pl_core_news_md`, 2 of the 243 marked occurrences reach the model,
+and 5 of 309 uses of a token hide nothing, a word the model could not read. The model's answers
 to them come back with every token restored, as text, as a response and as a stream, and 39 of
 their 40 lines read exactly as a person would write them.
 

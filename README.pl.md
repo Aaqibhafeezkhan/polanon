@@ -573,11 +573,11 @@ Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w
 a reguły z `pl_core_news_md` 98%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście
 krótkich dokumentów to test regresji, a nie benchmark badawczy:
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) opisują,
-co zostaje przeoczone i dlaczego, i podają wynik Presidio na pierwszych jedenastu z nich z tym
-samym modelem: 66% zamaskowanych w całości, 76% przy najłagodniejszym sposobie liczenia. Osiem
+co zostaje przeoczone i dlaczego, i podają wynik Presidio na nich z tym samym modelem: 67%
+zamaskowanych w całości, 77% przy najłagodniejszym sposobie liczenia. Osiem
 wymyślonych wywołań agenta AI, z jego angielskim promptem, narzędziami i ich JSON-em, kodem,
 logami, umową najmu i pocztą w trzech językach, mierzy, ile kosztuje ruch agenta:
-z `pl_core_news_md` do modelu trafiają 3 z 243 oznaczonych wystąpień, a 5 z 307 użyć tokenów nic
+z `pl_core_news_md` do modelu trafiają 2 z 243 oznaczonych wystąpień, a 5 z 309 użyć tokenów nic
 nie ukrywa, tylko zasłania słowo, którego model nie może przeczytać. Odpowiedzi modelu wracają ze
 wszystkimi tokenami przywróconymi, jako tekst, jako odpowiedź i jako strumień, a 39 z ich 40 linii
 brzmi dokładnie tak, jak napisałby je człowiek.
