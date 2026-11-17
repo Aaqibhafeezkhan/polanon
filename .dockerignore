@@ -1,0 +1,9 @@
+# The image is built from the package alone: pyproject.toml, README.md, LICENSE and polanon/.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!MANIFEST.in
+!polanon/
+**/__pycache__
+**/*.py[cod]

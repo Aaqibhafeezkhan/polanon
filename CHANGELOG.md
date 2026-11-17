@@ -5,6 +5,16 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Added
+
+- **The gateway as a Docker image**, `ghcr.io/boromat/polanon-gateway`, with the spaCy model
+  inside, for Intel and ARM machines, published with every release and tagged with the version,
+  the minor version and `latest`. In the container the gateway listens on every interface, so it
+  starts only with `POLANON_GATEWAY_KEY`; it runs as a user without privileges and reports its
+  health to Docker. CI builds the image and tries it on every change.
+
 ## [0.3.7] - 2026-11-17
 
 Anthropic's Messages API in the gateway, names the operator leaves readable, an account number
