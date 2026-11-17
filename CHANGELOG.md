@@ -5,7 +5,12 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
-## [Unreleased]
+## [0.3.8] - 2026-11-17
+
+The gateway as a Docker image, for a tool that is already written: one command, and the tool
+gets a base URL and a key. The library is the same as in 0.3.7, so this is a patch release, as
+CONTRIBUTING.md describes. `docker run ghcr.io/boromat/polanon-gateway:0.3` starts the gateway
+with the spaCy model inside, and the README now opens with it and with the library side by side.
 
 ### Added
 
