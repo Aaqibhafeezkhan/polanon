@@ -16,7 +16,7 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from polanon.guards._software_english import SOFTWARE_WORDS
 from polanon.guards.base import Guard
@@ -64,6 +64,13 @@ _LOAD_LOCK = threading.Lock()
 #: texts a call, nearly all of them read in the call before.
 CACHE_TEXTS = 20_000
 _CACHE_LOCK = threading.Lock()
+
+#: How the learned verifier is used: not at all, after the filters, or in place of their test of a
+#: line's language. See :class:`NerGuard`.
+Verifier = Literal["off", "after", "hybrid"]
+VERIFIERS: tuple[Verifier, ...] = ("off", "after", "hybrid")
+#: Texts whose words a guard remembers for the verifier when it remembers no spans.
+_WORDS_KEPT = 64
 
 #: The parties of a Polish contract in their cases, which it writes with a capital letter.
 _CONTRACT_PARTIES = """
@@ -761,8 +768,15 @@ def _named_without_language(fragment: str) -> bool:
     return all(not word[0].islower() for word in words) or _holds_a_first_name(fragment)
 
 
-def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
-    """Drop what the Polish model read as a name where the text is not Polish, unless it is one."""
+def _without_english_misreadings(
+    text: str, spans: list[Span], *, by_language: bool = True
+) -> list[Span]:
+    """Drop what the Polish model read as a name where the text is not Polish, unless it is one.
+
+    With `by_language` False the last test, whether a span reads as a name in the language of its
+    line, is left to the learned verifier, which weighs the same signs with the rest; code,
+    identifiers and the English of software are still dropped here.
+    """
     languages: dict[int, str] = {}
     english_text: bool | None = None
     kept = []
@@ -794,6 +808,9 @@ def _without_english_misreadings(text: str, spans: list[Span]) -> list[Span]:
         language = languages[line_start]
         if language == _CODE:
             continue
+        if not by_language:
+            kept.append(span)
+            continue
         if language == _UNKNOWN:
             if english_text is None:
                 english_text = _is_english_text(text)
@@ -822,6 +839,17 @@ def _is_lowercase_adjective(fragment: str) -> bool:
     only the lowercase spelling is dropped.
     """
     return " " not in fragment and fragment.islower() and is_common_adjective(fragment)
+
+
+def _words_of(document: Any, offset: int) -> Iterator[tuple[int, int, Any]]:
+    """Yield where each word of a piece the model read stands, with what the model read in it."""
+    from polanon.guards._span_features import Word
+
+    for token in document:
+        if not token.is_space:
+            start = offset + token.idx
+            word = Word(token.text, token.pos_, token.lemma_, token.has_vector)
+            yield start, start + len(token.text), word
 
 
 def _join_hyphenated(text: str, spans: list[Span]) -> list[Span]:
@@ -900,6 +928,7 @@ class NerGuard(Guard):
         spacy_model: str = "pl_core_news_md",
         cache_texts: int = CACHE_TEXTS,
         mode: Mode = "normal",
+        verifier: Verifier = "off",
     ) -> None:
         """Store the model name; the pipeline itself loads on first use.
 
@@ -914,16 +943,27 @@ class NerGuard(Guard):
                 out as written. "paranoid" keeps every span with a letter in it. In the calls of
                 an AI agent in ``benchmarks/run_agent.py``, "normal" lets 3 of 243 values
                 through and 2% of the token uses hide nothing, "paranoid" 1 and more than half.
+            verifier: an experiment, in the normal mode only. "after" lets the learned verifier
+                of :mod:`polanon.guards._span_features` drop more of what the filters keep;
+                "hybrid" drops code, identifiers and the English of software by the filters and
+                leaves the rest, what reads as a name in the language of its line, to the
+                verifier. Either weighs what the other guards found as well. "off" is the
+                filters alone.
 
         Raises:
-            ValueError: for a mode that is neither "normal" nor "paranoid".
+            ValueError: for a mode that is neither "normal" nor "paranoid", or an unknown verifier.
         """
         check_mode(mode)
+        if verifier not in VERIFIERS:
+            raise ValueError(f"verifier must be one of {', '.join(VERIFIERS)}, not {verifier!r}")
         self.spacy_model = spacy_model
         self.cache_texts = cache_texts
         self.mode = mode
+        self.verifier = verifier
         self._nlp: Any | None = None
         self._found: OrderedDict[tuple[str, frozenset[str]], tuple[Span, ...]] = OrderedDict()
+        #: What the model read in every word of the texts it read lately, for the verifier.
+        self._words: OrderedDict[str, tuple[tuple[int, int, Any], ...]] = OrderedDict()
 
     def _get_pipeline(self) -> Any:
         """Load and cache the spaCy pipeline, once even when several threads ask at the same time.
@@ -967,7 +1007,7 @@ class NerGuard(Guard):
             if found is not None:
                 self._found.move_to_end(key)
                 return list(found)
-        spans = self._read(text, wanted)
+        spans = self._read(text, wanted, digest)
         if self.cache_texts > 0:
             with _CACHE_LOCK:
                 self._found[key] = tuple(spans)
@@ -975,23 +1015,69 @@ class NerGuard(Guard):
                     self._found.popitem(last=False)
         return spans
 
-    def _read(self, text: str, wanted: frozenset[str] | set[str]) -> list[Span]:
+    def _verifies(self) -> bool:
+        return (
+            self.verifier != "off"
+            and self.mode == "normal"
+            and getattr(self._get_pipeline(), "lang", "pl") == "pl"
+        )
+
+    def _read(self, text: str, wanted: frozenset[str] | set[str], digest: str = "") -> list[Span]:
         """Run the model over `text` and keep what reads as a name."""
         nlp = self._get_pipeline()
+        verifies = self._verifies()
         spans: list[Span] = []
+        words: list[tuple[int, int, Any]] = []
         for offset, piece in _chunks(text, CHUNK_CHARS):
-            for entity in nlp(piece).ents:
+            document = nlp(piece)
+            for entity in document.ents:
                 entity_type = LABEL_MAP.get(entity.label_)
                 if entity_type not in wanted:
                     continue
                 start, end = offset + entity.start_char, offset + entity.end_char
                 spans.extend(self._line_spans(text, start, end, str(entity_type)))
+            if verifies:
+                words.extend(_words_of(document, offset))
+        if verifies:
+            with _CACHE_LOCK:
+                self._words[digest] = tuple(words)
+                while len(self._words) > max(self.cache_texts, _WORDS_KEPT):
+                    self._words.popitem(last=False)
         spans = _join_hyphenated(text, spans)
         if self.mode == "paranoid":
             return [span for span in spans if _has_a_letter(text[span.start : span.end])]
         if getattr(nlp, "lang", "pl") == "pl":
-            spans = _without_english_misreadings(text, spans)
+            spans = _without_english_misreadings(
+                text, spans, by_language=not (verifies and self.verifier == "hybrid")
+            )
         return spans
+
+    def _review(self, text: str, spans: list[Span], others: list[Span]) -> list[Span]:
+        """Keep the spans the learned verifier keeps, knowing what the other guards found.
+
+        Called by the pipeline once every guard has read `text`. A text whose words are no longer
+        remembered keeps every span: more masked, nothing let through.
+        """
+        if not spans or not self._verifies():
+            return spans
+        from polanon.guards._span_features import span_features, verifier_keeps
+
+        digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        with _CACHE_LOCK:
+            words = self._words.get(digest)
+        if words is None:
+            return spans
+        kept = []
+        for span in spans:
+            features = span_features(
+                text,
+                span,
+                rules_found_it=any(o.start < span.end and span.start < o.end for o in others),
+                words=[word for start, end, word in words if start < span.end and span.start < end],
+            )
+            if verifier_keeps(features, span.entity_type):
+                kept.append(span)
+        return kept
 
     def _line_spans(self, text: str, start: int, end: int, entity_type: str) -> list[Span]:
         """Split an entity at line breaks and the columns of a table, and trim the whitespace.

@@ -4,19 +4,22 @@ The Polish spaCy model tags words that name nobody: English of software, code, a
 a label before a colon. The normal mode drops them by rules written one at a time. A learned
 verifier would weigh the same signs, and more, with weights fitted on annotated text instead.
 
-This module describes a span; it decides nothing. ``benchmarks/verifier_data.py`` writes these
-features for every span the model finds in the benchmarks' texts, with whether the span covers an
-annotated value, and the masking reads none of it yet. Every feature is 0 or 1, so a weight reads
-as how much the sign counts, and :data:`FEATURES` fixes their order.
+``benchmarks/verifier_data.py`` writes these features for every span the model finds in the
+benchmarks' texts, with whether the span covers an annotated value, ``verifier_train.py`` fits a
+logistic regression on them and writes its weights to :mod:`polanon.guards._verifier_weights`, and
+:func:`verifier_keeps` reads those when the NER guard asks for its verifier. Every feature is 0
+or 1, so a weight reads as how much the sign counts, and :data:`FEATURES` fixes their order.
 """
 
 from __future__ import annotations
 
+import math
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from polanon._canonical import _surname
+from polanon.guards import _verifier_weights as fitted
 from polanon.guards import ner
 from polanon.guards._software_english import SOFTWARE_WORDS
 from polanon.guards.names_pl import HONORIFICS, fold, is_common_adjective
@@ -193,3 +196,21 @@ def span_features(
         "a_word_without_vector": any(not word.has_vector for word in words),
     }
     return {name: int(bool(found[name])) for name in FEATURES}
+
+
+def verifier_score(features: Mapping[str, int], entity_type: str) -> float:
+    """Return the learned verifier's probability that a span with these features is a name.
+
+    A feature counts with its own weight and with the weight it has for spans of `entity_type`.
+    """
+    z = fitted.BIAS + sum(
+        fitted.WEIGHTS.get(name, 0.0) + fitted.WEIGHTS.get(f"{entity_type}:{name}", 0.0)
+        for name, value in features.items()
+        if value
+    )
+    return 1 / (1 + math.exp(-z)) if z >= 0 else math.exp(z) / (1 + math.exp(z))
+
+
+def verifier_keeps(features: Mapping[str, int], entity_type: str) -> bool:
+    """Return whether the verifier keeps a span: its probability reaches its type's threshold."""
+    return verifier_score(features, entity_type) >= fitted.THRESHOLDS.get(entity_type, 0.5)

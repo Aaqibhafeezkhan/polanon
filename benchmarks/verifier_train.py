@@ -175,6 +175,44 @@ def thresholds_on(dev: Sequence[Example], scores: dict[Example, float]) -> dict[
     }
 
 
+def write_module(
+    path: Path,
+    names: Sequence[str],
+    weights: Sequence[float],
+    bias: float,
+    thresholds: dict[str, float],
+    trained: int,
+) -> None:
+    """Write the weights as the module the NER guard reads, rounded and sorted by name."""
+    table = "\n".join(
+        f"    {name!r}: {weight:.4f},"
+        for name, weight in sorted(zip(names, weights, strict=True))
+        if round(weight, 4)
+    )
+    cuts = "\n".join(f"    {kind!r}: {cut:.2f}," for kind, cut in sorted(thresholds.items()))
+    path.write_text(
+        f'''"""Weights of the learned verifier, written by benchmarks/verifier_train.py.
+
+Fitted on {trained} spans the Polish spaCy model found in OpenPII's and KPWr's train parts. A
+weight named "TYPE:feature" counts for spans of that type only. A span is kept when the logistic
+of the bias and the weights of its features reaches the threshold of its type.
+"""
+
+BIAS = {bias:.4f}
+
+WEIGHTS: dict[str, float] = {{
+{table}
+}}
+
+THRESHOLDS: dict[str, float] = {{
+{cuts}
+}}
+''',
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def row(name: str, t: Tally) -> str:
     """One line of a markdown table."""
     return f"| {name} | {t.kept} | {t.dropped} | {t.wrongly_kept} | {t.rightly_dropped} |"
@@ -186,6 +224,9 @@ def main() -> int:
     parser.add_argument("--data", type=Path, default=Path.home() / ".cache/polanon/verifier")
     parser.add_argument("--per-type", action="store_true", help="a copy of every feature per type")
     parser.add_argument("--threshold-per-type", action="store_true", help="a threshold per type")
+    parser.add_argument(
+        "--module", type=Path, help="also write the weights as a module, such as the package's"
+    )
     args = parser.parse_args()
 
     names, examples = load(args.data / "spans.jsonl", per_type=args.per_type)
@@ -233,6 +274,10 @@ def main() -> int:
     lost = Counter(e.text for e in kpwr_test if e.label == 1 and scores[e] < cut[e])
     print("KPWr names it drops:", lost.most_common(20))
 
+    if args.module is not None:
+        thresholds = by_type or dict.fromkeys(("PERSON", "LOCATION", "ORG"), one)
+        write_module(args.module, names, weights, bias, thresholds, len(train))
+        print(f"\nModule written to {args.module}")
     out = args.data / "weights.json"
     out.write_text(
         json.dumps(

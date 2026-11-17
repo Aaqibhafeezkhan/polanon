@@ -47,6 +47,8 @@ from polanon import (
     SecretsGuard,
     merge_spans,
 )
+from polanon._detection import detect
+from polanon.guards.ner import Verifier
 from polanon.policy import ENTITY_TYPES, Mode
 
 SAMPLES = Path(__file__).parent / "samples"
@@ -129,11 +131,11 @@ def evaluate(
 
     Coverage is what polanon's pipeline masks: the detections merged as it merges them. With
     `union`, it is every character any detection covers, which is at least what another tool's
-    own conflict resolution would mask, so a comparison never scores it below its best.
+    own conflict resolution would mask, so a comparison never scores it below its best. The
+    guards run as the pipeline runs them, so one that reviews its spans once it knows what the
+    others found, as the NER guard's learned verifier does, does so here too.
     """
-    detected: list = []
-    for guard in guards:
-        detected.extend(guard.detect(text, enabled))
+    detected = detect(text, None, enabled, guards)
     spans = merge_spans(detected, text)
     covering = detected if union else spans
     masked_chars = {index for span in covering for index in range(span.start, span.end)}
@@ -179,7 +181,9 @@ def run(guards: list[Guard], *, union: bool = False) -> tuple[dict[str, Score], 
     return totals, extra, len(documents)
 
 
-def guards_for(with_ner: bool, spacy_model: str, mode: Mode = "normal") -> list[Guard]:
+def guards_for(
+    with_ner: bool, spacy_model: str, mode: Mode = "normal", verifier: Verifier = "off"
+) -> list[Guard]:
     """Build the guard stack for one configuration."""
     guards: list[Guard] = [
         RegexGuard(),
@@ -192,7 +196,7 @@ def guards_for(with_ner: bool, spacy_model: str, mode: Mode = "normal") -> list[
     if with_ner:
         from polanon.guards.ner import NerGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model, mode=mode))
+        guards.append(NerGuard(spacy_model=spacy_model, mode=mode, verifier=verifier))
     return guards
 
 
@@ -245,10 +249,16 @@ def main() -> int:
     parser.add_argument(
         "--paranoid", action="store_true", help='the spaCy guard in mode="paranoid"'
     )
+    parser.add_argument(
+        "--verifier",
+        choices=("off", "after", "hybrid"),
+        default="off",
+        help="the learned verifier of the spaCy guard, an experiment",
+    )
     args = parser.parse_args()
 
     mode: Mode = "paranoid" if args.paranoid else "normal"
-    totals, extra, documents = run(guards_for(args.ner, args.spacy_model, mode))
+    totals, extra, documents = run(guards_for(args.ner, args.spacy_model, mode, args.verifier))
     model = f" + spaCy NER, {mode}" if args.ner else ""
     print(f"configuration: guards without a model{model}\n")
     report(totals, extra, documents, args.markdown)

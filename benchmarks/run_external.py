@@ -380,14 +380,22 @@ def score(
     return totals, extra, time.perf_counter() - started
 
 
-def configurations(presidio: bool) -> list[tuple[str, list[Guard], bool]]:
-    """The rules alone, with the spaCy model and paranoid when it is installed, and Presidio."""
+def configurations(presidio: bool, verifier: bool = False) -> list[tuple[str, list[Guard], bool]]:
+    """The rules alone, with the spaCy model and paranoid when it is installed, and Presidio.
+
+    With `verifier`, the spaCy model with the learned verifier after its filters and in place of
+    their test of a line's language too.
+    """
     from polanon import ner_available
 
     found: list[tuple[str, list[Guard], bool]] = [("polanon, rules", guards_for(False, ""), False)]
     if ner_available("pl_core_news_md"):
         found.append(("polanon + pl_core_news_md", guards_for(True, "pl_core_news_md"), False))
         found.append(("polanon paranoid", guards_for(True, "pl_core_news_md", "paranoid"), False))
+        if verifier:
+            for way in ("after", "hybrid"):
+                guards = guards_for(True, "pl_core_news_md", "normal", way)
+                found.append((f"polanon + verifier {way}", guards, False))
     if presidio:
         from compare_presidio import PresidioGuard
 
@@ -466,8 +474,9 @@ def main() -> int:
     parser.add_argument("--part", choices=("test", "dev"), default="test")
     parser.add_argument("--presidio", action="store_true", help="also score Presidio")
     parser.add_argument("--teryt", action="store_true", help="also score every TERYT street")
+    parser.add_argument("--verifier", action="store_true", help="also the learned verifier")
     args = parser.parse_args()
-    setups = configurations(args.presidio)
+    setups = configurations(args.presidio, args.verifier)
 
     rows = openpii_rows(args.data)
     random.Random(SEED).shuffle(rows)  # noqa: S311 - a fixed sample, not a secret
