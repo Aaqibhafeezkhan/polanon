@@ -160,6 +160,24 @@ def test_email_with_polish_letters_is_masked_as_one_unit(text, expected):
     assert [text[s.start : s.end] for s in spans] == [expected]
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Napisz do françois.dupont@example.com jutro.", "françois.dupont@example.com"),
+        ("Kontakt: jürgen.müller@firma.example", "jürgen.müller@firma.example"),
+        ("adres annaantúnez@example.org, telefon", "annaantúnez@example.org"),
+        ("pisz na Ö@example.com", "Ö@example.com"),
+        ("mail: jiří.dvořák@příklad.example.cz", "jiří.dvořák@příklad.example.cz"),
+        ("[at]: søren [at] example [dot] dk", "søren [at] example [dot] dk"),
+    ],
+)
+def test_email_with_any_letters_is_masked_whole(text, expected):
+    """Only Polish letters were accepted, so a French, German or Czech name in an address was
+    masked from its first such letter on: "franç" went out in front of the token."""
+    spans = [s for s in RegexGuard().detect(text, {"EMAIL"}) if s.entity_type == "EMAIL"]
+    assert [text[s.start : s.end] for s in spans] == [expected]
+
+
 def test_address_does_not_swallow_the_postcode_that_follows():
     text = "ul. Krótka 5, 00-950 Warszawa"
     found = {(s.entity_type, text[s.start : s.end]) for s in RegexGuard().detect(text, ALL)}
@@ -802,6 +820,40 @@ def test_a_pesel_with_a_typo_right_after_its_label_is_masked(text):
 
 
 @pytest.mark.parametrize(
+    ("text", "enabled", "expected"),
+    [
+        # Social insurance in Poland is the PESEL, and a translated form calls it so.
+        ("numer ubezpieczenia społecznego: 15501416181", {"PESEL"}, "<PESEL_1>"),
+        ("numeru ubezpieczenia (78059938421)", {"PESEL"}, "<PESEL_1>)"),
+        # The check digit is wrong in each: one keystroke off a real number.
+        ("NIP: 123-456-32-19", {"NIP"}, "<NIP_1>"),
+        ("nr NIP 1234563219", {"NIP"}, "<NIP_1>"),
+        ("numer dowodu osobistego: ABA300001", {"PL_ID"}, "<DOWOD_1>"),
+        ("Dowód osobisty nr XYZ123456", {"PL_ID"}, "<DOWOD_1>"),
+        ("numer karty kredytowej 4111 1111 1111 1112", {"CREDIT_CARD"}, "<KARTA_1>"),
+        ("card number: 5500-0000-0000-0005", {"CREDIT_CARD"}, "<KARTA_1>"),
+    ],
+)
+def test_an_identifier_with_a_typo_right_after_its_label_is_masked(text, enabled, expected):
+    """A number its label names is someone's even when a digit is wrong: without the label the
+    checksum decides, and a mistyped NIP, ID card or card number after its label went out."""
+    assert masked(text, enabled).endswith(expected)
+
+
+@pytest.mark.parametrize(
+    ("text", "enabled"),
+    [
+        ("Faktura 123-456-32-19 opłacona.", {"NIP"}),
+        ("Kod produktu XYZ123456 w magazynie.", {"PL_ID"}),
+        ("Zamówienie 4111 1111 1111 1112 wysłane.", {"CREDIT_CARD"}),
+        ("numer ubezpieczenia pojazdu 15501416181", {"PESEL"}),
+    ],
+)
+def test_the_same_numbers_without_their_label_are_left_alone(text, enabled):
+    assert masked(text, enabled) == text
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("nr zamówienia 15501416181", "nr zamówienia 15501416181"),
@@ -1062,6 +1114,51 @@ def test_a_street_without_its_prefix_or_postcode_is_masked_after_a_label_or_befo
 
 
 @pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Biuro mieści się przy ulicy Długiej nr 36, 00-950 Warszawa.", "ulicy Długiej nr 36"),
+        ("Adres: ul. Kwiatowa nr 12/4", "ul. Kwiatowa nr 12/4"),
+        ("Spotkanie na placu Wolności nr 2.", "placu Wolności nr 2"),
+        ("Dom przy al. Adama Mickiewicza numer 228.", "al. Adama Mickiewicza numer 228"),
+        ("Klient zam. Polna nr 5.", "Polna nr 5"),
+        ("Kurier odbierze paczkę z Długiej nr 17 w Białymstoku.", "Długiej nr 17"),
+    ],
+)
+def test_an_address_with_nr_before_its_house_number_is_masked_whole(text, address):
+    """ "przy ulicy Długiej nr 36": the "nr" in front of the number ended the street, and the
+    street with its number went out in clear."""
+    assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    ("text", "values"),
+    [
+        ("Ulica: Kwiatowa\nNumer domu: 8A\nMiasto: Kraków", ["Kwiatowa", "8A"]),
+        ("Ulica: Jana Pawła II, nr budynku: 17/3", ["Jana Pawła II", "17/3"]),
+        ("street: Długa; house number: 5", ["Długa", "5"]),
+        ("Numer lokalu: 12", ["12"]),
+    ],
+)
+def test_a_street_and_its_number_in_form_fields_are_masked(text, values):
+    """A form or a CRM export puts the street and the house number in fields of their own,
+    with no "ul." and no postcode next to them."""
+    assert _found(text, "ADDRESS") == values
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ulica handlowa nr 1 w rankingu.",
+        "Numer domu: brak",
+        "Plac budowy nr 3 zamknięty.",
+        "Ulica: do ustalenia",
+    ],
+)
+def test_words_like_a_street_field_without_a_street_are_no_address(text):
+    assert _found(text, "ADDRESS") == []
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "Działa na Windows 11 w Polsce.",
@@ -1114,3 +1211,103 @@ def test_a_birth_date_after_birthday_or_a_label_of_code_is_masked(text, date):
 def test_a_date_written_in_english_is_a_date_and_no_birth_date_without_its_label():
     assert _found("Deadline: 15 June 2025", "DATE") == ["15 June 2025"]
     assert _found("Deadline: 15 June 2025", "BIRTH_DATE") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Numer prawa jazdy: 01234/15/1234",
+        "nr prawa jazdy 00012/18/1465",
+        "prawo jazdy nr ABX123456Z",
+        "Driver's license number: D1234-5678-9012",
+        "driving licence no. KOWAL703123J99XY",
+    ],
+)
+def test_a_driving_licence_number_after_its_label_is_masked(text):
+    """A driving licence number in an HR record or a rental agreement went out in clear: no rule
+    knew it. Its shape differs by country, so the label is what makes it one."""
+    assert masked(text, {"DRIVING_LICENCE"}).endswith("<PRAWO_JAZDY_1>")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Prawo jazdy kategorii B od 2015 roku.",
+        "prawo jazdy: tak",
+        "Ma prawo jazdy B1 i samochód.",
+        "Kod produktu 01234/15/1234 w magazynie.",
+    ],
+)
+def test_no_driving_licence_without_its_label_and_a_number(text):
+    assert masked(text, {"DRIVING_LICENCE"}) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "address"),
+    [
+        ("Adres: ul. 1000-lecia 5, 00-950 Warszawa", "ul. 1000-lecia 5"),
+        ("Mieszka przy ul. 10-go Pułku Piechoty 55.", "ul. 10-go Pułku Piechoty 55"),
+        ("Biuro: ul. 83. Pułku Strzelców 7", "ul. 83. Pułku Strzelców 7"),
+        ("Dom przy ul. A. Słonimskiego 108.", "ul. A. Słonimskiego 108"),
+        ("Adres: ul. Cypriana K. Norwida 21", "ul. Cypriana K. Norwida 21"),
+        ("Siedziba: ul. inż. Bohdana Łozińskiego 11A", "ul. inż. Bohdana Łozińskiego 11A"),
+        ("Adres: ul. ks. J. Popiełuszki 4", "ul. ks. J. Popiełuszki 4"),
+        ("Adres: ul. Bohaterów Wojny 1920 r. 31", "ul. Bohaterów Wojny 1920 r. 31"),
+        ("Mieszka przy ul. Nad Stawem 3 od lat.", "ul. Nad Stawem 3"),
+        ("Adres: ul. Pod Lipami nad Wisłą 12", "ul. Pod Lipami nad Wisłą 12"),
+        ('Adres: skwer im. "Solidarności" 31', 'skwer im. "Solidarności" 31'),
+        ("Biuro na Wybrzeżu Kościuszkowskim 20.", "Wybrzeżu Kościuszkowskim 20"),
+        ("Magazyn: Nabrzeże Wieleckie 5", "Nabrzeże Wieleckie 5"),
+        ("Sklep przy Trakcie Lubelskim 120.", "Trakcie Lubelskim 120"),
+        ("Lokal: Pasaż Grunwaldzki 3", "Pasaż Grunwaldzki 3"),
+        ("Adres: bulw. Filadelfijski 8", "bulw. Filadelfijski 8"),
+    ],
+)
+def test_streets_as_the_teryt_register_names_them_are_masked_whole(text, address):
+    """Run through every street in GUS's TERYT register, the rules missed numbers in a street's
+    name, initials, titles beyond the usual few, small words, quotes, years and prefixes such as
+    "Wybrzeże" or "Trakt", and the street with its house number went out in clear."""
+    assert _found(text, "ADDRESS") == [address]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Spotkanie 10-go maja o 12.",
+        "Rocznica 1000-lecia 5 razy hucznie.",
+        "Trakt handlowy przez 3 kraje.",
+        "Dr A. Kowalski przyjmuje w pokoju 12.",
+    ],
+)
+def test_numbers_and_initials_outside_a_street_are_no_address(text):
+    assert _found(text, "ADDRESS") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Prosimy o podanie numeru prawa jazdy (AB12345C78).",
+        "Przesyłam kopię prawa jazdy – 01234/15/1234 – w załączniku.",  # noqa: RUF001 - a dash, meant
+        "Numer prawa jazdy (jeśli dotyczy): XY98765Z43",
+        "Driver's License Number (if applicable): D1234-5678",
+        "prawo jazdy kat. B nr 00012/18/1465",
+        "Proszę o kartę kierowcy (PL0000012345678).",
+        "numer karty kierowcy: PL0000012345678",
+    ],
+)
+def test_a_driving_licence_number_after_its_label_in_other_forms_is_masked(text):
+    """The number came in brackets or after a dash, with "(jeśli dotyczy)" between the label and
+    the colon, after "kat. B", or as the number of a tachograph driver card, and went out."""
+    assert "<PRAWO_JAZDY_1>" in masked(text, {"DRIVING_LICENCE"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Prawo jazdy (kat. B) od 2015 roku.",
+        "Ma prawo jazdy (2015) i samochód.",
+        "Karta kierowcy jest ważna do końca roku.",
+    ],
+)
+def test_a_driving_licence_label_without_a_number_after_it_masks_nothing(text):
+    assert masked(text, {"DRIVING_LICENCE"}) == text

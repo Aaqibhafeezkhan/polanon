@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from polanon.guards import _pesel_names
 from polanon.guards.base import Guard
 from polanon.types import Span
 
@@ -265,6 +266,9 @@ def _index(entries: list[tuple[str, dict[str, set[str]]]]) -> dict[str, frozense
 NAME_FORMS: dict[str, frozenset[Tag]] = _index(
     [("m", decline_masculine(name.lower())) for name in _MALE_NAMES]
     + [("f", decline_feminine(name.lower())) for name in _FEMALE_NAMES]
+    # The rest of the names a thousand people or more bear in the PESEL register.
+    + [("m", decline_masculine(name.lower())) for name in _words(_pesel_names.MALE)]
+    + [("f", decline_feminine(name.lower())) for name in _words(_pesel_names.FEMALE)]
 )
 
 #: Forms of first names that are also ordinary Polish words or very common English ones, folded.
@@ -278,7 +282,7 @@ AMBIGUOUS_FORMS = frozenset(
         rozy ryska rysku ula ule ulu wiktoria witka
         """
     )
-)
+) | frozenset(_words(_pesel_names.AMBIGUOUS))
 
 _SURNAME_FORMS: dict[str, frozenset[Tag]] = _index(
     [("m", decline_masculine(name.lower())) for name in _NOUN_SURNAMES]

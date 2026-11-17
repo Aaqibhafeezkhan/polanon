@@ -13,6 +13,8 @@ while it streams. Pure Python: the standard library is the whole core.
 Featured in [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A), Jakub
 Mrugalski's weekly newsletter for people in IT, on 13 November 2026.
 
+[![Try polanon in your browser](https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.svg)](https://boromat.github.io/en/demo/)
+
 **Without writing code**, with the gateway in Docker. Claude Code, n8n, Open WebUI, LibreChat,
 Hermes Agent and any other tool that speaks the OpenAI or Anthropic API keep working as they did,
 and every call is masked before it leaves:
@@ -34,7 +36,7 @@ tool, the gateway without Docker, and what it does with a call are in
 
 **In Python**, in your own code: mask a text, send it, restore the answer.
 
-![polanon masking a Polish invoice request in a terminal, then restoring the model's answer in Python](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.gif)
+![polanon in a terminal: masking a Polish text in Python and restoring the answer, the gateway in Docker in front of a tool, and the scores against Presidio](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.svg)
 
 ```bash
 pip install polanon
@@ -82,19 +84,26 @@ Plusgiro and sort codes, international phone numbers, street addresses and postc
 
 ## How it compares
 
+![polanon and Presidio on Polish data polanon was never tuned on: values masked whole, false alarms, by kind of value, and people in real Polish text](https://raw.githubusercontent.com/boromat/polanon/main/docs/comparison.svg)
+
 |  | polanon | [Presidio](https://github.com/data-privacy-stack/presidio) | [pii-veil](https://pypi.org/project/pii-veil/) | [piimask](https://pypi.org/project/piimask/) |
 |---|---|---|---|---|
 | Restores the model's answer | Yes, from stable tokens such as `<OSOBA_1>`, also while it streams | Not built in: its deanonymizer decrypts spans at known positions; its docs include a sample that restores an LLM answer | Yes, from stable tokens and a saved mapping | Yes, from stable tokens |
 | Polish identifiers with a checksum | PESEL, NIP, REGON, ID card, IBAN, payment cards | PESEL; IBAN and payment cards in general | PESEL, NIP, REGON, IBAN, payment cards; ID card and passport by pattern only | None; IBAN and payment cards in general |
 | Polish names in every grammatical case | For listed first names and the surnames that agree with them, without a language model; spaCy adds the rest | With a Polish spaCy model and its `persName` label mapped | Not detected | Not detected; its README suggests adding an NER model |
 | What the core needs | Nothing beyond the standard library | spaCy, numpy, pydantic and a few more; a language model only for names and places | pii-core and typer | Nothing beyond the standard library |
-| On polanon's [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) | 98% fully masked with `pl_core_news_md`, 86% with rules alone | 66% with the same model (presidio-analyzer 2.2.366) | Not measured | Not measured |
+| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% of 5,255 values masked whole with `pl_core_news_md`, 435 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
+| On polanon's own [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md), tuned on | 98% fully masked with `pl_core_news_md`, 86% with rules alone | 67% with the same model | Not measured | Not measured |
 | License | MIT | MIT | Apache-2.0 | MIT |
 
-Compared from each project's own documentation and source on 3 November 2026. Only Presidio was
-run on the sample documents, with the script in `benchmarks/`, and that is not neutral ground: the
-eleven synthetic documents were written by polanon's author, who tuned its rules on them, and
-Presidio had only the Polish model, also for the three invoices from abroad. Each has its place:
+Compared from each project's own documentation and source on 3 November 2026; measured on 17
+November 2026. Only Presidio was run, with the scripts in `benchmarks/`. polanon's own thirteen
+documents are not neutral ground: its author wrote them and tuned its rules on them, and Presidio
+had only the Polish model, also for the three invoices from abroad. The Polish rows of ai4privacy's
+OpenPII and CLARIN-PL's KPWr are: polanon was never tuned on the parts measured, and on them the
+gap narrows to five points and six times fewer false alarms, with a tie on people, where the same
+spaCy model does the work. Presidio wins on random codes written without a label, which it reads
+with low-score patterns that also mark product codes and order numbers. Each has its place:
 Presidio for many languages, structured data and its Azure integration; pii-veil for Polish
 identifiers under Apache-2.0 when names do not matter; piimask for language-neutral identifiers
 (e-mail, phone numbers, payment cards, IBAN, IP addresses, URLs) and US social security numbers,
@@ -530,7 +539,7 @@ Checksum-validated Polish identifiers (PESEL, NIP, REGON, ID card, IBAN, payment
 next to their label, e-mail addresses and phone numbers, street addresses and postcodes, links to
 a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
 and IPv6, MAC addresses, vehicle registrations after their label ("nr rej."), VINs, passport
-numbers, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
+numbers, driving licence numbers after their label, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
 company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). Once a person or a
 profile link is masked, the surname or the handle alone is masked wherever it appears in the same
 text: "Kowalski" after "Jan Kowalski", "jkowalski" in a JSON field after "github.com/jkowalski".

@@ -611,3 +611,39 @@ def test_a_capitalised_common_surname_settles_no_lowercase_word_before_it():
 
 def test_a_common_surname_in_a_lowercase_list_still_settles_its_first_name():
     assert _found("1. maja nowak") == ["maja nowak"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Dzwoniła Kazimiera Nowak w sprawie faktury.", ["Kazimiera Nowak"]),
+        ("Umowę podpisał Sylwester Kowalski.", ["Sylwester Kowalski"]),
+        ("Pani Marlena Wiśniewska prosi o kontakt.", ["Marlena Wiśniewska"]),
+        ("Pracownik Oleksandr Kovalenko złożył wniosek.", ["Oleksandr Kovalenko"]),
+        ("Wniosek złożyła Nataliia Shevchenko z Lublina.", ["Nataliia Shevchenko"]),
+        ("dzisiaj tetiana przyszła do biura", ["tetiana"]),
+    ],
+)
+def test_first_names_from_the_pesel_register_are_recognised(text, expected):
+    """The hand-written lists covered the first names of about 87% of the people in the PESEL
+    register; Kazimiera, Sylwester, Marlena and the Ukrainian names of Poland's residents were
+    not on them, and a person with such a name went out in clear without the language model."""
+    assert _found(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "inna osoba przyszła do biura",
+        "herbata z melisy i maliny",
+        "kurs franka szwajcarskiego spadł",
+        "bal na sylwestra w Zakopanem",
+        "lina do wspinaczki i taras z widokiem",
+        "dane osobowe ale nie wszystkie",
+        "piszę w Pascalu",
+    ],
+)
+def test_register_names_that_are_also_words_stay_words(text):
+    """Inna, Melisa, Malina, Frank, Sylwester, Lina, Taras, Dana and Pascal are first names in the
+    register and ordinary words too: alone, in lowercase, they name nobody."""
+    assert _found(text) == []

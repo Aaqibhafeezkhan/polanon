@@ -132,3 +132,40 @@ def test_a_stored_list_of_types_keeps_only_real_ones():
     from polanon.policy import enabled_entities
 
     assert enabled_entities("PESEL, EMAIL,,PERSONS ,IBAN") == {"PESEL", "EMAIL", "IBAN"}
+
+
+def _people(text, *names):
+    """Person spans over the given pieces of the text, each at its first place after the last."""
+    spans, at = [], 0
+    for name in names:
+        start = text.index(name, at)
+        spans.append(Span(start, start + len(name), "PERSON", 0.85, "spacy_ner"))
+        at = start + len(name)
+    return spans
+
+
+def test_a_person_s_initials_and_the_rest_of_the_name_are_one_person():
+    """ "George W. Bush" went out as "<OSOBA_1> <OSOBA_2>" and "C. Alexander i S. Ishikawa" as
+    four people: one detector stopped at the initial, another started after it."""
+    cases = [
+        ("Wypowiedział się George W. Bush.", ("George W.", "Bush"), ["George W. Bush"]),
+        ("Wypowiedział się George W. Bush.", ("George", "W. Bush"), ["George W. Bush"]),
+        (
+            "Autorzy: C. Alexander i S. Ishikawa.",
+            ("C.", "Alexander", "S.", "Ishikawa"),
+            ["C. Alexander", "S. Ishikawa"],
+        ),
+        ("Cytuje J. G. Ballarda.", ("J.", "G.", "Ballarda"), ["J. G. Ballarda"]),
+    ]
+    for text, pieces, expected in cases:
+        merged = merge_spans(_people(text, *pieces), text)
+        assert [text[s.start : s.end] for s in merged] == expected
+
+
+def test_two_people_side_by_side_without_an_initial_stay_two():
+    text = "Byli tam Jan Kowalski Anna Nowak, a także Ł. Ż."
+    merged = merge_spans(_people(text, "Jan Kowalski", "Anna Nowak"), text)
+    assert [text[s.start : s.end] for s in merged] == ["Jan Kowalski", "Anna Nowak"]
+    text = "Spotkał Kowalskiego. Nowak przyszedł później."
+    merged = merge_spans(_people(text, "Kowalskiego", "Nowak"), text)
+    assert [text[s.start : s.end] for s in merged] == ["Kowalskiego", "Nowak"]

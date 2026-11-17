@@ -20,9 +20,9 @@ from run_agent import anonymizer_for, occurrences, run, strings  # noqa: E402
 
 from polanon.policy import ENTITY_TYPES  # noqa: E402
 
-#: What leaks with the default masking: "sopotu" and "Erik Holm" by design, and a name written
-#: in Cyrillic, which no guard finds.
-KNOWN_LEAKS = {"sopotu", "Erik Holm", "Олена Коваленко"}
+#: What leaks with the default masking: "sopotu" by design, and a name written in Cyrillic,
+#: which no guard finds.
+KNOWN_LEAKS = {"sopotu", "Олена Коваленко"}
 
 #: Types a rule finds by their shape, checksum or label; a leak of one is a bug.
 DETERMINISTIC = {"EMAIL", "PHONE", "POSTAL_CODE", "ADDRESS", "NIP", "PESEL", "IBAN", "SECRET"}
@@ -106,7 +106,7 @@ def test_the_rules_alone_mask_nothing_for_nothing(model_free):
     legal form and the foreign names a model is for."""
     assert {name: dict(s.for_nothing) for name, s in model_free.items() if s.for_nothing} == {}
     leaked = sum(score.leaked for score in model_free.values())
-    assert leaked <= 37
+    assert leaked <= 35
 
 
 @needs_model
@@ -114,10 +114,10 @@ def test_the_rules_alone_mask_nothing_for_nothing(model_free):
 def test_with_the_polish_model_little_leaks_and_little_is_masked_for_nothing():
     """The bounds of the default masking, both ways.
 
-    Two values leak by design: a place typed in lowercase in a chat, "sopotu", and a foreign name
-    opening an English sentence, read as a capitalised English word. No guard finds a name
-    written in Cyrillic. Masked for nothing are a few German nouns, a speaker's name
-    in a smart home and "thanks" in Ukrainian.
+    One value leaks by design, a place typed in lowercase in a chat, "sopotu". A foreign name
+    opening an English sentence, read as a capitalised English word, is found as a first name
+    of the PESEL register. No guard finds a name written in Cyrillic. Masked for nothing are a
+    few German nouns, a speaker's name in a smart home and "thanks" in Ukrainian.
     """
     scores = run(anonymizer_for(with_ner=True))
     leaked = {value for score in scores.values() for _, value in score.leaked_values}
@@ -131,12 +131,12 @@ def test_with_the_polish_model_little_leaks_and_little_is_masked_for_nothing():
 @needs_model
 @pytest.mark.slow
 def test_in_paranoid_mode_nothing_leaks_and_more_than_half_the_tokens_hide_nothing():
-    """What `mode="paranoid"` buys and what it costs: "sopotu" and "Erik Holm" are masked, and so
+    """What `mode="paranoid"` buys and what it costs: "sopotu" is masked, and so
     are "return", "message" and "notify" of the tools and the agent's English. What no guard
     finds still leaks."""
     scores = run(anonymizer_for(with_ner=True, mode="paranoid"))
     leaked = {value for score in scores.values() for _, value in score.leaked_values}
-    assert leaked <= KNOWN_LEAKS - {"sopotu", "Erik Holm"}
+    assert leaked <= KNOWN_LEAKS - {"sopotu"}
     wasted = sum(score.wasted_uses for score in scores.values())
     used = sum(score.uses for score in scores.values())
     assert wasted <= 386

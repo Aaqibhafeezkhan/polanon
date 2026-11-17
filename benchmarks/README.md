@@ -16,12 +16,8 @@ can only come out the same or better.
 |---|---:|---:|---:|---:|
 | polanon, guards only, no model | 164 / 190 (86%) | 0 | 26 | 0 |
 | polanon, guards + `pl_core_news_md` | **187 / 190 (98%)** | 0 | 3 | 6 |
-| Presidio 2.2.366, set up for Polish with the same model | 112 / 169 (66%) | 25 | 32 | 47 |
-| Presidio, phone recognizer at leniency 0 | 128 / 169 (76%) | 29 | 12 | 76 |
-
-Presidio was measured on the first eleven documents, before the discharge summary joined them, and
-has not been run on the thirteen; on those eleven polanon masks 145 of 169 with the rules alone and
-166 of 169 with the model, with 7 over-masked spans.
+| Presidio 2.2.366, set up for Polish with the same model | 127 / 190 (67%) | 28 | 35 | 53 |
+| Presidio, phone recognizer at leniency 0 | 146 / 190 (77%) | 32 | 12 | 89 |
 
 Presidio is the usual answer to "mask personal data before an LLM call", so it is the baseline.
 [`compare_presidio.py`](compare_presidio.py) gives it the same Polish spaCy model, every offline recognizer it
@@ -30,7 +26,7 @@ scores it in its favour: every finding counts whatever its score, coverage is th
 findings, and same-type findings separated by a space are joined as its anonymizer joins them. What
 it misses is what it has no rule for: Polish names in their grammatical cases, companies by their
 legal form, street addresses, Polish, Swedish and Swiss postcodes, Bankgiro and sort codes, and
-secrets. At leniency 0 its phone recognizer gains 16 values, mostly postcodes and account numbers
+secrets. At leniency 0 its phone recognizer gains 19 values, mostly postcodes and account numbers
 read as telephone numbers. Most of its over-masked spans are findings at very low scores, which
 count here because every finding does. A setup with an English or German model for the foreign
 invoices was not tried and would find some of their names.
@@ -107,16 +103,17 @@ made a token is a word it cannot read, and a value masked once is masked whereve
 
 | Configuration | Leaked | Tokens that hide nothing | Their uses |
 |---|---:|---:|---:|
-| polanon, guards only, no model | 37 of 243 | 0 | 0 of 263 |
+| polanon, guards only, no model | 35 of 243 | 0 | 0 of 266 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
-| polanon, guards + `pl_core_news_md` | **3 of 243** | 5 | **5 of 307** |
-| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 696 |
+| polanon, guards + `pl_core_news_md` | **2 of 243** | 5 | **5 of 309** |
+| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 697 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
-nothing is masked for nothing. With the model two values leak by design: "sopotu", a place typed
+nothing is masked for nothing. With the model one value leaks by design: "sopotu", a place typed
 in lowercase in a chat, dropped since a place in lowercase stopped being one, so that "text" and
-"service" of a manual are not, and "Erik Holm" opening an English sentence, where a capitalised
-word is read as English. No guard finds the third in any mode, a name written in Cyrillic.
+"service" of a manual are not. "Erik Holm" opening an English sentence, where a capitalised word
+is read as English, leaked too until Erik joined the first names of the PESEL register. No guard
+finds the second in any mode, a name written in Cyrillic.
 Two birthdays under a contact's `birthday` key and a login made of a surname in a path,
 `/home/tmalinowski`, leaked too until a key that names a birthday was read as its label and a
 login made of a known surname was masked with the person. `mode="paranoid"` takes every name the
@@ -145,9 +142,61 @@ or is wrong:
 Nothing comes back wrong, and no token is left in an answer. What comes back as written is a
 name polanon cannot decline for sure, "Olena Kovalenko" asked for in the genitive. A value that
 leaked reached the model as it is, so the model writes its case itself and the line counts as
-exact: the rules alone score 40 of 40, which says little.
+exact: the rules alone score 39 of 40, which says little.
 [`tests/test_agent_benchmark.py`](../tests/test_agent_benchmark.py) holds these numbers as
 bounds both ways.
+
+## On data polanon was never tuned on
+
+Documents written by the author of the guards say what the guards were tuned to do.
+[`run_external.py`](run_external.py) measures polanon, and Presidio set up as above, on public
+Polish data instead, downloaded on first use and never kept in this repository:
+
+- the Polish rows of ai4privacy's
+  [OpenPII](https://huggingface.co/datasets/ai4privacy/pii-masking-openpii-1m) (CC-BY-4.0),
+  texts written by a language model with their values annotated. Shuffled with a fixed seed, the
+  first 1,000 were read to find what polanon missed and fix it; the next 1,000, measured here,
+  never were;
+- the test part of CLARIN-PL's [KPWr](https://huggingface.co/datasets/clarin-pl/kpwr-ner)
+  (CC-BY-3.0), 4,323 sentences of real Polish text, where people, cities, streets and companies
+  are read;
+- every street of GUS's [TERYT](https://eteryt.stat.gov.pl/) catalogue (CC-BY-4.0).
+
+On the 1,000 OpenPII texts never read, with 5,255 values:
+
+| Configuration | Masked whole | Spans outside the values |
+|---|---:|---:|
+| polanon, guards only, no model | 2,668 (51%) | 105 |
+| polanon, guards + `pl_core_news_md` | **3,733 (71%)** | **435** |
+| the same, `mode="paranoid"` | 3,780 (72%) | 868 |
+| Presidio 2.2.366, set up for Polish with the same model | 3,456 (66%) | 2,641 |
+
+| Value | Annotated | polanon, with the model | Presidio |
+|---|---:|---:|---:|
+| People | 1,558 | 79% | 70% |
+| Streets with their house numbers | 701 | 64% | 33% |
+| E-mail addresses | 554 | 99% | 99% |
+| Cities | 503 | 78% | 81% |
+| Phone numbers | 437 | 60% | 34% |
+| Postcodes | 300 | 98% | 0% |
+| Driving licences | 189 | 51% | 89% |
+| Passports | 145 | 98% | 100% |
+| PESEL, NIP, ID card and payment card numbers that pass their checksum | 74 | 100% | 85% |
+| The same that fail it | 794 | 30% | 82% |
+
+Most of OpenPII's numbers are random digits. A real PESEL, NIP, ID card or card number always
+passes its checksum, so the two are counted apart: polanon masks every valid one, and one that
+fails only after its label, where a typo is likely. Presidio reads random codes without a label
+too, which wins it the driving licences, with patterns of low score that also take product codes
+and order numbers. A span outside the values is not always an error: dates and ages are left out
+of the values, so a masked date of birth counts there for both.
+
+On KPWr only recall counts, since it names much more than these four kinds. Rules alone find 46%
+of the people; with the same spaCy model both find 90% of 949, and of the 1,557 values polanon
+masks 1,393 (89.5%) and Presidio 1,384 (88.9%), ahead on streets, 66 of 95 against 56, and
+behind on companies, 63 of 76 against 65. Of the 50,449 streets in TERYT, written with a house
+number in a form, before a postcode and in a sentence, the rules mask 95.3% whole in all three,
+98.0% of those with "ul.".
 
 ## Running it
 
@@ -165,6 +214,14 @@ The Presidio comparison needs Presidio, which is not a dependency of this projec
 ```bash
 pip install presidio-analyzer
 python benchmarks/compare_presidio.py [--lenient-phones] [--markdown]
+```
+
+The data polanon was never tuned on is downloaded into `~/.cache/polanon/benchmarks`:
+
+```bash
+python benchmarks/run_external.py              # OpenPII and KPWr
+python benchmarks/run_external.py --presidio   # and Presidio
+python benchmarks/run_external.py --teryt      # and every TERYT street
 ```
 
 A document worth keeping is welcome: put the text in `samples/`, its annotations in `gold/` with

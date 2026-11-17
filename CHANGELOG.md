@@ -5,6 +5,79 @@ All notable changes to this project are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html); until 1.0, the second number goes up
 only for a change that breaks something, as CONTRIBUTING.md describes.
 
+## [Unreleased]
+
+### Added
+
+- **Driving licence numbers, after their label**, as the new type `DRIVING_LICENCE` with the
+  token `<PRAWO_JAZDY_1>`: "Numer prawa jazdy: 01234/15/1234", "driver's license number:
+  D1234-5678-9012". No rule knew them, and an HR record or a rental agreement sent them in
+  clear. The shape differs by country, so the label is what makes a run of letters and digits
+  one, and it must hold a digit: "prawo jazdy kategorii B" names no number. The number may
+  stand in brackets or after a dash, after "kat. B" or a remark such as "(jeśli dotyczy)",
+  and a tachograph's driver card, "karta kierowcy", is read the same way.
+- **First names from the PESEL register**: the 630 names borne by at least 1 000 people in
+  Poland that the hand-written lists lacked, from the register's lists of 22 January 2025 that
+  the Ministry of Digital Affairs publishes on dane.gov.pl under CC0. The names polanon knows
+  without a language model now cover about 98% of women and 96% of men in the register, up
+  from 87% and 86%: Kazimiera, Sylwester, Marlena, and the Ukrainian and Belarusian names
+  Poland's residents bear, Oleksandr, Tetiana, Nataliia, written as the register writes them.
+  A form that is also an ordinary word, "inna", "melisa", "sylwestra", "idę", is treated as
+  "Kalina" is, and Max, Mark, Frank, Roger, Pascal, Christian and Aurora are left out as the
+  English words an agent's tools and logs are full of. Without the model, people found whole in
+  the training part of CLARIN-PL's KPWr rise from 39% to 45%, and in the agent benchmark
+  "Erik Holm" opening an English sentence no longer leaks: 2 of 243 values reach the model with
+  `pl_core_news_md`, down from 3.
+- **A benchmark on public Polish data polanon was never tuned on**, `benchmarks/run_external.py`.
+  It downloads the Polish rows of ai4privacy's OpenPII (CC-BY-4.0), the test part of CLARIN-PL's
+  KPWr (CC-BY-3.0) and GUS's TERYT street catalogue (CC-BY-4.0) on first use, keeps none of them
+  in the repository, and scores polanon, and Presidio if asked, as `benchmarks/run.py` does.
+  OpenPII is shuffled with a fixed seed: the first 1,000 Polish texts were read to find what the
+  fixes above fix, the next 1,000 never were. On those, with `pl_core_news_md`, polanon masks 71%
+  of 5,255 values whole with 435 spans outside them, and Presidio 66% with 2,641; on KPWr both
+  find 90% of people.
+
+### Changed
+
+- **The README shows polanon at work and how it compares.** The terminal demo, now an animated
+  SVG drawn by `benchmarks/terminal_demo.py`, shows the gateway in Docker next to the library
+  and ends on the scores against Presidio. `benchmarks/comparison_chart.py` draws those scores
+  as a chart under "How it compares", and a button at the top opens the demo that runs polanon
+  in the browser, with nothing sent anywhere.
+
+### Fixed
+
+- **An e-mail address with letters from outside Polish is masked whole.** Only Polish letters
+  were accepted next to the Latin ones, so `françois.dupont@example.com` was masked from its "ç"
+  on and "franç" went to the model; a German, Czech or Scandinavian name in an address lost the
+  same way, and one made of such letters alone was not masked at all. Every letter of any
+  alphabet now counts, in the local part, the domain and the bracketed `[at]` form. Found by
+  measuring on the Polish rows of ai4privacy's OpenPII, where 24 of 537 addresses leaked so.
+- **A NIP, ID card or payment card number right after its label is masked with a typo in it**,
+  as a PESEL already was. Without the label the checksum decides, and a number one keystroke
+  off its real value after "NIP:", "numer dowodu osobistego:" or "numer karty kredytowej" went
+  out in clear. "Numer ubezpieczenia społecznego", which a translated form writes for the PESEL,
+  is read as a PESEL label too. The same numbers without a label are left as they were.
+- **A street with "nr" before its house number, and a street in form fields, are masked.**
+  "przy ulicy Długiej nr 36" or "al. Mickiewicza numer 228": the "nr" ended the street, and the
+  street with its number went out in clear. A form or a CRM export writes the street and the
+  number in fields of their own, "Ulica: Kwiatowa", "Numer domu: 8A", "house number: 5", with
+  no "ul." and no postcode next to them; such a field is masked once it has its colon, so
+  "ulica handlowa nr 1" in a sentence stays as it is.
+- **A name with initials is one person**: "George W. Bush" went out as `<OSOBA_1> <OSOBA_2>`
+  and "C. Alexander i S. Ishikawa" as four people, since one detector stopped at an initial and
+  another started after it. Nothing leaked, but the model read two people where there was one.
+  Two person spans one space apart are now joined when the space follows an initial or comes
+  right before one; two names side by side without an initial stay two.
+- **Streets as the TERYT register names them are masked whole.** Every one of the 50 449
+  street names in GUS's TERYT catalogue of 16 November 2026, written with its house number,
+  was run through the rules, and 91.4% came out masked whole. Missed were numbers in a name
+  ("ul. 1000-lecia", "10-go Pułku Piechoty", "83. Pułku Strzelców"), initials ("ul. A.
+  Słonimskiego"), titles beyond the usual few ("inż.", "mgr", "adw.", "kmdr"), small words and
+  years ("Nad Stawem", "Bohaterów Wojny 1920 r."), a name in quotes or opened by "im.", and
+  the kinds "Wybrzeże", "Nabrzeże", "Trakt", "Pasaż", "Zaułek" and "bulw.". Now 95.3% are,
+  98.0% of those with "ul.", with no new span on any other benchmark.
+
 ## [0.3.8] - 2026-11-17
 
 The gateway as a Docker image, for a tool that is already written: one command, and the tool

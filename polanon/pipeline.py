@@ -216,7 +216,8 @@ def _outside(spans: list[Span], ranges: list[tuple[int, int]], text: str) -> lis
 #: Types whose every value carries a digit: an identifier, a phone number, a date, an address with
 #: its house number.
 _DIGIT_TYPES = frozenset(
-    {"PESEL", "NIP", "REGON", "KRS", "PL_ID", "PL_PASSPORT", "IBAN", "CREDIT_CARD", "PHONE"}
+    {"PESEL", "NIP", "REGON", "KRS", "PL_ID", "PL_PASSPORT", "DRIVING_LICENCE", "IBAN"}
+    | {"CREDIT_CARD", "PHONE"}
     | {"POSTAL_CODE", "ADDRESS", "PLATE", "VIN", "DATE", "BIRTH_DATE", "TAX_ID", "COMPANY_ID"}
     | {"BANK_ACCOUNT"}
 )

@@ -71,6 +71,7 @@ _GROUPED_TYPES = frozenset(
         "COMPANY_ID",
         "PL_ID",
         "PL_PASSPORT",
+        "DRIVING_LICENCE",
         "VIN",
         "PHONE",
     }

@@ -63,7 +63,7 @@ def test_a_foreign_title_is_no_part_of_a_name():
         "Wiśniewskiej",
         "Wiśniewską",
     ]
-    assert known_parts("Mrs Emily Carter", "PERSON", trusted=True) == ["Emily", "Carter"]
+    assert known_parts("Mrs Ottoline Carter", "PERSON", trusted=True) == ["Ottoline", "Carter"]
 
 
 def test_each_part_of_a_double_surname_is_masked():

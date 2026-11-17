@@ -171,14 +171,26 @@ def _is_plate_value(value: str) -> bool:
 #: "przy ulicy Długiej 5", "na placu Wolności 2", which the nominative alone let through whole.
 _STREET = (
     r"(?:ul|al|pl|os|ulic[aąęy]|ale(?:ja|je|i|ją|ję|jach)|plac(?:u|em)?|osiedl(?:e|a|u|em)"
-    r"|rond(?:o|a|em|zie)|skwer(?:u|em|ze)?)"
+    r"|rond(?:o|a|em|zie)|skwer(?:u|em|ze)?"
+    # Streets the TERYT register files under other kinds: "Wybrzeże Kościuszkowskie 20",
+    # "Nabrzeże Wieleckie 5", "Trakt Lubelski 120", "Pasaż Grunwaldzki 3", "bulw. Filadelfijski".
+    r"|bulw|bulwar\w*|wybrze[żz]\w*|nabrze[żz]\w*|trak(?:t\w*|cie)|pasa[żz]\w*|zau[łl]\w*)"
 )
-#: A name component: a capitalised word (Roman numerals such as "II" included), or a leading day
-#: number as in "3 Maja". A separate Roman-numeral branch matched "I" a second way, and on OCR
-#: output with a run of "I" tokens the failed match backtracked through 2^n combinations.
-_NAME_PART = r"(?:[A-ZŁŚŻŹĆÓĄĘŃ][\w'\u2019-]*|\d{1,2}(?=\s+[A-ZŁŚŻŹĆÓĄĘŃ]))"
-#: An abbreviated title in front of the patron's name: "ul. gen. Andersa", "al. Kard. Wyszyńskiego".
-_TITLE = r"(?i:gen|ks|św|sw|prof|kard|marsz|płk|plk|abp|bp|bł|dr|mjr|kpt|ppor|por|hetm)\."
+#: A name component: a capitalised word (Roman numerals such as "II" included), in quotes as in
+#: skwer im. "Solidarności", a leading day number as in "3 Maja", or a number the name counts
+#: by: "1000-lecia", "10-go Pułku", "83. Pułku". A separate Roman-numeral branch matched "I" a
+#: second way, and on OCR output with a run of "I" tokens the failed match backtracked through
+#: 2^n combinations.
+_NAME_PART = (
+    r"(?:[\"„“]?[A-ZŁŚŻŹĆÓĄĘŃ][\w'\u2019-]*[\"”]?|\d{1,2}(?=\s+[A-ZŁŚŻŹĆÓĄĘŃ])"
+    r"|\d{1,4}-(?:lecia|lecie|go|ej|ego|tej|ty|ci|ym)\b|\d{1,3}\.(?=\s+[A-ZŁŚŻŹĆÓĄĘŃ]))"
+)
+#: An abbreviated title in front of the patron's name, or an initial: "ul. gen. Andersa", "al.
+#: Kard. Wyszyńskiego", "ul. inż. Bohdana Łozińskiego", "ul. A. Słonimskiego".
+_TITLE = (
+    r"(?:(?i:gen|ks|św|sw|prof|kard|marsz|płk|plk|ppłk|pplk|abp|bp|bł|dr|mjr|kpt|ppor|por|hetm"
+    r"|inż|inz|mgr|adw|asp|kmdr|hm|phm|kpr|plut|sierż|sierz|adm)|[A-ZŁŚŻŹĆÓĄĘŃ])\."
+)
 #: A house number, optionally with a flat number: "43A", "12/4", "15 m. 3", "5 lok. 12".
 _HOUSE = r"\d+[A-Za-z]?(?:\s*/\s*\d+[A-Za-z]?)?(?:\s*(?:m|lok(?:al)?)\.?\s*\d+[A-Za-z]?)?"
 #: The most words a street's name takes, and the most titles in front of it: "Jana Pawła II",
@@ -187,15 +199,24 @@ _HOUSE = r"\d+[A-Za-z]?(?:\s*/\s*\d+[A-Za-z]?)?(?:\s*(?:m|lok(?:al)?)\.?\s*\d+[A
 #: the run, so "Ulica Ulica ..." or "Z Z ..." of 5,000 words took seconds.
 _STREET_WORDS = 8
 _TITLES = 3
-#: The words of a street's name after its first one: "Pawła II", "im. Jana", "pod Lipami".
-_MORE_STREET_WORDS = rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}"
+#: The small words and years a street's name holds after its first word: "Pawła II", "im. Jana",
+#: "pod Lipami nad Wisłą", "Bohaterów Wojny 1920 r.", "Andrzeja Szwajkerta ps. Jędruś".
+_STREET_LINKS = (
+    r"i|w|we|z|ze|na|nad|pod|przy|za|od|do|o|u|im\.|imienia|ps\.|vel|von|van|der|de|la|di|del"
+    r"|(?:1[0-9]|20)\d\d(?:\s+r\.)?"
+)
+#: The words of a street's name after its first one.
+_MORE_STREET_WORDS = rf"(?:\s+(?:{_NAME_PART}|{_TITLE}|{_STREET_LINKS})){{0,{_STREET_WORDS - 1}}}"
+#: "nr" or "numer" written between a street and its house number: "przy ulicy Długiej nr 36".
+#: It ended the street, and the street with its number went out in clear.
+_HOUSE_NR = r"(?i:nr|numer)\.?"
 
 ADDRESS_PATTERN = re.compile(
     # The word boundary matters: without it the "al" at the end of "TOTAL" reads as "al." (aleja),
     # and an invoice line such as "TOTAL M0061 Catalyst 1" became an address cut mid-word.
     # PDF output and quick typing drop the space after the prefix's dot: "ul.Długa 5".
-    rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:{_TITLE}\s+){{0,{_TITLES}}}{_NAME_PART}"
-    rf"{_MORE_STREET_WORDS}\s+{_HOUSE}"
+    rf"\b(?i:{_STREET})(?:\.\s*|\s+)(?:(?:{_TITLE}|im\.|imienia)\s+){{0,{_TITLES}}}{_NAME_PART}"
+    rf"{_MORE_STREET_WORDS}\s+(?:{_HOUSE_NR}\s*)?{_HOUSE}"
 )
 
 #: A short house number of a street written without its prefix, with a flat number if any.
@@ -210,8 +231,8 @@ _SHORT_HOUSE = (
 #: numbers are short, so "NIP 1234567890, 00-950" is not read as a street.
 ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
     rf"(?<![\w.]){_NAME_PART}"
-    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|i|w|na|pod|im\.)){{0,{_STREET_WORDS - 1}}}[ \t]+"
-    rf"{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|{_STREET_LINKS})){{0,{_STREET_WORDS - 1}}}[ \t]+"
+    rf"(?:{_HOUSE_NR}[ \t]*)?{_SHORT_HOUSE}(?=[ \t]*,?[ \t]*\d{{2}}-\d{{3}}\b)"
 )
 
 #: A street without its prefix that a sentence names: "Adres: Japczaka 17", "zam. Długa 5",
@@ -222,7 +243,7 @@ ADDRESS_BEFORE_POSTCODE_PATTERN = re.compile(
 _STREET_WITHOUT_PREFIX = (
     rf"(?:{_TITLE}[ \t]+){{0,{_TITLES}}}{_NAME_PART}"
     rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE})){{0,{_STREET_WORDS - 1}}}?"
-    rf"[ \t]+(?P<house>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
+    rf"[ \t]+(?:(?P<nr>{_HOUSE_NR})[ \t]*)?(?P<house>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
 )
 ADDRESS_AFTER_LABEL_PATTERN = re.compile(
     r"(?<![\w.])(?i:adres|zam\.|zamieszka[łl][aey]|mieszka(?:[ \t]+(?:przy|na))?)(?!\w)"
@@ -231,6 +252,19 @@ ADDRESS_AFTER_LABEL_PATTERN = re.compile(
 ADDRESS_BEFORE_TOWN_PATTERN = re.compile(
     rf"(?<![\w.])(?i:z|ze|na|przy|do)[ \t]+(?P<value>{_STREET_WITHOUT_PREFIX})"
     r"(?=[ \t]+w[ \t]+(?P<town>[A-ZŁŚŻŹĆÓĄĘŃ][\w-]*))"
+)
+#: A street and its house number in fields of their own, as a form or a CRM export writes them:
+#: "Ulica: Kwiatowa", "Numer domu: 8A", "house number: 5". The colon makes it a field; without
+#: one, "ulica handlowa nr 1" or "numer domu 5 osób" is a sentence.
+ADDRESS_STREET_FIELD_PATTERN = re.compile(
+    r"(?<![\w.])(?i:ulica|street)[ \t]*:[ \t]*"
+    rf"(?P<value>{_NAME_PART}"
+    rf"(?:[ \t]+(?:{_NAME_PART}|{_TITLE}|{_STREET_LINKS})){{0,{_STREET_WORDS - 1}}})"
+)
+ADDRESS_NUMBER_FIELD_PATTERN = re.compile(
+    r"(?<![\w.])(?i:(?:nr|numer)\.?[ \t]+(?:domu|budynku|lokalu|mieszkania)"
+    r"|(?:house|building|flat|apartment)[ \t]+(?:no|number)\.?)[ \t]*:[ \t]*"
+    rf"(?P<value>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
 )
 #: The endings of a street after "z", "na", "przy" or "do": "Długiej", "Mickiewicza",
 #: "Piłsudskiego", "Kościuszki", "Rynku", "Kwiatów". A product's name has none: "Windows".
@@ -243,16 +277,20 @@ _NOT_A_TOWN = frozenset(
     | {"stanach", "emiratach", "niemczech", "włoszech", "węgrzech"}
 )
 
-_POLISH_LETTERS = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-_EMAIL_LOCAL = rf"A-Za-z0-9._%+\-{_POLISH_LETTERS}"
-_EMAIL_LABEL = rf"[A-Za-z0-9\-{_POLISH_LETTERS}]+"
+#: What an address may hold, in a character class: letters of any alphabet, as an address with a
+#: French, German or Czech name in it has them, digits, "_" and ".%+-". Only Polish letters were
+#: allowed once, and "françois.dupont@…" was masked from its "ç" on, with "franç" left in front.
+_EMAIL_LOCAL = r"\w.%+\-"
+_EMAIL_LABEL = r"[\w\-]+"
+#: A top-level domain: letters only, of any alphabet.
+_EMAIL_TLD = r"[^\W\d_]{2,}"
 _EMAIL_AT = r"\s*[\[({]\s*(?i:at|małpa|malpa)\s*[\])}]\s*"
 _EMAIL_DOT = r"(?:\.|\s*[\[({]\s*(?i:dot|kropka)\s*[\])}]\s*)"
 
 #: An e-mail address with its "@" written out in brackets, and optionally its dots too.
 OBFUSCATED_EMAIL_PATTERN = re.compile(
     rf"(?<![{_EMAIL_LOCAL}])[{_EMAIL_LOCAL}]+{_EMAIL_AT}"
-    rf"{_EMAIL_LABEL}(?:{_EMAIL_DOT}{_EMAIL_LABEL})*{_EMAIL_DOT}[A-Za-z{_POLISH_LETTERS}]{{2,}}"
+    rf"{_EMAIL_LABEL}(?:{_EMAIL_DOT}{_EMAIL_LABEL})*{_EMAIL_DOT}{_EMAIL_TLD}"
 )
 
 #: Sites whose path starts with the handle of the person or the organisation the page belongs to.
@@ -369,8 +407,21 @@ _ID_CARD_LABEL = re.compile(
 _PASSPORT_LABEL = re.compile(
     r"(?i)(?:paszport\w*|passport)(?:\s+(?:nr|no|numer|number|to))?\.?\s*[:-]?\s*$"
 )
-#: Words that end right before a PESEL: "PESEL:", "nr PESEL", "numer PESEL to".
-_PESEL_LABEL = re.compile(r"(?i)pesel\w*(?:\s+(?:nr|numer|to))?\.?\s*[:-]?\s*$")
+#: Words that end right before a PESEL: "PESEL:", "nr PESEL", "numer PESEL to", and the social
+#: insurance number a translated form asks for, which in Poland is the PESEL.
+_PESEL_LABEL = re.compile(
+    r"(?i)(?:pesel\w*|(?:nr|numer\w*)\.?\s+ubezpieczenia(?:\s+społeczn\w*)?)"
+    r"(?:\s+(?:nr|numer|to))?\.?\s*[:(-]?\s*$"
+)
+#: Words that end right before a NIP: "NIP:", "nr NIP", "NIP UE". A label starts a word.
+_NIP_LABEL = re.compile(r"(?i)(?<![^\W\d_])nip(?:\s+(?:ue|nr|numer|to))?\.?\s*[:(-]?\s*$")
+#: Words that end right before a payment card's number: "numer karty kredytowej", "nr karty:",
+#: "karta płatnicza nr", "card number".
+_CARD_LABEL = re.compile(
+    r"(?i)(?:(?:nr|numer\w*)\.?\s+kart\w*(?:\s+(?:kredytow|płatnicz|debetow)\w*)?"
+    r"|kart[aą]\s+(?:kredytow|płatnicz|debetow)\w*(?:\s+(?:nr|numer))?"
+    r"|(?:credit\s+|debit\s+)?card\s+(?:no|number))\.?\s*[:(-]?\s*$"
+)
 #: Phone labels: a nine-digit REGON-looking number after these is a phone (#8). A label starts a
 #: word, so the "tel" that ends "hotel" is none.
 _PHONE_LABEL = re.compile(
@@ -441,6 +492,23 @@ PATTERNS: list[Rule] = [
     # Polish word and a six-figure number ("dla 120000 osób") would pass the check one time in ten.
     ("PL_ID", re.compile(r"\b(?:[A-Z]{3} ?|[a-z]{3})\d{6}\b"), None),  # see _LOCATORS
     ("PL_PASSPORT", re.compile(r"\b(?:[A-Z]{2} ?|[a-z]{2})\d{7}\b"), None),  # see _LOCATORS
+    # A driving licence number has a different shape in every country, "01234/15/1234" in Poland,
+    # so only its label makes a run of letters and digits one, and so does the label of a
+    # tachograph's driver card. It must hold a digit: "prawo jazdy kategorii B" or "prawo jazdy:
+    # tak" names no number. Between the label and the number may stand the categories ("kat.
+    # B"), a remark in brackets ("(jeśli dotyczy)"), a colon, a dash or an opening bracket.
+    (
+        "DRIVING_LICENCE",
+        re.compile(
+            r"(?i:\b(?:praw(?:o|a|em)\s+jazdy|driv(?:ing|er'?s|er\u2019s)\s+licen[cs]e"
+            r"|kart(?:a|y|ę|ą|cie)\s+kierowcy)"
+            r"(?:\s+kat(?:\.|egorii)\s*[A-Z][A-Z0-9+]*(?:\s*,\s*[A-Z][A-Z0-9+]*)*)?"
+            r"(?:\s+(?:nr|numer|no|number))?\.?)"
+            r"(?:\s*\([^()\n]{1,30}\))?\s*[:#(\u2013\u2014-]?\s*"
+            r"(?P<value>(?=[A-Za-z0-9/-]*\d)[A-Za-z0-9][A-Za-z0-9/-]{3,18}[A-Za-z0-9])(?![\w/-])"
+        ),
+        None,
+    ),
     (
         "IBAN",
         re.compile(
@@ -457,15 +525,10 @@ PATTERNS: list[Rule] = [
     ("CREDIT_CARD", re.compile(r"(?<!\d)\d+(?:[ -]\d+)*"), None),
     # The lookbehind starts a match only where a run of address characters starts. Without it a
     # long run with no "@" — a hex dump, a base64 blob — was rescanned from every position.
-    # Polish letters are allowed in the local part and in every domain label (#7).
+    # Letters of any alphabet are allowed in the local part and in every domain label (#7).
     (
         "EMAIL",
-        re.compile(
-            r"(?<![A-Za-z0-9._%+\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
-            r"[A-Za-z0-9._%+\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+@"
-            r"[A-Za-z0-9.\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\."
-            r"[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]{2,}"
-        ),
+        re.compile(rf"(?<![{_EMAIL_LOCAL}])[{_EMAIL_LOCAL}]+@[\w.\-]+\.{_EMAIL_TLD}"),
         None,
     ),
     # An address written to slip past harvesters: "jan.kowalski [at] example.com", "(małpa)",
@@ -502,6 +565,8 @@ PATTERNS: list[Rule] = [
     ("ADDRESS", ADDRESS_BEFORE_POSTCODE_PATTERN, None),
     ("ADDRESS", ADDRESS_AFTER_LABEL_PATTERN, None),
     ("ADDRESS", ADDRESS_BEFORE_TOWN_PATTERN, None),
+    ("ADDRESS", ADDRESS_STREET_FIELD_PATTERN, None),
+    ("ADDRESS", ADDRESS_NUMBER_FIELD_PATTERN, None),
     ("VIN", re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"), is_valid_vin),
     # A lowercase VIN only after its label: seventeen lowercase letters and digits are a request
     # id, a session key or a hash far more often, and a European VIN carries no check digit.
@@ -606,6 +671,9 @@ def _locate_cards(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     groups = [m.span() for m in re.finditer(r"\d+", run)]
     if _account_shaped(text, match.start(), groups):
         return []
+    # Right after "numer karty" the run is the card, its checksum broken by a typo or not.
+    if _follows(_CARD_LABEL, text, match) and 12 <= sum(_width(g) for g in groups) <= 19:
+        return [match.span()]
     found: list[tuple[int, int]] = []
     first = 0
     while first < len(groups):
@@ -697,11 +765,22 @@ def _locate_pl_id(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     "PLN 100000" is an amount however the checksum falls, unless an ID card label stands before it.
     """
     value = match.group()
-    if not is_valid_pl_id(value):
-        return []
-    if value[:3].upper() in _NOT_AN_ID_SERIES and not _follows(_ID_CARD_LABEL, text, match):
+    if _follows(_ID_CARD_LABEL, text, match):
+        return [match.span()]  # its label names it, typo or not, as with a PESEL
+    if not is_valid_pl_id(value) or value[:3].upper() in _NOT_AN_ID_SERIES:
         return []
     return [match.span()]
+
+
+def _locate_nip(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return a NIP: right after a NIP label always, elsewhere only with its checksum.
+
+    A NIP mistyped by one digit after "NIP:" is still the company's or the person's, and went out
+    in clear; a number without the label is a NIP only when its checksum says so.
+    """
+    if _follows(_NIP_LABEL, text, match) or is_valid_nip(match.group()):
+        return [match.span()]
+    return []
 
 
 def _locate_passport(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
@@ -765,6 +844,8 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     after the label, and one before a town counts only when the street and the town are in the
     cases a sentence puts them in, "z Długiej 17 w Białymstoku", unlike "na Windows 11 w Polsce".
     """
+    if match.re in (ADDRESS_STREET_FIELD_PATTERN, ADDRESS_NUMBER_FIELD_PATTERN):
+        return [match.span("value")]
     if match.re in (ADDRESS_AFTER_LABEL_PATTERN, ADDRESS_BEFORE_TOWN_PATTERN):
         before_postcode = ADDRESS_BEFORE_POSTCODE_PATTERN.match(text, match.start("value"))
         if before_postcode is not None and before_postcode.end() == match.end("value"):
@@ -772,7 +853,8 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     if match.re is ADDRESS_AFTER_LABEL_PATTERN:
         return [match.span("value")]
     if match.re is ADDRESS_BEFORE_TOWN_PATTERN:
-        street = text[match.start("value") : match.start("house")].split()[-1].lower()
+        street_end = match.start("nr") if match.group("nr") else match.start("house")
+        street = text[match.start("value") : street_end].split()[-1].lower()
         town = match.group("town").lower()
         if (
             _STREET_IN_AN_OBLIQUE_CASE.search(street) is None
@@ -818,6 +900,7 @@ _LOCATORS: dict[str, Locator] = {
     "ADDRESS": _locate_address,
     "LINK": _locate_profile_link,
     "PESEL": _locate_pesel,
+    "NIP": _locate_nip,
     "REGON": _locate_regon,
     "IBAN": _locate_iban,
     "CREDIT_CARD": _locate_cards,

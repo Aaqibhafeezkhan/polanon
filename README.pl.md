@@ -14,6 +14,8 @@ nie potrzebuje niczego poza biblioteką standardową.
 polanon trafił do [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A),
 cotygodniowego newslettera Jakuba Mrugalskiego dla ludzi z branży IT, 13 listopada 2026.
 
+[![Wypróbuj polanon w przeglądarce](https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.pl.svg)](https://boromat.github.io/demo/)
+
 **Bez pisania kodu**, z bramką w Dockerze. Claude Code, n8n, Open WebUI, LibreChat, Hermes Agent
 i każde inne narzędzie, które mówi API OpenAI albo Anthropic, działają jak dotąd, a każde
 wywołanie jest maskowane, zanim wyjdzie:
@@ -34,7 +36,7 @@ Wszystkie narzędzia, bramkę bez Dockera i to, co robi z wywołaniem, opisuje
 
 **W Pythonie**, we własnym kodzie: zamaskuj tekst, wyślij go, przywróć odpowiedź.
 
-![polanon w terminalu maskuje polską prośbę o korektę faktury, a potem w Pythonie przywraca dane w odpowiedzi modelu](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.gif)
+![polanon w terminalu: maskowanie polskiego tekstu w Pythonie i przywracanie odpowiedzi, bramka w Dockerze przed narzędziem i wyniki wobec Presidio](https://raw.githubusercontent.com/boromat/polanon/main/docs/demo.pl.svg)
 
 ```bash
 pip install polanon
@@ -86,26 +88,34 @@ pocztowe.
 
 ## Na tle innych
 
+![polanon i Presidio na polskich danych, na których polanon nie był strojony: wartości zamaskowane w całości, fałszywe alarmy, rodzaje danych i osoby w prawdziwych tekstach](https://raw.githubusercontent.com/boromat/polanon/main/docs/comparison.pl.svg)
+
 |  | polanon | [Presidio](https://github.com/data-privacy-stack/presidio) | [pii-veil](https://pypi.org/project/pii-veil/) | [piimask](https://pypi.org/project/piimask/) |
 |---|---|---|---|---|
 | Przywracanie danych w odpowiedzi modelu | Tak, ze stabilnych tokenów takich jak `<OSOBA_1>`, także strumieniowo | Nie jest wbudowane: jego deanonymizer odszyfrowuje fragmenty na znanych pozycjach; dokumentacja zawiera przykład, który przywraca dane w odpowiedzi LLM | Tak, ze stabilnych tokenów i zapisanego mapowania | Tak, ze stabilnych tokenów |
 | Polskie identyfikatory z sumą kontrolną | PESEL, NIP, REGON, dowód osobisty, IBAN, karty płatnicze | PESEL; IBAN i karty płatnicze w wersji ogólnej | PESEL, NIP, REGON, IBAN, karty płatnicze; dowód osobisty i paszport tylko według wzorca | Brak; IBAN i karty płatnicze w wersji ogólnej |
 | Polskie imiona i nazwiska w każdym przypadku gramatycznym | Dla imion z listy i zgodnych z nimi nazwisk, bez modelu językowego; resztę dokłada spaCy | Z polskim modelem spaCy i zmapowaną etykietą `persName` | Nie są wykrywane | Nie są wykrywane; jego README sugeruje dodanie modelu NER |
 | Czego potrzebuje rdzeń | Niczego poza biblioteką standardową | spaCy, numpy, pydantic i kilku innych pakietów; modelu językowego tylko do imion i nazwisk oraz miejsc | pii-core i typer | Niczego poza biblioteką standardową |
-| Na [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon | 98% zamaskowanych w całości z `pl_core_news_md`, 86% przy samych regułach | 66% z tym samym modelem (presidio-analyzer 2.2.366) | Nie mierzono | Nie mierzono |
+| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 435 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
+| Na własnych [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon, na których była strojona | 98% zamaskowanych w całości z `pl_core_news_md`, 86% przy samych regułach | 67% z tym samym modelem | Nie mierzono | Nie mierzono |
 | Licencja | MIT | MIT | Apache-2.0 | MIT |
 
 Porównanie na podstawie własnej dokumentacji i kodu źródłowego każdego z projektów, stan na
-3 listopada 2026 r. Na przykładowych dokumentach uruchomiono tylko Presidio, skryptem
-z `benchmarks/`, i nie są to neutralne warunki: jedenaście syntetycznych dokumentów napisał autor
-biblioteki polanon, który dostrajał na nich jej reguły, a Presidio dostał tylko polski model, także
-do trzech faktur z zagranicy. Każde z tych narzędzi ma swoje miejsce. Presidio służy do wielu języków,
-danych ustrukturyzowanych i integracji z Azure, pii-veil do polskich identyfikatorów na licencji
-Apache-2.0, gdy imiona i nazwiska nie mają znaczenia, a piimask do identyfikatorów niezależnych od
-języka (e-mail, numery telefonów, karty płatnicze, IBAN, adresy IP, adresy URL) i amerykańskich
-numerów ubezpieczenia społecznego, ze strategiami podstawiania fałszywych wartości, haszowania
-i częściowego maskowania oraz zaszyfrowanym sejfem. polanon jest dla polskiego tekstu wysyłanego do
-modelu, gdy imiona i nazwiska w nim zawarte oraz przywrócona odpowiedź liczą się tak samo jak numery.
+3 listopada 2026 r.; pomiary z 17 listopada 2026 r. Uruchomiono tylko Presidio, skryptami
+z `benchmarks/`. Trzynaście własnych dokumentów biblioteki polanon nie jest neutralnym terenem:
+napisał je jej autor i dostrajał na nich reguły, a Presidio dostał tylko polski model, także do
+trzech faktur z zagranicy. Neutralne są polskie wiersze OpenPII od ai4privacy i KPWr od CLARIN-PL:
+na mierzonych częściach polanon nigdy nie był strojony, a różnica maleje tam do pięciu punktów
+i sześć razy mniej fałszywych alarmów, z remisem na osobach, gdzie pracuje ten sam model spaCy.
+Presidio wygrywa na losowych kodach bez etykiety, które czyta wzorcami o niskiej pewności,
+oznaczającymi też kody produktów i numery zamówień. Każde z tych narzędzi ma swoje miejsce. Presidio
+służy do wielu języków, danych ustrukturyzowanych i integracji z Azure, pii-veil do polskich
+identyfikatorów na licencji Apache-2.0, gdy imiona i nazwiska nie mają znaczenia, a piimask do
+identyfikatorów niezależnych od języka (e-mail, numery telefonów, karty płatnicze, IBAN, adresy IP,
+adresy URL) i amerykańskich numerów ubezpieczenia społecznego, ze strategiami podstawiania
+fałszywych wartości, haszowania i częściowego maskowania oraz zaszyfrowanym sejfem. polanon jest dla
+polskiego tekstu wysyłanego do modelu, gdy imiona i nazwiska w nim zawarte oraz przywrócona
+odpowiedź liczą się tak samo jak numery.
 
 ## Instalacja
 
@@ -545,7 +555,7 @@ Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód os
 płatnicze), numery KRS obok swojej etykiety, adresy e-mail i numery telefonów, adresy i kody
 pocztowe, linki do profilu osoby (LinkedIn, GitHub, GitHub Pages, GitLab, media społecznościowe) aż
 po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów po etykiecie
-(„nr rej.”), numery VIN, numery paszportów, daty urodzenia, klucze API, tokeny i hasła, polskie
+(„nr rej.”), numery VIN, numery paszportów, numery praw jazdy po etykiecie, daty urodzenia, klucze API, tokeny i hasła, polskie
 imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp. z o.o.”, „S.A.”,
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
 maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”,
