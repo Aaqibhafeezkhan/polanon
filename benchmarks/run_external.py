@@ -48,7 +48,11 @@ OPENPII = (
     "https://huggingface.co/datasets/ai4privacy/pii-masking-openpii-1m/resolve/main/data/"
     "validation.jsonl"
 )
-KPWR = "https://huggingface.co/datasets/clarin-pl/kpwr-ner/resolve/main/data/kpwr-ner-n82-test.iob"
+KPWR = (
+    "https://huggingface.co/datasets/clarin-pl/kpwr-ner/resolve/main/data/kpwr-ner-n82-{part}.iob"
+)
+#: KPWr's parts as its files name them: the test part, and the part meant for training.
+KPWR_PARTS = {"test": "test", "train": "train-tune"}
 TERYT = (
     "https://eteryt.stat.gov.pl/eTeryt/rejestr_teryt/udostepnianie_danych/baza_teryt/"
     "uzytkownicy_indywidualni/pobieranie/pliki_pelne.aspx?contrast=default"
@@ -171,13 +175,14 @@ def openpii_rows(data: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.open(encoding="utf-8")]
 
 
-def kpwr_sentences(data: Path) -> list[dict[str, list[str]]]:
-    """KPWr's test sentences as tokens and their IOB tags, downloaded once."""
-    path = data / "kpwr-ner-n82-test.iob"
+def kpwr_sentences(data: Path, part: str = "test") -> list[dict[str, list[str]]]:
+    """KPWr's sentences of one part, "test" or "train", as tokens and IOB tags, downloaded once."""
+    name = KPWR_PARTS[part]
+    path = data / f"kpwr-ner-n82-{name}.iob"
     if not path.exists():
-        print("downloading KPWr's test part...", file=sys.stderr)
+        print(f"downloading KPWr's {part} part...", file=sys.stderr)
         data.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(_get(KPWR))
+        path.write_bytes(_get(KPWR.format(part=name)))
     sentences, tokens, tags = [], [], []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("-DOCSTART"):
@@ -311,8 +316,13 @@ def _written_together(tokens: list[str], index: int) -> bool:
     return word in _NO_SPACE_BEFORE or previous in _NO_SPACE_AFTER
 
 
-def kpwr_sentence(row: dict[str, list[str]]) -> tuple[str, list[GoldEntity]]:
-    """A sentence as written, rebuilt from its tokens, and the values of KPWR_TYPES in it."""
+def kpwr_sentence(
+    row: dict[str, list[str]], types: dict[str, str] | None = KPWR_TYPES
+) -> tuple[str, list[GoldEntity]]:
+    """A sentence as written, rebuilt from its tokens, and the values of `types` in it.
+
+    With `types` None every name KPWr annotates is returned, under its own label.
+    """
     tokens = row["tokens"]
     text, starts = "", []
     for index, token in enumerate(tokens):
@@ -323,7 +333,8 @@ def kpwr_sentence(row: dict[str, list[str]]) -> tuple[str, list[GoldEntity]]:
     gold: list[list[Any]] = []
     current: list[Any] | None = None
     for index, (token, tag) in enumerate(zip(tokens, row["ner"], strict=True)):
-        kind = KPWR_TYPES.get(tag[2:]) if tag != "O" else None
+        label = tag[2:]
+        kind = None if tag == "O" else label if types is None else types.get(label)
         if tag.startswith("I-") and current and current[2] == kind:
             current[1] = starts[index] + len(token)
             continue
