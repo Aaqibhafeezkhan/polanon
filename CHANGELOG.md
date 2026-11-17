@@ -7,6 +7,22 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Changed
+
+- **One person is one number in every case, also without a key.** Each case of a name went out
+  as a token of its own: "Jan Kowalski złożył wniosek. Proszę odpisać Janowi Kowalskiemu" became
+  `<OSOBA_1> złożył wniosek. Proszę odpisać <OSOBA_2>`, and the model read two people. A form of
+  a person who already has a token now takes that token with its case after a colon,
+  `<OSOBA_1:celownik>`, so the model sees one person in the case the text used. Restoring already
+  understood such tokens and declines the name back; a case is written only where declining the
+  kept form gives exactly the text's spelling, so restoring the masked text still gives the text
+  back, and any other form, one in capitals for instance, keeps a token of its own. The mapping
+  holds no new entries for the other cases. Masked text may now hold such tokens:
+  `CASED_TOKEN_PATTERN`, new in the package, matches a token with a case or without, where
+  `TOKEN_PATTERN` matches one without. Text masked before and sent again keeps them whole, the
+  token instructions tell the model what they mean, and a stable token from a key carries no
+  case, since an index searches for it as it is.
+
 ### Fixed
 
 - **English words that are forms of a first name stay words.** Three of the names 0.3.9 took

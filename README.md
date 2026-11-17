@@ -585,7 +585,12 @@ Kowalskiego". `token_instructions("pl")` asks for it, and every restore understa
 the gateway included. Declined are names of one or two words the rules read for sure: a listed
 first name and a surname such as Kowalski, Nowak, Bednarek, Mickiewicz or Duda. A surname alone
 that may be a man's or a woman's, a foreign name, a company and a place come back as written, and
-the case is dropped. Spellings that differ only in letter
+the case is dropped. The other cases of a person who already has a token keep the person's
+number and carry their case: after "Jan Kowalski", "Janowi Kowalskiemu" goes out as
+`<OSOBA_1:celownik>`, so the model sees one person, and restoring declines the name back into
+exactly the form the text wrote. A form that declining does not give back letter for letter, such
+as one in capitals, keeps a token of its own, and a stable token from a key carries no case.
+`CASED_TOKEN_PATTERN` matches a token with a case or without. Spellings that differ only in letter
 case, in the kind of whitespace (a no-break space, a line break, a run of spaces) or in invisible
 characters are the same value, and so are an identifier's groups written apart or together: they
 share its token, and restore writes the spelling seen first. Passwords and custom types are the

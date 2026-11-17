@@ -53,7 +53,14 @@ from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.mock import MockJudge
 from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
-from polanon.policy import ENTITY_TYPES, TOKEN_PATTERN, Mode, check_mode, token_for
+from polanon.policy import (
+    CASED_TOKEN_PATTERN,
+    ENTITY_TYPES,
+    TOKEN_PATTERN,
+    Mode,
+    check_mode,
+    token_for,
+)
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import StreamRestorer, restored
 from polanon.turn import MaskedTurn, UnknownBlocks, token_instructions
@@ -67,6 +74,7 @@ from polanon.types import (
 )
 
 __all__ = [
+    "CASED_TOKEN_PATTERN",
     "DEFAULT_ENABLED",
     "ENTITY_TYPES",
     "TOKEN_PATTERN",

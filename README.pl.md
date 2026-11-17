@@ -605,7 +605,12 @@ Kowalski” tam, gdzie tekst mówił „Jana Kowalskiego”. Prosi o to `token_i
 a rozumie to każde przywracanie, także strumień i bramka. Odmieniane są imiona i nazwiska z jednego
 lub dwóch słów, które reguły czytają na pewno: imię z listy i nazwisko w rodzaju Kowalski, Nowak,
 Bednarek, Mickiewicz albo Duda. Samo nazwisko, które może należeć do mężczyzny albo kobiety, obce
-nazwisko, firma i miejsce wracają tak, jak były zapisane, a przypadek znika. Zapisy różniące się
+nazwisko, firma i miejsce wracają tak, jak były zapisane, a przypadek znika. Inne przypadki osoby,
+która ma już token, dostają jej numer i swój przypadek: po „Jan Kowalski” forma „Janowi
+Kowalskiemu” idzie jako `<OSOBA_1:celownik>`, więc model widzi jedną osobę, a przywracanie odmienia
+imię i nazwisko z powrotem dokładnie do formy z tekstu. Forma, której odmiana nie odtwarza litera
+w literę, na przykład zapisana wielkimi literami, dostaje własny token, a stały token z kluczem
+nie ma przypadku. `CASED_TOKEN_PATTERN` rozpoznaje token z przypadkiem i bez. Zapisy różniące się
 tylko wielkością liter, rodzajem białych znaków (spacja
 niełamiąca, podział wiersza, kilka spacji z rzędu) albo niewidocznymi znakami to ta sama wartość;
 tak samo identyfikator, którego grupy zapisano osobno albo razem: wszystkie te zapisy dzielą jeden

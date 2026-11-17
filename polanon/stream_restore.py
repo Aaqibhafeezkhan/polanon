@@ -14,11 +14,11 @@ from collections.abc import Callable
 from typing import Protocol
 
 from polanon._inflection import CASE_NAMES, inflected
-from polanon.policy import LABEL_TO_ENTITY
+from polanon.policy import CASED_TOKEN_PATTERN, LABEL_TO_ENTITY
 
 #: A token as an answer may hold it: ``<OSOBA_1>``, or with a case after a colon,
 #: ``<OSOBA_1:wołacz>``.
-RESTORED_TOKEN_PATTERN = r"<(?P<label>[A-Z_]+)_(?P<n>\d+)(?::(?P<case>[^\W\d_]+))?>"  # noqa: S105
+RESTORED_TOKEN_PATTERN = CASED_TOKEN_PATTERN
 _TOKEN_RE = re.compile(RESTORED_TOKEN_PATTERN)
 #: A trailing fragment that may still become a token, e.g. "<", "<OSOB", "<OSOBA_1", "<OSOBA_1:wo".
 _PARTIAL_RE = re.compile(r"<[A-Z_]*\d*(?::[^\W\d_]*)?$")
@@ -49,8 +49,8 @@ def restored(text: str, mapping: _Values, *, escape: Callable[[str], str] | None
     def value(match: re.Match[str]) -> str:
         token = f"<{match['label']}_{match['n']}>"
         original = mapping.get(token)
-        if original is None:
-            return match[0]
+        if original is None or original == token:
+            return match[0]  # unknown, or a placeholder typed as it is: it stays as written
         if match["case"] is not None:
             entity_type = LABEL_TO_ENTITY.get(match["label"], match["label"])
             original = inflected(original, entity_type, match["case"]) or original

@@ -16,12 +16,16 @@ from bisect import bisect_right
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from polanon._canonical import canonical
 from polanon._detection import detect
+from polanon._inflection import CASE_NAMES, inflected
 from polanon._known_parts import known_parts, logins_of, person_parts
 from polanon._matching import (
+    CASED_TOKEN_RE,
     TOKEN_RE,
     Haystack,
     Ranges,
+    base_token,
     folds,
     known_value_matches,
     place_known_values,
@@ -57,6 +61,13 @@ class _TokenAllocator:
     every document and process. One that another value of the mapping already holds is lengthened
     past it. Token-shaped text equal to it is the value's own token written back, and takes the
     value: a placeholder numbered by hand never has twelve digits that match an HMAC.
+
+    Without them, a person named in another case than the form the mapping keeps takes that
+    form's token with the case after a colon: "Janowi Kowalskiemu" after "Jan Kowalski" is
+    ``<OSOBA_1:celownik>``. The model sees one person, not two, and restoring declines the name
+    back. A case is written only where declining the kept form gives exactly the text's spelling,
+    so restoring the masked text gives the text back; any other form keeps a token of its own. A
+    stable token carries no case, since it is what an index searches for.
     """
 
     def __init__(
@@ -68,6 +79,8 @@ class _TokenAllocator:
         self._mapping: dict[str, str] = dict(existing_mapping)
         self._by_value: dict[tuple[str, str], str] = {}
         self._counters: dict[str, int] = {}
+        #: The canonical form of a person -> the tokens of the forms masked so far.
+        self._people: dict[str, list[str]] = {}
         self._pseudonyms = pseudonyms
         self._taken = (
             None if pseudonyms is None else owner_lookup(pseudonyms, self._mapping, type_of)
@@ -80,6 +93,7 @@ class _TokenAllocator:
             if value != token:
                 for key in value_keys(value, entity_type):
                     self._by_value.setdefault(key, token)
+                self._know_person(token, value, entity_type)
         for token in reserved:
             self._reserve(token)
             self._mapping.setdefault(token, token)
@@ -107,6 +121,9 @@ class _TokenAllocator:
             known = self._by_value.get(key)
             if known is not None:
                 return known
+        declined = self._declined(value, entity_type)
+        if declined is not None:
+            return declined
         if self._pseudonyms is not None and self._taken is not None:
             token = self._pseudonyms.allocate(value, entity_type, self._taken)
         else:
@@ -124,7 +141,31 @@ class _TokenAllocator:
             self._mapping[token] = value
         # Another spelling of the value may hold the token already: the first one written stays.
         self._mapping.setdefault(token, value)
+        self._know_person(token, self._mapping[token], entity_type)
         return token
+
+    def _know_person(self, token: str, value: str, entity_type: str) -> None:
+        """Remember a person's token by the canonical form of its value, for the other cases."""
+        if self._pseudonyms is None and entity_type == "PERSON":
+            tokens = self._people.setdefault(canonical(value, entity_type), [])
+            if token not in tokens:
+                tokens.append(token)
+
+    def _declined(self, value: str, entity_type: str) -> str | None:
+        """Return the token of a person `value` names in another case, with that case, or None.
+
+        Only a case that declines the kept form into exactly `value` is written, so restoring
+        gives `value` back: "JANA KOWALSKIEGO" is no case of "Jan Kowalski", whose genitive is
+        written "Jana Kowalskiego".
+        """
+        if self._pseudonyms is not None or entity_type != "PERSON":
+            return None
+        for token in self._people.get(canonical(value, entity_type), ()):
+            kept = self._mapping[token]
+            for case_name in CASE_NAMES:
+                if inflected(kept, entity_type, case_name) == value:
+                    return f"{token[:-1]}:{case_name}>"
+        return None
 
     @property
     def mapping(self) -> dict[str, str]:
@@ -161,8 +202,8 @@ def mask_known_values(text: str, mapping: dict[str, str]) -> str:
     hidden = {value.strip() for value, _ in values}
     occupied = [
         (match.start(), match.end())
-        for match in TOKEN_RE.finditer(text)
-        if mapping.get(match[0]) != match[0] and match[0] not in hidden
+        for match in CASED_TOKEN_RE.finditer(text)
+        if mapping.get(base_token(match)) != base_token(match) and match[0] not in hidden
     ]
     parts: list[str] = []
     cursor = 0
@@ -175,7 +216,7 @@ def mask_known_values(text: str, mapping: dict[str, str]) -> str:
 
 
 def _token_ranges(text: str) -> list[tuple[int, int]]:
-    return [(m.start(), m.end()) for m in TOKEN_RE.finditer(text)]
+    return [(m.start(), m.end()) for m in CASED_TOKEN_RE.finditer(text)]
 
 
 def _masked_already(text: str, mapping: dict[str, str]) -> list[tuple[int, int]]:
@@ -186,12 +227,14 @@ def _masked_already(text: str, mapping: dict[str, str]) -> list[tuple[int, int]]
     model that took "OSOBA_8" for a place sent "<<MIEJSCE_1>>", which restores to nobody. A
     placeholder the caller typed stands for itself and shelters nothing, and neither does
     token-shaped text the mapping hides as a value, such as a password written "<ADMIN_2024>".
+    A token with a case, "<OSOBA_8:dopełniacz>", is masked text as its token is.
     """
     hidden = {value.strip() for token, value in mapping.items() if value != token}
+    tokens = ((match, base_token(match)) for match in CASED_TOKEN_RE.finditer(text))
     return [
         match.span()
-        for match in TOKEN_RE.finditer(text)
-        if mapping.get(match[0], match[0]) != match[0] and match[0] not in hidden
+        for match, token in tokens
+        if mapping.get(token, token) != token and match[0] not in hidden
     ]
 
 
@@ -342,9 +385,11 @@ def _count(counts: dict[str, int], token: str) -> None:
     """Count one replacement under the type of the token it received.
 
     A value keeps its token when a guard reads it as another type, so the count follows the token:
-    "WA 12345" that went out as a registration is not counted as a postcode.
+    "WA 12345" that went out as a registration is not counted as a postcode. A token with a case
+    counts as the person it declines.
     """
-    entity_type = type_of(token) or token
+    match = CASED_TOKEN_RE.fullmatch(token)
+    entity_type = (type_of(base_token(match)) if match else None) or token
     counts[entity_type] = counts.get(entity_type, 0) + 1
 
 
@@ -426,7 +471,7 @@ def _mask_stage1(
         text,
     )
 
-    reserved = (match.group(0) for match in TOKEN_RE.finditer(text))
+    reserved = (base_token(match) for match in CASED_TOKEN_RE.finditer(text))
     return _substitute(text, spans, _TokenAllocator(existing_mapping, reserved, pseudonyms))
 
 
@@ -468,7 +513,7 @@ def _apply_findings(
         for finding in findings
         if finding.entity_type in enabled
         and len(finding.text.strip()) >= MIN_FINDING_CHARS
-        and TOKEN_RE.search(finding.text) is None
+        and CASED_TOKEN_RE.search(finding.text) is None
         and (allowlist is None or not allowlist.exempts(finding.entity_type, finding.text))
     ]
     masked = masking.masked
