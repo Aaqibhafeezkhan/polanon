@@ -11,8 +11,7 @@ Zamaskuj dane osobowe, zanim prompt opuści twoją sieć, wyślij do modelu same
 wstaw z powrotem do jego odpowiedzi, nawet wtedy, gdy przychodzi strumieniowo. Czysty Python: rdzeń
 nie potrzebuje niczego poza biblioteką standardową.
 
-polanon trafił do [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A),
-cotygodniowego newslettera Jakuba Mrugalskiego dla ludzi z branży IT, 13 listopada 2026.
+[Pisali o nas](#pisali-o-polanon)
 
 <p align="center"><a href="https://boromat.pl/demo/"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.pl.svg" alt="Wypróbuj polanon w przeglądarce"></a></p>
 

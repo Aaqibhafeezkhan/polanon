@@ -10,8 +10,7 @@
 your network, send only tokens to the model, and put the originals back into its answer, even
 while it streams. Pure Python: the standard library is the whole core.
 
-Featured in [unknowNews](https://mrugalski.pl/nl/wu/ojVtmS0K0CI892763N1hEauM1A), Jakub
-Mrugalski's weekly newsletter for people in IT, on 13 November 2026.
+[Written about us](https://github.com/boromat/polanon#written-about)
 
 <p align="center"><a href="https://boromat.pl/en/demo/"><img src="https://raw.githubusercontent.com/boromat/polanon/main/docs/try-demo.svg" alt="Try polanon in your browser"></a></p>
 
