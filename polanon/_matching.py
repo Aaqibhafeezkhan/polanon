@@ -107,6 +107,51 @@ _FOLD_FIX = str.maketrans({chr(0x03C2): chr(0x03C3), chr(0x0131): "i"})
 
 _PLAIN_DASHES = str.maketrans(dict.fromkeys(DASHES, "-"))
 
+#: Cyrillic and Greek letters a reader takes for Latin ones, lowercase, as :func:`fold` leaves
+#: them: "Jan Kowalski" written with a Cyrillic a and o reads as the Latin name, to a model too.
+#: A value with a token is searched for with these read as the Latin letters, so such a spelling
+#: does not leave it in clear. Only the search reads them so: what makes two values one, and the
+#: stable tokens, stay as they were.
+_LOOKALIKES = str.maketrans(
+    {
+        # Cyrillic: a, ve, ie, ka, em, en, o, er, es, te, u, ha, i, je, dze, komi de, qa, we
+        "\u0430": "a",
+        "\u0432": "b",
+        "\u0435": "e",
+        "\u043a": "k",
+        "\u043c": "m",
+        "\u043d": "h",
+        "\u043e": "o",
+        "\u0440": "p",
+        "\u0441": "c",
+        "\u0442": "t",
+        "\u0443": "y",
+        "\u0445": "x",
+        "\u0456": "i",
+        "\u0458": "j",
+        "\u0455": "s",
+        "\u0501": "d",
+        "\u051b": "q",
+        "\u051d": "w",
+        # Greek: alpha, beta, epsilon, zeta, eta, iota, kappa, mu, nu, omicron, rho, tau,
+        # upsilon, chi
+        "\u03b1": "a",
+        "\u03b2": "b",
+        "\u03b5": "e",
+        "\u03b6": "z",
+        "\u03b7": "h",
+        "\u03b9": "i",
+        "\u03ba": "k",
+        "\u03bc": "m",
+        "\u03bd": "n",
+        "\u03bf": "o",
+        "\u03c1": "p",
+        "\u03c4": "t",
+        "\u03c5": "y",
+        "\u03c7": "x",
+    }
+)
+
 #: Longer than any date, time or amount the check around a short number reads, as written with
 #: its joiners: "1.234.567.890,12" is 16 characters.
 _LONGEST_SHAPE = 20
@@ -151,6 +196,14 @@ def fold(text: str) -> str:
     if len(folded) != len(text):
         folded = "".join(char.lower()[0] for char in text)
     return folded.translate(_FOLD_FIX)
+
+
+def skeleton(text: str) -> str:
+    """Return :func:`fold` of `text` with the letters that look Latin made Latin.
+
+    Character for character, so positions in the result are positions in `text`.
+    """
+    return fold(text).translate(_LOOKALIKES)
 
 
 def squeeze(text: str) -> str:
@@ -277,7 +330,8 @@ class Haystack:
     """A text prepared for the searches beside the exact one, and the way back to the original.
 
     `text` is the guards' view of the text with every run of whitespace read as one space, and
-    `folded` is the same text lowercased character for character.
+    `folded` is the same text lowercased character for character, with the Cyrillic and Greek
+    letters that look Latin made Latin.
     """
 
     def __init__(self, text: str, view: View | None) -> None:
@@ -286,7 +340,7 @@ class Haystack:
         self._view = view
         self._squeezed = _Removal.of(seen, _WHITESPACE_RUN, " ")
         self.text = self._squeezed.text
-        self.folded = fold(self.text)
+        self.folded = skeleton(self.text)
         #: Whether `text` is the original as written, so a search in it repeats the exact one.
         self.as_written = view is None and not self._squeezed.gaps
 
@@ -382,7 +436,7 @@ def _prepared_needles(values: tuple[tuple[str, str], ...]) -> tuple[Needle, ...]
         folding = folds(entity_type)
         ungrouped = None
         if entity_type in _GROUPED_TYPES:
-            ungrouped = _GROUP_SEPARATOR.sub("", fold(read))
+            ungrouped = _GROUP_SEPARATOR.sub("", skeleton(read))
         needle = Needle(value.strip(), read, payload, folding, ungrouped)
         found.setdefault((needle.written, folding), needle)
     return tuple(sorted(found.values(), key=lambda needle: (-len(needle.read), needle.folds)))
@@ -485,7 +539,7 @@ def _find(text: str, haystack: Haystack, found: list[Needle]) -> _Found:
         if not needle.folds and not (haystack.as_written and needle.read == needle.written)
     ]
     for indices, searched, wanted in (
-        (folding, haystack.folded, [fold(found[i].read) for i in folding]),
+        (folding, haystack.folded, [skeleton(found[i].read) for i in folding]),
         (exact_case, haystack.text, [found[i].read for i in exact_case]),
     ):
         for index, positions in zip(indices, occurrences(searched, wanted), strict=True):

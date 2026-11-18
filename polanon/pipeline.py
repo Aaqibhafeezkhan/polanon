@@ -29,6 +29,7 @@ from polanon._matching import (
     folds,
     known_value_matches,
     place_known_values,
+    skeleton,
     type_of,
     value_keys,
 )
@@ -40,6 +41,20 @@ from polanon.judge.parsing import MIN_FINDING_CHARS
 from polanon.policy import ENTITY_TYPES, token_for
 from polanon.pseudonyms import Pseudonyms, owner_lookup
 from polanon.types import AnonymizationResult, JudgeFallback, Span, _trim, merge_spans
+
+
+def _token_keys(value: str, entity_type: str) -> list[tuple[str, str]]:
+    """Return the keys that give two spellings of a value one token.
+
+    These are :func:`value_keys`, and for a value whose letter case does not matter each of them
+    once more with the Cyrillic and Greek letters that look Latin made Latin: "Jan Kowalski"
+    written with a Cyrillic a and o is found as the value it looks like, and keeps its token.
+    The stable tokens are computed from :func:`value_keys` alone, so they do not change.
+    """
+    keys = value_keys(value, entity_type)
+    if not folds(entity_type):
+        return keys
+    return keys + [(f"{kind}, lookalike", skeleton(key)) for kind, key in keys]
 
 
 class _TokenAllocator:
@@ -91,7 +106,7 @@ class _TokenAllocator:
                 continue
             self._reserve(token)
             if value != token:
-                for key in value_keys(value, entity_type):
+                for key in _token_keys(value, entity_type):
                     self._by_value.setdefault(key, token)
                 self._know_person(token, value, entity_type)
         for token in reserved:
@@ -116,7 +131,7 @@ class _TokenAllocator:
         Any key the value shares with a value seen before means the same value: an identifier
         written once with its groups apart and once together keeps one token.
         """
-        keys = value_keys(value, entity_type)
+        keys = _token_keys(value, entity_type)
         for key in keys:
             known = self._by_value.get(key)
             if known is not None:

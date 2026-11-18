@@ -624,7 +624,8 @@ literami też dostaje własny token, z powodu opisanego niżej.
 
 **Każde wystąpienie zamaskowanej wartości jest maskowane**, także tam, gdzie żaden detektor nie
 rozpoznałby jej samodzielnie: w oryginalnym zapisie, wielkimi literami, rozdzielona podziałem
-wiersza, ze znakiem o zerowej szerokości w środku, z inaczej rozdzielonymi grupami oraz w całości,
+wiersza, ze znakiem o zerowej szerokości w środku, z literami cyrylicy albo greki, które wyglądają
+jak łacińskie, z inaczej rozdzielonymi grupami oraz w całości,
 razem z tym, co detektor znalazł w jej wnętrzu. Dwa wyjątki sprawiają, że zwykłe słowa pozostają
 czytelne. Jednowyrazowa nazwa pisana wielką literą nie jest dopasowywana, gdy występuje zapisana
 samymi małymi literami, bo Zima, Kot i Wilk to nazwiska, a „zima” to pora roku; identyfikatory

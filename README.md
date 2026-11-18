@@ -602,8 +602,9 @@ a token with a name that reads alike. A one-word name found in all lowercase kee
 own too, for the reason below.
 
 **Every occurrence of a masked value is masked**, also where no detector would recognise it on its
-own: as written, in capitals, across a line break, with a zero-width character in it, with its
-groups spaced differently, and around whatever a detector found inside it. Two exceptions keep ordinary words readable. A capitalised
+own: as written, in capitals, across a line break, with a zero-width character in it, with
+Cyrillic or Greek letters that look Latin in it, with its groups spaced differently, and around
+whatever a detector found inside it. Two exceptions keep ordinary words readable. A capitalised
 one-word name is not matched in all lowercase, because Zima, Kot and Wilk are surnames and "zima"
 is winter; identifiers such as a VIN or an e-mail address are matched in any case. A number shorter
 than six digits, such as a PIN, is not matched inside a longer number, a date, a time or an

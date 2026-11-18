@@ -33,6 +33,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   with a limit of 5 s for 800 passages failed under `pytest --cov` on slower machines, and
   passed while the time still grew with the square; it now checks that four times the passages
   take less than eight times as long.
+- **A value with a token is masked when written with letters that only look Latin.** "Jan
+  Kowalski" with a Cyrillic a and o in it reads as the same name to a person and a model, but
+  it went out in clear, in the next text and in the same one, and the gateway's last check
+  before a call leaves did not see it either. The search for values with a token now reads the
+  Cyrillic and Greek letters that look Latin as the Latin ones, and such a spelling keeps the
+  value's token. The stable tokens are computed as before, so an index needs no rebuilding.
 - **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
   default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
   promises tests without network. The tests now switch it off, and the README and the Haystack

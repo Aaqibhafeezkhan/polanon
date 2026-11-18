@@ -546,6 +546,27 @@ async def test_numbering_still_follows_reading_order_when_values_repeat():
     assert result.anonymized == "PESEL <PESEL_1>, potem <PESEL_2>, znowu <PESEL_1>."
 
 
+#: "Jan Kowalski" with a Cyrillic a and o, which a reader and a model read as the Latin letters.
+LOOKALIKE = "J\u0430n K\u043ew\u0430lski"
+
+
+def test_a_value_with_a_token_is_masked_when_written_with_lookalike_letters():
+    """A spelling that leaves a value with a token in clear is a way past the masking: Cyrillic
+    letters that look Latin did, in the next text and in the same one."""
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    first = anonymizer.anonymize_sync("Jan Kowalski")
+    later = anonymizer.anonymize_sync(f"Pismo od {LOOKALIKE}.", first.mapping)
+    assert later.anonymized == "Pismo od <OSOBA_1>."
+    both = anonymizer.anonymize_sync(f"Jan Kowalski oraz {LOOKALIKE}")
+    assert both.anonymized == "<OSOBA_1> oraz <OSOBA_1>"
+    assert mask_known_values(LOOKALIKE, first.mapping) == "<OSOBA_1>"
+
+
+def test_a_cyrillic_word_with_no_value_behind_it_stays_as_it_is():
+    text = "Москва, улица Пушкина"
+    assert mask_known_values(text, {"<OSOBA_1>": "Jan Kowalski"}) == text
+
+
 def test_mask_known_values_replaces_every_occurrence_with_its_token():
     mapping = {"<FIRMA_1>": "Projekt Atlas"}
     masked = mask_known_values("Projekt Atlas, potem znowu Projekt Atlas.", mapping)
