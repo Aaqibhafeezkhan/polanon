@@ -9,6 +9,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **The Haystack maskers take `mode` and `ml_filter`.** `PolanonDocumentMasker` and
+  `PolanonQueryMasker` built the spaCy guard with its defaults only, so a pipeline could not ask
+  for the paranoid mode or leave the decision to the hand-written filters. Both now pass them on
+  as `default_guards` takes them, refuse a wrong value when they are built, and keep them in a
+  saved pipeline; a pipeline saved before loads with the defaults.
 - **CI runs the tests on Windows.** The package says it runs on any OS, and its command line
   reads Windows's code pages and UTF-16 and writes UTF-8 to the Windows console, but every job
   ran on Linux. A job on `windows-latest` now runs the whole suite with the spaCy model.

@@ -442,6 +442,10 @@ i nie wysyłaj do modelu. `PolanonStreamRestorer` przywraca odpowiedź w strumie
 podajesz w czasie uruchomienia, `{"mask": {"known": clients}}`, więc nigdy nie trafiają do zapisanego
 potoku.
 
+**Detektory.** Oba maskowniki używają samych reguł, chyba że dostaną `with_ner=True`; wtedy
+`spacy_model`, `mode` i `ml_filter` działają tak jak w `default_guards`:
+`PolanonDocumentMasker(store=mappings, with_ner=True, mode="paranoid")`.
+
 **Zapisywanie potoku.** Klucz to `Secret` Haystacka, a zapisany potok zawiera tylko nazwę jego
 zmiennej. Magazyn mapowań zapisuje się przez własne `to_dict`, które powinno mówić, dokąd się łączy,
 a nigdy, co przechowuje; `InMemoryMappingStore` go nie ma, więc potok z nim budujesz w kodzie.

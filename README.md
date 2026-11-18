@@ -428,6 +428,10 @@ with `Pipeline.stream()`, feed it the chunks instead: `stream.feed(chunk.content
 are sensitive, such as client names, go in at run time, `{"mask": {"known": clients}}`, so they
 never end up in a saved pipeline.
 
+**The detectors.** Both maskers use the rules alone unless given `with_ner=True`, and then
+`spacy_model`, `mode` and `ml_filter` work as they do in `default_guards`:
+`PolanonDocumentMasker(store=mappings, with_ner=True, mode="paranoid")`.
+
 **Saving a pipeline.** The key is a Haystack `Secret`, and a saved pipeline holds the name of its
 variable only. A mapping store is saved through its own `to_dict`, which should say where it
 connects and never what it holds; `InMemoryMappingStore` has none, so a pipeline with it is built
