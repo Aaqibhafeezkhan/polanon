@@ -562,6 +562,22 @@ def test_a_value_with_a_token_is_masked_when_written_with_lookalike_letters():
     assert mask_known_values(LOOKALIKE, first.mapping) == "<OSOBA_1>"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Dzwonił Jan\N{ZERO WIDTH SPACE}Kowalski wczoraj.", "Dzwonił <OSOBA_1> wczoraj."),
+        ("Dzwonił Jan Kowal\N{ZERO WIDTH SPACE}ski wczoraj.", "Dzwonił <OSOBA_1> wczoraj."),
+    ],
+)
+def test_a_zero_width_space_between_two_words_reads_as_a_space_and_inside_one_as_nothing(
+    text, expected
+):
+    """A zero-width space as the only gap between a first name and a surname joined them into
+    one word no rule reads as a person; inside a word it still hides nothing."""
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    assert anonymizer.anonymize_sync(text).anonymized == expected
+
+
 def test_an_e_mail_written_with_at_in_brackets_keeps_the_token_of_the_plain_one():
     """Two spellings the stable tokens took for one address got two numbered tokens."""
     anonymizer = Anonymizer(default_guards(with_ner=False))

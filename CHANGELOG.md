@@ -54,6 +54,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   `pl_core_news_lg`, another space, and on `pl_core_news_sm`, which has none, where the weights
   of the vectors silently counted for nothing. With another model the hand-written filters now
   decide alone, as with `ml_filter=False`; with `pl_core_news_md` nothing changes.
+- **A zero-width space between a first name and a surname reads as a space.** The guards drop
+  invisible characters, so "Jan" and "Kowalski" with only a zero-width space between them were
+  read as one word, which no rule takes for a person, and only the spaCy model masked them.
+  Where such a space stands between a lowercase letter and a capital, it is now read as the
+  space it stands for; inside a word it is still dropped.
 - **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
   default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
   promises tests without network. The tests now switch it off, and the README and the Haystack
