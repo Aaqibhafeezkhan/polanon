@@ -2,6 +2,7 @@
 
 import io
 import json
+import sys
 
 import pytest
 
@@ -245,6 +246,16 @@ def test_mapping_option_writes_the_mapping_to_a_file(capsys, tmp_path):
         "<OSOBA_1>": "Łukasz Wiśniewski",
         "<PESEL_1>": "50810112354",
     }
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions")
+def test_a_mapping_written_over_an_existing_file_is_readable_by_its_owner_only(tmp_path):
+    """The mapping holds the originals, and a file that already existed kept its 0644."""
+    mapping = tmp_path / "mapping.json"
+    mapping.write_text("{}", encoding="utf-8")
+    mapping.chmod(0o644)
+    assert main(["--mapping", str(mapping), SIGNED]) == 0
+    assert mapping.stat().st_mode & 0o777 == 0o600
 
 
 def test_an_unwritable_mapping_fails_before_any_masked_text(capsys, tmp_path):

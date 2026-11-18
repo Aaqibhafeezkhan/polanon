@@ -22,6 +22,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   two digits in clear, and split after the fifth digit, "PESEL: 50810 112354", it was not masked
   at all. After a PESEL label eleven digits split by single spaces or dashes anywhere are one
   PESEL; without the label such groups still are not, since an order number has their shape.
+- **`--mapping` narrows a file that already exists to its owner.** The mapping, which holds the
+  originals, was created readable by its owner only, but a file already there kept its mode, so
+  one left at 0644 by an earlier run or another tool stayed readable by everyone on the machine.
+  It is now set to 0600 before anything is written to it, where the OS has such modes.
 - **A stream the provider breaks off keeps its last words.** When the provider broke off a
   streamed answer with a connection error, the gateway ended the stream without the text it was
   still holding back in case it began a token, so an answer that stopped on "Tak, <OSOBA"
