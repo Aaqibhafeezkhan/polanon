@@ -439,6 +439,10 @@ component receives, and the masker receives the originals. A run that fails keep
 the error's snapshot, written to disk with `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Both are off
 by default.
 
+**Haystack's own telemetry is on by default.** Haystack reports how its pipelines are used to its
+own servers unless `HAYSTACK_TELEMETRY_ENABLED=False` is set; polanon sends nothing. Where nothing
+but the masked calls should leave the machine, set it.
+
 ## A gateway for any OpenAI-compatible tool
 
 Tools such as Hermes Agent, n8n, Open WebUI or LibreChat talk to a model through the OpenAI API.

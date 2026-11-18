@@ -453,6 +453,10 @@ to, co dostaje każdy komponent, a maskownik dostaje oryginały. Nieudane urucho
 wejścia w snapshocie błędu, zapisywanym na dysk przy `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Oba
 są domyślnie wyłączone.
 
+**Telemetria samego Haystacka jest domyślnie włączona.** Haystack wysyła na własne serwery dane o
+tym, jak używane są jego potoki, chyba że ustawisz `HAYSTACK_TELEMETRY_ENABLED=False`; polanon nie
+wysyła niczego. Tam, gdzie z maszyny mają wychodzić tylko zamaskowane zapytania, ustaw tę zmienną.
+
 ## Bramka dla każdego narzędzia zgodnego z API OpenAI
 
 Narzędzia takie jak Hermes Agent, n8n, Open WebUI czy LibreChat rozmawiają z modelem przez API
