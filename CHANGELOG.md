@@ -7,6 +7,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **CI runs the tests on Windows.** The package says it runs on any OS, and its command line
+  reads Windows's code pages and UTF-16 and writes UTF-8 to the Windows console, but every job
+  ran on Linux. A job on `windows-latest` now runs the whole suite with the spaCy model.
+
 ### Fixed
 
 - **A long text is masked in time that grows with its length, not with its square.** The ML

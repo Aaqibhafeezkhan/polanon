@@ -105,6 +105,28 @@ jobs:
       - name: Test the gateway, end to end
         run: pytest tests/test_gateway_payloads.py tests/test_gateway_app.py tests/test_gateway_cli.py tests/test_gateway_server.py tests/test_layering.py
 
+  # The command line reads files and pipes in Windows's code pages and UTF-16 and writes UTF-8 to
+  # its console, which only Windows exercises; the rest of the suite runs there as well.
+  windows:
+    name: Tests on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev,ner,judge]" anthropic openai
+
+      - name: Download the spaCy model
+        run: python -m spacy download pl_core_news_md
+
+      - name: Test
+        run: pytest -p no:cacheprovider
+
   versions:
     name: The built wheel on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
