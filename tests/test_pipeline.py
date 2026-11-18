@@ -578,6 +578,27 @@ def test_a_zero_width_space_between_two_words_reads_as_a_space_and_inside_one_as
     assert anonymizer.anonymize_sync(text).anonymized == expected
 
 
+def test_a_mapping_s_keys_are_worked_out_once_per_call_however_many_texts_use_it(monkeypatch):
+    """The gateway masks every text of a call against the whole mapping: worked out again for
+    each text, the keys made the largest recorded call of a real agent 9% slower than in 0.4.0.
+    After `forget`, which the gateway calls after each call, nothing of them is kept."""
+    from polanon import _canonical, _matching
+
+    calls: list[str] = []
+    canonical = _canonical.canonical
+    monkeypatch.setattr(
+        _canonical, "canonical", lambda value, kind: calls.append(value) or canonical(value, kind)
+    )
+    _matching.forget()
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    for _ in range(3):
+        anonymizer.anonymize_sync("Bez danych.", {"<TELEFON_1>": "600 100 200"})
+    assert calls.count("600 100 200") == 1
+    _matching.forget()
+    anonymizer.anonymize_sync("Bez danych.", {"<TELEFON_1>": "600 100 200"})
+    assert calls.count("600 100 200") == 2
+
+
 def test_an_e_mail_written_with_at_in_brackets_keeps_the_token_of_the_plain_one():
     """Two spellings the stable tokens took for one address got two numbered tokens."""
     anonymizer = Anonymizer(default_guards(with_ner=False))

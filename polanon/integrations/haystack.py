@@ -45,6 +45,7 @@ from polanon import (
     default_guards,
     stored_mapping,
 )
+from polanon.policy import Mode, check_mode
 from polanon.turn import _with_known_values
 
 #: The environment variable the key is read from unless a component is given another Secret.
@@ -109,13 +110,20 @@ class _Masker:
         digits: int = 12,
         with_ner: bool = False,
         spacy_model: str = "pl_core_news_md",
+        mode: Mode = "normal",
+        ml_filter: bool = True,
     ) -> None:
+        check_mode(mode)
+        if not isinstance(ml_filter, bool):
+            raise TypeError(f"ml_filter is True or False, not {type(ml_filter).__name__}")
         self.store = store
         self.key = key
         self.scope = scope
         self.digits = digits
         self.with_ner = with_ner
         self.spacy_model = spacy_model
+        self.mode: Mode = mode
+        self.ml_filter = ml_filter
         self._anonymizer: Anonymizer | None = None
 
     def warm_up(self) -> None:
@@ -131,7 +139,12 @@ class _Masker:
             digits=self.digits,
             collisions=getattr(self.store, "collisions", None),
         )
-        guards = default_guards(with_ner=self.with_ner, spacy_model=self.spacy_model)
+        guards = default_guards(
+            with_ner=self.with_ner,
+            spacy_model=self.spacy_model,
+            mode=self.mode,
+            ml_filter=self.ml_filter,
+        )
         self._anonymizer = Anonymizer(guards, pseudonyms=pseudonyms)
 
     def _masking(self, known: list[str] | None) -> Anonymizer:
@@ -153,6 +166,8 @@ class _Masker:
             digits=self.digits,
             with_ner=self.with_ner,
             spacy_model=self.spacy_model,
+            mode=self.mode,
+            ml_filter=self.ml_filter,
         )
 
     @classmethod

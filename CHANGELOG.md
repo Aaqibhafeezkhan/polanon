@@ -9,6 +9,22 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **The gateway hands a client the call's mapping when the operator allows it.** Started with
+  `--pii-map`, it answers a request with `"return_pii_map": true` with the mapping of the call,
+  token to original, under `return_pii_map`: in the answer of chat completions, the Responses
+  API, Anthropic's Messages API and embeddings, and in the last event of a stream, which for
+  chat completions is a chunk of its own before `[DONE]`. A token the client wrote itself is left
+  out. The provider never sees the field, a value that is not true or false is refused before
+  anything is sent, and without `--pii-map` a request for the mapping is refused, since with
+  stable tokens it tells which token stands for which value. Proposed by macieksonik in
+  [#30](https://github.com/boromat/polanon/pull/30), with the reasons, the design and the first
+  code; the request there to send the system prompt unmasked is answered by `--allow` and
+  `--allow-file`, which leave the assistant's and its company's names readable.
+- **The Haystack maskers take `mode` and `ml_filter`.** `PolanonDocumentMasker` and
+  `PolanonQueryMasker` built the spaCy guard with its defaults only, so a pipeline could not ask
+  for the paranoid mode or leave the decision to the hand-written filters. Both now pass them on
+  as `default_guards` takes them, refuse a wrong value when they are built, and keep them in a
+  saved pipeline; a pipeline saved before loads with the defaults.
 - **CI runs the tests on Windows.** The package says it runs on any OS, and its command line
   reads Windows's code pages and UTF-16 and writes UTF-8 to the Windows console, but every job
   ran on Linux. A job on `windows-latest` now runs the whole suite with the spaCy model.
@@ -28,6 +44,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   two digits in clear, and split after the fifth digit, "PESEL: 50810 112354", it was not masked
   at all. After a PESEL label eleven digits split by single spaces or dashes anywhere are one
   PESEL; without the label such groups still are not, since an order number has their shape.
+- **The command line prints the masked text before the mapping.** Standard output is buffered
+  and standard error is not, so in a terminal, or with both sent to one file, the mapping came
+  first. The masked text is now flushed before the mapping is written.
 - **`--mapping` narrows a file that already exists to its owner.** The mapping, which holds the
   originals, was created readable by its owner only, but a file already there kept its mode, so
   one left at 0644 by an earlier run or another tool stayed readable by everyone on the machine.
@@ -50,7 +69,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   `<EMAIL_1>` and `<EMAIL_2>`, and so were a phone with and without +48 and an account with
   and without "PL", while the stable tokens took each pair for one value. A value now keeps its
   token in every spelling its stable token covers; a person named in another case still gets
-  the token with that case.
+  the token with that case. The keys behind this and the lookalike letters are worked out once
+  per call and forgotten with the call's other values, so a call of 400 KB of an AI agent's
+  history is masked as fast as in 0.4.0.
 - **A KRS number after its label is a KRS number.** One ten-digit number in eleven passes the
   NIP checksum, and "KRS 0000012345" went out as `KRS <NIP_1>`: masked, under the wrong name. A
   number right after a KRS label is now left to the KRS rule, unless a NIP label stands before

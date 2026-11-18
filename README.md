@@ -428,6 +428,10 @@ with `Pipeline.stream()`, feed it the chunks instead: `stream.feed(chunk.content
 are sensitive, such as client names, go in at run time, `{"mask": {"known": clients}}`, so they
 never end up in a saved pipeline.
 
+**The detectors.** Both maskers use the rules alone unless given `with_ner=True`, and then
+`spacy_model`, `mode` and `ml_filter` work as they do in `default_guards`:
+`PolanonDocumentMasker(store=mappings, with_ner=True, mode="paranoid")`.
+
 **Saving a pipeline.** The key is a Haystack `Secret`, and a saved pipeline holds the name of its
 variable only. A mapping store is saved through its own `to_dict`, which should say where it
 connects and never what it holds; `InMemoryMappingStore` has none, so a pipeline with it is built
@@ -520,6 +524,10 @@ What it does with a call:
   per line, leave readable the names the model has to see as they are, such as the assistant's
   own and the company it speaks for; a person named so stays readable too. Everything else in
   the prompt is masked as before.
+- `--pii-map` lets a client that keeps its own records, an audit or a store of mappings, ask for
+  the call's mapping: with `"return_pii_map": true` in the request, the answer carries
+  `"return_pii_map": {"<OSOBA_1>": "Jan Kowalski"}`, and a stream carries it in its last event.
+  The provider never sees the field. Without the switch such a request is refused.
 - It keeps nothing on disk. A tool sends the whole conversation with every call, and each call is
   masked and restored on its own. With `POLANON_KEY` set to 64 hexadecimal characters, a person
   keeps one token in every call and in every grammatical case.

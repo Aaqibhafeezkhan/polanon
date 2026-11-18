@@ -351,6 +351,34 @@ def test_a_pipeline_saves_the_key_by_its_variable_only_and_loads_back():
     assert isinstance(masker.store, RemoteStore)
 
 
+def test_the_spacy_mode_and_the_ml_filter_reach_the_guards_and_a_saved_pipeline(monkeypatch):
+    """The maskers built the spaCy guard with its defaults only: no paranoid mode for a team
+    that wants every span masked, and no way to leave the decision to the hand-written filters."""
+    import polanon.integrations.haystack as integration
+
+    built = {}
+    monkeypatch.setattr(integration, "default_guards", lambda **kwargs: built.update(kwargs) or [])
+    masker = PolanonDocumentMasker(
+        store=RemoteStore(), with_ner=True, mode="paranoid", ml_filter=False
+    )
+    masker.warm_up()
+    assert (built["mode"], built["ml_filter"]) == ("paranoid", False)
+    pipeline = Pipeline()
+    pipeline.add_component("mask", masker)
+    saved = pipeline.dumps()
+    loaded = Pipeline.loads(saved, allowed_modules=["polanon.integrations.haystack", __name__])
+    assert (loaded.get_component("mask").mode, loaded.get_component("mask").ml_filter) == (
+        "paranoid",
+        False,
+    )
+
+
+@pytest.mark.parametrize(("setting", "value"), [("mode", "strict"), ("ml_filter", "no")])
+def test_a_wrong_mode_or_ml_filter_is_refused_when_the_masker_is_built(mappings, setting, value):
+    with pytest.raises((ValueError, TypeError)):
+        PolanonQueryMasker(store=mappings, **{setting: value})
+
+
 def test_a_store_that_cannot_be_saved_says_so(mappings):
     pipeline = Pipeline()
     pipeline.add_component("mask", PolanonQueryMasker(store=mappings))
