@@ -29,7 +29,7 @@ from polanon._matching import (
     folds,
     known_value_matches,
     place_known_values,
-    skeleton,
+    token_keys,
     type_of,
     value_keys,
 )
@@ -41,26 +41,6 @@ from polanon.judge.parsing import MIN_FINDING_CHARS
 from polanon.policy import ENTITY_TYPES, token_for
 from polanon.pseudonyms import Pseudonyms, owner_lookup
 from polanon.types import AnonymizationResult, JudgeFallback, Span, _trim, merge_spans
-
-
-def _token_keys(value: str, entity_type: str) -> list[tuple[str, str]]:
-    """Return the keys that give two spellings of a value one token.
-
-    These are :func:`value_keys`; for a value whose letter case does not matter each of them
-    once more with the Cyrillic and Greek letters that look Latin made Latin, so "Jan Kowalski"
-    written with a Cyrillic a and o keeps the token of the name it looks like; and, but for a
-    person, the canonical form the stable tokens are computed from, so the numbered tokens take
-    two spellings for one value where the stable ones do: "jan.kowalski [at] example.com" is the
-    plain address. A person's canonical form is its base form, and a person named in another
-    case gets the token with that case instead. The stable tokens themselves do not change.
-    """
-    keys = value_keys(value, entity_type)
-    if not folds(entity_type):
-        return keys
-    keys = [*keys, *[(f"{kind}, lookalike", skeleton(key)) for kind, key in keys]]
-    if entity_type != "PERSON":
-        keys.append(("canonical", canonical(value, entity_type)))
-    return keys
 
 
 class _TokenAllocator:
@@ -112,7 +92,7 @@ class _TokenAllocator:
                 continue
             self._reserve(token)
             if value != token:
-                for key in _token_keys(value, entity_type):
+                for key in token_keys(value, entity_type):
                     self._by_value.setdefault(key, token)
                 self._know_person(token, value, entity_type)
         for token in reserved:
@@ -137,7 +117,7 @@ class _TokenAllocator:
         Any key the value shares with a value seen before means the same value: an identifier
         written once with its groups apart and once together keeps one token.
         """
-        keys = _token_keys(value, entity_type)
+        keys = token_keys(value, entity_type)
         for key in keys:
             known = self._by_value.get(key)
             if known is not None:

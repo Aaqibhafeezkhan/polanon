@@ -254,6 +254,36 @@ def _value_keys(value: str, entity_type: str) -> tuple[tuple[str, str], ...]:
     return tuple(keys)
 
 
+def token_keys(value: str, entity_type: str) -> list[tuple[str, str]]:
+    """Return the keys that give two spellings of a value one token.
+
+    These are :func:`value_keys`; for a value whose letter case does not matter each of them
+    once more with the Cyrillic and Greek letters that look Latin made Latin, so "Jan Kowalski"
+    written with a Cyrillic a and o keeps the token of the name it looks like; and, but for a
+    person, the canonical form the stable tokens are computed from, so the numbered tokens take
+    two spellings for one value where the stable ones do: "jan.kowalski [at] example.com" is the
+    plain address. A person's canonical form is its base form, and a person named in another
+    case gets the token with that case instead. The stable tokens themselves do not change.
+
+    Kept like :func:`value_keys` until :func:`forget`: every text of a call is masked against
+    the whole mapping, and working them out again for each text made a large call 9% slower.
+    """
+    return list(_token_keys(value, entity_type))
+
+
+@lru_cache(maxsize=_KEYED_VALUES)
+def _token_keys(value: str, entity_type: str) -> tuple[tuple[str, str], ...]:
+    keys = _value_keys(value, entity_type)
+    if not folds(entity_type):
+        return keys
+    from polanon._canonical import canonical  # it reads values through this module
+
+    lookalike = tuple((f"{kind}, lookalike", skeleton(key)) for kind, key in keys)
+    if entity_type == "PERSON":
+        return keys + lookalike
+    return (*keys, *lookalike, ("canonical", canonical(value, entity_type)))
+
+
 class Ranges:
     """Non-overlapping ranges kept in order, so an overlap check is a bisection, not a scan.
 
@@ -412,6 +442,7 @@ def forget() -> None:
     _prepared_needles.cache_clear()
     _prepared_tables.cache_clear()
     _value_keys.cache_clear()
+    _token_keys.cache_clear()
 
 
 def needles(values: Iterable[tuple[str, str]]) -> list[Needle]:

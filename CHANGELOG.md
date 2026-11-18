@@ -50,7 +50,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   `<EMAIL_1>` and `<EMAIL_2>`, and so were a phone with and without +48 and an account with
   and without "PL", while the stable tokens took each pair for one value. A value now keeps its
   token in every spelling its stable token covers; a person named in another case still gets
-  the token with that case.
+  the token with that case. The keys behind this and the lookalike letters are worked out once
+  per call and forgotten with the call's other values, so a call of 400 KB of an AI agent's
+  history is masked as fast as in 0.4.0.
 - **A KRS number after its label is a KRS number.** One ten-digit number in eleven passes the
   NIP checksum, and "KRS 0000012345" went out as `KRS <NIP_1>`: masked, under the wrong name. A
   number right after a KRS label is now left to the KRS rule, unless a NIP label stands before
