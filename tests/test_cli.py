@@ -137,6 +137,22 @@ def test_output_is_utf8_whatever_the_console_encoding():
     assert json.loads(completed.stderr.decode("utf-8")) == {"<OSOBA_1>": "Łukasz Wiśniewski"}
 
 
+def test_the_masked_text_comes_before_the_mapping_where_both_reach_one_place():
+    """Standard output is buffered and standard error is not, so in one terminal, or with both
+    sent to one file, the mapping came out first and the masked text after it."""
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "polanon", "Umowę podpisał Łukasz Wiśniewski."],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    assert completed.returncode == 0
+    both = completed.stdout.decode("utf-8")
+    assert both.index("Umowę podpisał <OSOBA_1>.") < both.index("{")
+
+
 def test_a_utf8_file_is_masked_with_file_option(capsys, tmp_path):
     path = tmp_path / "umowa.txt"
     path.write_bytes("Umowę podpisał Łukasz Wiśniewski.".encode())

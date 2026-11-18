@@ -108,7 +108,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     result = Anonymizer(guards).anonymize_sync(text)
     if args.mapping is None:
-        print(result.anonymized)
+        # Flushed, so in one terminal the masked text comes before the unbuffered mapping.
+        print(result.anonymized, flush=True)
         print(json.dumps(result.mapping, ensure_ascii=False, indent=2), file=sys.stderr)
         return 0
     # The mapping first: masked text that cannot be restored is of no use to anyone.

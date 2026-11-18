@@ -28,6 +28,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   two digits in clear, and split after the fifth digit, "PESEL: 50810 112354", it was not masked
   at all. After a PESEL label eleven digits split by single spaces or dashes anywhere are one
   PESEL; without the label such groups still are not, since an order number has their shape.
+- **The command line prints the masked text before the mapping.** Standard output is buffered
+  and standard error is not, so in a terminal, or with both sent to one file, the mapping came
+  first. The masked text is now flushed before the mapping is written.
 - **`--mapping` narrows a file that already exists to its owner.** The mapping, which holds the
   originals, was created readable by its owner only, but a file already there kept its mode, so
   one left at 0644 by an earlier run or another tool stayed readable by everyone on the machine.
