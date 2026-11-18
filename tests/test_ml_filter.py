@@ -121,6 +121,30 @@ def test_a_review_reads_the_text_and_each_line_once_however_many_spans_they_hold
     assert [(f["text_english"], f["line_polish"]) for f in seen] == [(0, 0), (0, 0)]
 
 
+class _Pipeline:
+    """A made-up spaCy pipeline that names its model as a real one does."""
+
+    lang = "pl"
+
+    def __init__(self, name: str) -> None:
+        self.meta = {"lang": "pl", "name": name}
+
+    def __call__(self, _text: str) -> _Document:
+        return _Document()
+
+
+@pytest.mark.parametrize(
+    ("name", "reviewed"), [("core_news_md", 2), ("core_news_lg", 0), ("core_news_sm", 0)]
+)
+def test_the_ml_filter_reviews_only_with_the_model_it_was_fitted_on(seen, name, reviewed):
+    """Its weights read the vectors of pl_core_news_md: another model's are another space, and
+    the small model has none, so there the hand-written filters decide alone."""
+    guard = NerGuard()
+    guard._nlp = _Pipeline(name)
+    detect(TEXT, None, {"PERSON"}, [_Rule(), guard])
+    assert len(seen) == reviewed
+
+
 def test_the_switch_takes_true_or_false_only():
     with pytest.raises(TypeError, match="ml_filter is True or False, not 'after'"):
         NerGuard(ml_filter="after")  # type: ignore[arg-type]

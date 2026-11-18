@@ -675,8 +675,9 @@ regression that weighs the span, its words and the words around it, their vector
 rules found there, fitted on public Polish data. It masks the same values whole on every
 benchmark and leaves about a quarter fewer spans that hide nothing: on a part of OpenPII held out
 until it was done, 400 instead of 539. It adds about half a millisecond to a text the model takes
-twelve to read, and it learns nothing from the texts it masks: it ships as fixed weights. It is
-on by default; the
+twelve to read, and it learns nothing from the texts it masks: it ships as fixed weights. Its
+weights read the vectors of `pl_core_news_md`, so with another spaCy model the hand-written
+filters decide alone. It is on by default; the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-ml-filter)
 tell how it was fitted and measured, and this leaves the decision to the hand-written filters:
 

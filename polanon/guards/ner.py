@@ -69,6 +69,9 @@ _CACHE_LOCK = threading.Lock()
 #: Texts whose words a guard remembers for the ML filter when it remembers no spans.
 _WORDS_KEPT = 64
 
+#: The spaCy model the ML filter was fitted on, as its pipeline names itself.
+_ML_FILTER_MODEL = "core_news_md"
+
 #: The parties of a Polish contract in their cases, which it writes with a capital letter.
 _CONTRACT_PARTIES = """
     najemca najemcy najemcę najemcą najemców najemcom najemcami
@@ -1018,11 +1021,19 @@ class NerGuard(Guard):
         return spans
 
     def _filters_by_ml(self) -> bool:
-        """Whether the ML filter reviews the spans: on, in the normal mode, with a Polish model."""
+        """Whether the ML filter reviews the spans: on, in the normal mode, with its own model.
+
+        Its weights read the word vectors of the model it was fitted on, `pl_core_news_md`.
+        Another model's vectors are another space, and the small model has none, so with any
+        other model the hand-written filters decide alone, as with `ml_filter=False`.
+        """
+        pipeline = self._get_pipeline()
+        meta = getattr(pipeline, "meta", None) or {}
         return (
             self.ml_filter
             and self.mode == "normal"
-            and getattr(self._get_pipeline(), "lang", "pl") == "pl"
+            and getattr(pipeline, "lang", "pl") == "pl"
+            and meta.get("name", _ML_FILTER_MODEL) == _ML_FILTER_MODEL
         )
 
     def _read(self, text: str, wanted: frozenset[str] | set[str], digest: str = "") -> list[Span]:

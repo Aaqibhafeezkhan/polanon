@@ -703,7 +703,8 @@ znalazły tam reguły, dopasowana na publicznych polskich danych. Na każdym ben
 w całości te same wartości, a fragmentów, które niczego nie ukrywają, zostawia mniej więcej
 o jedną czwartą mniej: na części OpenPII odłożonej do samego końca 400 zamiast 539. Dokłada około
 pół milisekundy do tekstu, który model czyta dwanaście, i niczego nie uczy się z maskowanych
-tekstów: trafia do paczki jako gotowe wagi. Jest domyślnie włączony; jak go dopasowano
+tekstów: trafia do paczki jako gotowe wagi. Jego wagi czytają wektory `pl_core_news_md`, więc
+przy innym modelu spaCy decydują same ręczne filtry. Jest domyślnie włączony; jak go dopasowano
 i zmierzono, opisują
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-ml-filter),
 a tak zostawia się decyzję samym ręcznym filtrom:

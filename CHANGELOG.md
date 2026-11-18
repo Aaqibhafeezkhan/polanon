@@ -49,6 +49,11 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   NIP checksum, and "KRS 0000012345" went out as `KRS <NIP_1>`: masked, under the wrong name. A
   number right after a KRS label is now left to the KRS rule, unless a NIP label stands before
   it.
+- **The ML filter reviews spans only with the spaCy model it was fitted on.** Its weights read
+  the word vectors of `pl_core_news_md`, but it ran with any Polish model: on the vectors of
+  `pl_core_news_lg`, another space, and on `pl_core_news_sm`, which has none, where the weights
+  of the vectors silently counted for nothing. With another model the hand-written filters now
+  decide alone, as with `ml_filter=False`; with `pl_core_news_md` nothing changes.
 - **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
   default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
   promises tests without network. The tests now switch it off, and the README and the Haystack
