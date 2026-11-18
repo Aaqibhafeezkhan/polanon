@@ -103,6 +103,24 @@ def test_a_text_whose_words_are_forgotten_keeps_every_span(seen):
     assert seen == []
 
 
+def test_a_review_reads_the_text_and_each_line_once_however_many_spans_they_hold(seen, monkeypatch):
+    """Read once for every span, a text of 100 KB took 13 s to mask instead of 2.5 s, and a text
+    on one line, as a tool's JSON is, read its line as often."""
+    from polanon.guards import ner
+
+    guard = NerGuard()
+    guard._nlp = lambda _text: _Document()
+    spans = guard.detect(TEXT, {"PERSON"})
+    reads: list[str] = []
+    for name in ("_is_english_text", "_language"):
+        read = getattr(ner, name)
+        monkeypatch.setattr(ner, name, lambda text, read=read: reads.append(text) or read(text))
+    guard._review(TEXT, spans, [])
+    assert len(spans) == 2
+    assert reads == [TEXT, TEXT]
+    assert [(f["text_english"], f["line_polish"]) for f in seen] == [(0, 0), (0, 0)]
+
+
 def test_the_switch_takes_true_or_false_only():
     with pytest.raises(TypeError, match="ml_filter is True or False, not 'after'"):
         NerGuard(ml_filter="after")  # type: ignore[arg-type]

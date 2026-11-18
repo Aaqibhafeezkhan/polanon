@@ -9,6 +9,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Fixed
 
+- **A long text is masked in time that grows with its length, not with its square.** The ML
+  filter of 0.4.0 read the whole text again for every span the spaCy model found: whether the
+  text is English, how often the span stands in it, and the language of the span's line, which
+  in a text on one line, as a tool's JSON is, is the whole text. 100 KB of Polish prose took
+  13 s to mask instead of 2.5 s without the filter, and the gateway masks one call at a time.
+  Each of these is now read once per text and per line, and 100 KB takes 2.9 s. What is masked
+  does not change.
 - **A stream the provider breaks off keeps its last words.** When the provider broke off a
   streamed answer with a connection error, the gateway ended the stream without the text it was
   still holding back in case it began a token, so an answer that stopped on "Tak, <OSOBA"
