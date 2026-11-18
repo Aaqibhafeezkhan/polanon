@@ -46,15 +46,21 @@ from polanon.types import AnonymizationResult, JudgeFallback, Span, _trim, merge
 def _token_keys(value: str, entity_type: str) -> list[tuple[str, str]]:
     """Return the keys that give two spellings of a value one token.
 
-    These are :func:`value_keys`, and for a value whose letter case does not matter each of them
-    once more with the Cyrillic and Greek letters that look Latin made Latin: "Jan Kowalski"
-    written with a Cyrillic a and o is found as the value it looks like, and keeps its token.
-    The stable tokens are computed from :func:`value_keys` alone, so they do not change.
+    These are :func:`value_keys`; for a value whose letter case does not matter each of them
+    once more with the Cyrillic and Greek letters that look Latin made Latin, so "Jan Kowalski"
+    written with a Cyrillic a and o keeps the token of the name it looks like; and, but for a
+    person, the canonical form the stable tokens are computed from, so the numbered tokens take
+    two spellings for one value where the stable ones do: "jan.kowalski [at] example.com" is the
+    plain address. A person's canonical form is its base form, and a person named in another
+    case gets the token with that case instead. The stable tokens themselves do not change.
     """
     keys = value_keys(value, entity_type)
     if not folds(entity_type):
         return keys
-    return keys + [(f"{kind}, lookalike", skeleton(key)) for kind, key in keys]
+    keys = [*keys, *[(f"{kind}, lookalike", skeleton(key)) for kind, key in keys]]
+    if entity_type != "PERSON":
+        keys.append(("canonical", canonical(value, entity_type)))
+    return keys
 
 
 class _TokenAllocator:

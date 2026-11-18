@@ -39,6 +39,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   before a call leaves did not see it either. The search for values with a token now reads the
   Cyrillic and Greek letters that look Latin as the Latin ones, and such a spelling keeps the
   value's token. The stable tokens are computed as before, so an index needs no rebuilding.
+- **Two spellings of one value share a numbered token where they share a stable one.** With
+  numbered tokens "jan.kowalski@example.com" and "jan.kowalski [at] example.com" were
+  `<EMAIL_1>` and `<EMAIL_2>`, and so were a phone with and without +48 and an account with
+  and without "PL", while the stable tokens took each pair for one value. A value now keeps its
+  token in every spelling its stable token covers; a person named in another case still gets
+  the token with that case.
 - **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
   default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
   promises tests without network. The tests now switch it off, and the README and the Haystack

@@ -562,6 +562,16 @@ def test_a_value_with_a_token_is_masked_when_written_with_lookalike_letters():
     assert mask_known_values(LOOKALIKE, first.mapping) == "<OSOBA_1>"
 
 
+def test_an_e_mail_written_with_at_in_brackets_keeps_the_token_of_the_plain_one():
+    """Two spellings the stable tokens took for one address got two numbered tokens."""
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    first = anonymizer.anonymize_sync("jan.kowalski@example.com")
+    later = anonymizer.anonymize_sync("jan.kowalski [at] example.com", first.mapping)
+    assert later.anonymized == "<EMAIL_1>"
+    both = anonymizer.anonymize_sync("jan.kowalski@example.com i jan.kowalski [at] example.com")
+    assert both.anonymized == "<EMAIL_1> i <EMAIL_1>"
+
+
 def test_a_cyrillic_word_with_no_value_behind_it_stays_as_it_is():
     text = "Москва, улица Пушкина"
     assert mask_known_values(text, {"<OSOBA_1>": "Jan Kowalski"}) == text
