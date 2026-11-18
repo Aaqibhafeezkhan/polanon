@@ -539,6 +539,10 @@ Co robi z jednym wywołaniem:
   w linii, zostawiają czytelne nazwy, które model musi widzieć takimi, jakie są, na przykład
   imię asystenta i firmę, w imieniu której mówi; tak podana osoba też zostaje czytelna.
   Reszta promptu jest maskowana jak dotąd.
+- `--pii-map` pozwala klientowi, który prowadzi własny rejestr, audyt albo magazyn mapowań,
+  poprosić o mapowanie wywołania: z `"return_pii_map": true` w żądaniu odpowiedź niesie
+  `"return_pii_map": {"<OSOBA_1>": "Jan Kowalski"}`, a strumień niesie je w ostatnim zdarzeniu.
+  Dostawca nigdy nie widzi tego pola. Bez tej opcji takie żądanie jest odrzucane.
 - Niczego nie zapisuje na dysku. Narzędzie wysyła całą rozmowę przy każdym wywołaniu, a każde
   wywołanie jest maskowane i przywracane osobno. Z `POLANON_KEY` ustawionym na 64 znaki
   szesnastkowe dana osoba ma jeden token w każdym wywołaniu i w każdym przypadku gramatycznym.

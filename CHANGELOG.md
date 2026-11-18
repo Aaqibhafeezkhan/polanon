@@ -9,6 +9,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **The gateway hands a client the call's mapping when the operator allows it.** Started with
+  `--pii-map`, it answers a request with `"return_pii_map": true` with the mapping of the call,
+  token to original, under `return_pii_map`: in the answer of chat completions, the Responses
+  API, Anthropic's Messages API and embeddings, and in the last event of a stream, which for
+  chat completions is a chunk of its own before `[DONE]`. A token the client wrote itself is left
+  out. The provider never sees the field, a value that is not true or false is refused before
+  anything is sent, and without `--pii-map` a request for the mapping is refused, since with
+  stable tokens it tells which token stands for which value. Proposed by macieksonik in
+  [#30](https://github.com/boromat/polanon/pull/30), with the reasons, the design and the first
+  code; the request there to send the system prompt unmasked is answered by `--allow` and
+  `--allow-file`, which leave the assistant's and its company's names readable.
 - **The Haystack maskers take `mode` and `ml_filter`.** `PolanonDocumentMasker` and
   `PolanonQueryMasker` built the spaCy guard with its defaults only, so a pipeline could not ask
   for the paranoid mode or leave the decision to the hand-written filters. Both now pass them on

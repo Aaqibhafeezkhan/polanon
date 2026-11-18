@@ -179,3 +179,14 @@ def test_the_operator_s_names_stay_readable_without_the_well_known_ones():
     masked = anonymizer.anonymize_sync("Ola Nowak pisze z Facebooka do Jana Kowalskiego.", {})
     assert masked.anonymized.startswith("Ola Nowak pisze")
     assert "Kowalskiego" not in masked.anonymized
+
+
+def test_the_mapping_goes_back_to_clients_only_when_the_operator_says_so(capsys):
+    status, served = run(UPSTREAM)
+    assert status == 0
+    assert served.app._config.pii_map is False
+    assert "mapping" not in capsys.readouterr().err
+    status, served = run([*UPSTREAM, "--pii-map"])
+    assert status == 0
+    assert served.app._config.pii_map is True
+    assert "clients may ask for each call's mapping" in capsys.readouterr().err

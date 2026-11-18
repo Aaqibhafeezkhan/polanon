@@ -239,6 +239,12 @@ What it does not protect, and is the operator's part:
 - **Names the operator leaves readable.** A name given with `--allow` or `--allow-file` goes to
   the provider as it is, wherever it stands, a person's too: the assistant's own name or the
   company it speaks for are meant for the model, and so is whatever the operator lists there.
+- **The mapping handed back with `--pii-map`.** A client that asks gets the originals it sent,
+  next to their tokens, in the answer: whatever reads the client's answers, its logs or a proxy
+  in front of it, reads them too. With stable tokens the mapping also tells which token stands
+  for which value, so a client that can send a name it guesses learns its token, and can find
+  that person in an index or a log masked with the same key. Turn it on only for clients that
+  may know that. The provider never sees the field.
 - **Detection.** The gateway masks what the guards find, no more: run it with the spaCy model, and
   read "Residual risk" below. The stage-2 judge is not used.
 - **What the provider learns anyway.** The structure of the conversation, its length and timing,
