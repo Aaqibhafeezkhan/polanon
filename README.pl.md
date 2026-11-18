@@ -144,7 +144,14 @@ polanon --version  # wypisuje zainstalowaną wersję
 polanon "Jan Kowalski, PESEL 50810112354"
 polanon --file umowa.txt --ner --mapping mapping.json > masked.txt
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
+polanon --restore --mapping mapping.json --file answer.txt  # przywrócona odpowiedź modelu
+polanon --json "Jan Kowalski, PESEL 50810112354"  # {"text": "...", "mapping": {...}}
 ```
+
+`--restore` wstawia oryginały z powrotem do zamaskowanego tekstu, na przykład odpowiedzi modelu,
+z mapowaniem zapisanym przez `--mapping`, także osobę w innym przypadku; token, którego mapowanie
+nie zna, zostaje bez zmian. `--json` wypisuje zamiast tego jeden obiekt JSON na stdout, dla
+skryptów: tekst, a także mapowanie, chyba że trafia do pliku z `--mapping`.
 
 Niezerowy kod wyjścia oznacza, że coś poszło nie tak, a komunikat na stderr wyjaśnia, co. `--file`
 sam czyta bajty pliku i odróżnia od siebie UTF-8, UTF-16 (tak zapisuje Windows PowerShell 5.1

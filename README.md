@@ -138,7 +138,14 @@ polanon --version  # print the installed version
 polanon "Jan Kowalski, PESEL 50810112354"
 polanon --file umowa.txt --ner --mapping mapping.json > masked.txt
 cat umowa.txt | polanon --ner > masked.txt 2> mapping.json
+polanon --restore --mapping mapping.json --file answer.txt  # the model's answer, restored
+polanon --json "Jan Kowalski, PESEL 50810112354"  # {"text": "...", "mapping": {...}}
 ```
+
+`--restore` puts the originals back into masked text, such as the model's answer, with the mapping
+`--mapping` wrote, a person named in another case included; a token the mapping does not hold
+stays as it is. `--json` writes one JSON object to stdout instead, for a script: the text, and the
+mapping unless `--mapping` takes it.
 
 A non-zero exit status means something went wrong and stderr says what. `--file` reads the file's
 bytes itself and tells UTF-8, UTF-16 (what Windows PowerShell 5.1 writes with `>`) and cp1250

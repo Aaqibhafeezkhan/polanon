@@ -292,3 +292,89 @@ def test_no_standard_input_at_all_explains_itself(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", None)
     assert main([]) == 2
     assert "nothing to mask" in capsys.readouterr().err
+
+
+# --- --restore and --json ---
+
+MAPPING = {"<OSOBA_1>": "Łukasz Wiśniewski", "<PESEL_1>": "50810112354"}
+
+
+def _mapping_file(tmp_path, mapping=MAPPING):
+    path = tmp_path / "mapping.json"
+    path.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_restore_puts_the_originals_back_in_every_case(capsys, tmp_path):
+    """An answer the model wrote comes back as the reader should see it, a person declined too."""
+    path = _mapping_file(tmp_path)
+    answer = "Odpisz <OSOBA_1:celownik>, PESEL <PESEL_1>."
+    assert main(["--restore", "--mapping", str(path), answer]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "Odpisz Łukaszowi Wiśniewskiemu, PESEL 50810112354."
+    assert captured.err == ""
+
+
+def test_a_masked_file_comes_back_whole_with_its_mapping(capsys, tmp_path):
+    mapping = tmp_path / "mapping.json"
+    assert main(["--mapping", str(mapping), SIGNED]) == 0
+    masked = tmp_path / "masked.txt"
+    masked.write_text(capsys.readouterr().out, encoding="utf-8")
+    assert main(["--restore", "--mapping", str(mapping), "--file", str(masked)]) == 0
+    assert capsys.readouterr().out.strip() == SIGNED
+
+
+def test_restore_leaves_a_token_the_mapping_does_not_hold_as_it_is(capsys, tmp_path):
+    path = _mapping_file(tmp_path)
+    assert main(["--restore", "--mapping", str(path), "<OSOBA_1> i <OSOBA_2>"]) == 0
+    assert capsys.readouterr().out.strip() == "Łukasz Wiśniewski i <OSOBA_2>"
+
+
+def test_restore_without_a_mapping_is_refused(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--restore", "<OSOBA_1>"])
+    assert exit_info.value.code == 2
+    assert "--restore needs --mapping" in capsys.readouterr().err
+
+
+def test_restore_takes_no_option_of_the_masking(capsys, tmp_path):
+    with pytest.raises(SystemExit):
+        main(["--restore", "--ner", "--mapping", str(_mapping_file(tmp_path)), "<OSOBA_1>"])
+    assert "--restore" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("content", ['["<OSOBA_1>"]', '{"<OSOBA_1>": 7}', "nie json"])
+def test_a_file_that_is_no_mapping_is_refused_without_quoting_it(capsys, tmp_path, content):
+    path = tmp_path / "mapping.json"
+    path.write_text(content, encoding="utf-8")
+    assert main(["--restore", "--mapping", str(path), "<OSOBA_1>"]) == 2
+    err = capsys.readouterr().err
+    assert "is not a mapping" in err
+    assert "OSOBA" not in err
+
+
+def test_json_gives_the_masked_text_and_the_mapping_as_one_object(capsys):
+    """A script reads one object from stdout instead of the text there and the mapping on
+    stderr."""
+    assert main(["--json", SIGNED]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"text": SIGNED_MASKED, "mapping": MAPPING}
+    assert captured.err == ""
+
+
+def test_json_with_a_mapping_file_keeps_the_mapping_out_of_stdout(capsys, tmp_path):
+    mapping = tmp_path / "mapping.json"
+    assert main(["--json", "--mapping", str(mapping), SIGNED]) == 0
+    assert json.loads(capsys.readouterr().out) == {"text": SIGNED_MASKED}
+    assert json.loads(mapping.read_text(encoding="utf-8")) == MAPPING
+
+
+def test_json_with_restore_gives_the_restored_text(capsys, tmp_path):
+    path = _mapping_file(tmp_path)
+    assert main(["--restore", "--json", "--mapping", str(path), SIGNED_MASKED]) == 0
+    assert json.loads(capsys.readouterr().out) == {"text": SIGNED}
+
+
+def test_a_mapping_file_that_is_not_there_is_reported(capsys, tmp_path):
+    assert main(["--restore", "--mapping", str(tmp_path / "missing.json"), "<OSOBA_1>"]) == 2
+    assert "cannot read" in capsys.readouterr().err
