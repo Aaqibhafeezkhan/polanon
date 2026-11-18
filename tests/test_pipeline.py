@@ -546,6 +546,53 @@ async def test_numbering_still_follows_reading_order_when_values_repeat():
     assert result.anonymized == "PESEL <PESEL_1>, potem <PESEL_2>, znowu <PESEL_1>."
 
 
+#: "Jan Kowalski" with a Cyrillic a and o, which a reader and a model read as the Latin letters.
+LOOKALIKE = "J\u0430n K\u043ew\u0430lski"
+
+
+def test_a_value_with_a_token_is_masked_when_written_with_lookalike_letters():
+    """A spelling that leaves a value with a token in clear is a way past the masking: Cyrillic
+    letters that look Latin did, in the next text and in the same one."""
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    first = anonymizer.anonymize_sync("Jan Kowalski")
+    later = anonymizer.anonymize_sync(f"Pismo od {LOOKALIKE}.", first.mapping)
+    assert later.anonymized == "Pismo od <OSOBA_1>."
+    both = anonymizer.anonymize_sync(f"Jan Kowalski oraz {LOOKALIKE}")
+    assert both.anonymized == "<OSOBA_1> oraz <OSOBA_1>"
+    assert mask_known_values(LOOKALIKE, first.mapping) == "<OSOBA_1>"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Dzwonił Jan\N{ZERO WIDTH SPACE}Kowalski wczoraj.", "Dzwonił <OSOBA_1> wczoraj."),
+        ("Dzwonił Jan Kowal\N{ZERO WIDTH SPACE}ski wczoraj.", "Dzwonił <OSOBA_1> wczoraj."),
+    ],
+)
+def test_a_zero_width_space_between_two_words_reads_as_a_space_and_inside_one_as_nothing(
+    text, expected
+):
+    """A zero-width space as the only gap between a first name and a surname joined them into
+    one word no rule reads as a person; inside a word it still hides nothing."""
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    assert anonymizer.anonymize_sync(text).anonymized == expected
+
+
+def test_an_e_mail_written_with_at_in_brackets_keeps_the_token_of_the_plain_one():
+    """Two spellings the stable tokens took for one address got two numbered tokens."""
+    anonymizer = Anonymizer(default_guards(with_ner=False))
+    first = anonymizer.anonymize_sync("jan.kowalski@example.com")
+    later = anonymizer.anonymize_sync("jan.kowalski [at] example.com", first.mapping)
+    assert later.anonymized == "<EMAIL_1>"
+    both = anonymizer.anonymize_sync("jan.kowalski@example.com i jan.kowalski [at] example.com")
+    assert both.anonymized == "<EMAIL_1> i <EMAIL_1>"
+
+
+def test_a_cyrillic_word_with_no_value_behind_it_stays_as_it_is():
+    text = "Москва, улица Пушкина"
+    assert mask_known_values(text, {"<OSOBA_1>": "Jan Kowalski"}) == text
+
+
 def test_mask_known_values_replaces_every_occurrence_with_its_token():
     mapping = {"<FIRMA_1>": "Projekt Atlas"}
     masked = mask_known_values("Projekt Atlas, potem znowu Projekt Atlas.", mapping)

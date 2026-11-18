@@ -98,6 +98,13 @@ def leaks(text):
     return [raw for raw in RAW if raw in text]
 
 
+def test_haystack_s_telemetry_stays_off_in_the_tests():
+    """The tests make no network calls, and Haystack's telemetry reached eu.i.posthog.com."""
+    from haystack.telemetry import _telemetry
+
+    assert _telemetry.telemetry is None
+
+
 # --- what reaches the document store ---
 
 

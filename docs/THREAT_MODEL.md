@@ -39,8 +39,9 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   or a closing formula; and whatever you put on a denylist.
 - **Every later occurrence of a masked value.** Pass the mapping from the latest result to the next
   call and a value keeps its token wherever it appears again: in capitals, across a line break or a run of
-  spaces, with a no-break space, an invisible character or a decomposed accent in it, and with an
-  identifier's groups written apart or together. The surname of a masked person and the handle of a
+  spaces, with a no-break space, an invisible character or a decomposed accent in it, with Cyrillic
+  or Greek letters that look Latin in place of Latin ones, and with an identifier's groups written
+  apart or together. The surname of a masked person and the handle of a
   masked profile link count as masked values of their own, so "Kowalski" after "Jan Kowalski" and
   "jkowalski" after "github.com/jkowalski" are masked too. `mask_known_values` does the same for
   text masked earlier, such as conversation history sent again.

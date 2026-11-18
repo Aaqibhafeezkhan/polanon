@@ -469,16 +469,28 @@ def test_a_run_of_words_broken_by_punctuation_is_not_looked_up_as_one_value():
 
 
 def test_a_long_document_in_many_passages_is_masked_in_linear_time():
-    """Each passage masked against the mapping of all the others took 27 s for 800 of them."""
+    """Each passage masked against the mapping of all the others took 27 s for 800 of them.
+
+    Four times the passages must take about four times as long, not sixteen. A limit in seconds
+    failed under `pytest --cov` on a slower machine, which runs both sizes slower alike.
+    """
     import time
 
     passages = [
         f"Pismo nr {n}: Jan Kowalski{n} i Anna Nowak{n}, tel. 600 100 {n % 1000:03d}."
         for n in range(800)
     ]
-    began = time.perf_counter()
+
+    def fastest(count: int) -> float:
+        times = []
+        for _ in range(2):
+            began = time.perf_counter()
+            stable().mask_chunks(passages[:count])
+            times.append(time.perf_counter() - began)
+        return min(times)
+
+    assert fastest(800) < 8 * fastest(200)
     masked = stable().mask_chunks(passages)
-    assert time.perf_counter() - began < 5.0
     assert len(masked.texts) == 800
     assert all("600 100" not in text for text in masked.texts)
     for text, mapping, original in zip(masked.texts, masked.mappings, passages, strict=True):

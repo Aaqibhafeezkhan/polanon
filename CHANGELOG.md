@@ -7,6 +7,74 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **CI runs the tests on Windows.** The package says it runs on any OS, and its command line
+  reads Windows's code pages and UTF-16 and writes UTF-8 to the Windows console, but every job
+  ran on Linux. A job on `windows-latest` now runs the whole suite with the spaCy model.
+
+### Fixed
+
+- **A long text is masked in time that grows with its length, not with its square.** The ML
+  filter of 0.4.0 read the whole text again for every span the spaCy model found: whether the
+  text is English, how often the span stands in it, and the language of the span's line, which
+  in a text on one line, as a tool's JSON is, is the whole text. 100 KB of Polish prose took
+  13 s to mask instead of 2.5 s without the filter, and the gateway masks one call at a time.
+  Each of these is now read once per text and per line, and 100 KB takes 2.9 s. What is masked
+  does not change.
+- **A PESEL right after its label is masked whole however its digits are grouped.** Only the
+  whole number, the birth date apart from the serial number and one digit per box were read as
+  a PESEL. Grouped 3-3-3-2, "PESEL 508 101 123 54" went out as `PESEL <TELEFON_1> 54`, its last
+  two digits in clear, and split after the fifth digit, "PESEL: 50810 112354", it was not masked
+  at all. After a PESEL label eleven digits split by single spaces or dashes anywhere are one
+  PESEL; without the label such groups still are not, since an order number has their shape.
+- **`--mapping` narrows a file that already exists to its owner.** The mapping, which holds the
+  originals, was created readable by its owner only, but a file already there kept its mode, so
+  one left at 0644 by an earlier run or another tool stayed readable by everyone on the machine.
+  It is now set to 0600 before anything is written to it, where the OS has such modes.
+- **A document in many passages is cut in time that grows with its length.** `mask_chunks` and
+  `index_chunks` mask the passages as one text and cut it apart again, and each passage read
+  every masked range of the whole document: 800 passages took 1.4 s, 3,200 took 19 s. Each
+  passage now finds its own ranges by halving, and 3,200 take 1.5 s. The test that guarded this
+  with a limit of 5 s for 800 passages failed under `pytest --cov` on slower machines, and
+  passed while the time still grew with the square; it now checks that four times the passages
+  take less than eight times as long.
+- **A value with a token is masked when written with letters that only look Latin.** "Jan
+  Kowalski" with a Cyrillic a and o in it reads as the same name to a person and a model, but
+  it went out in clear, in the next text and in the same one, and the gateway's last check
+  before a call leaves did not see it either. The search for values with a token now reads the
+  Cyrillic and Greek letters that look Latin as the Latin ones, and such a spelling keeps the
+  value's token. The stable tokens are computed as before, so an index needs no rebuilding.
+- **Two spellings of one value share a numbered token where they share a stable one.** With
+  numbered tokens "jan.kowalski@example.com" and "jan.kowalski [at] example.com" were
+  `<EMAIL_1>` and `<EMAIL_2>`, and so were a phone with and without +48 and an account with
+  and without "PL", while the stable tokens took each pair for one value. A value now keeps its
+  token in every spelling its stable token covers; a person named in another case still gets
+  the token with that case.
+- **A KRS number after its label is a KRS number.** One ten-digit number in eleven passes the
+  NIP checksum, and "KRS 0000012345" went out as `KRS <NIP_1>`: masked, under the wrong name. A
+  number right after a KRS label is now left to the KRS rule, unless a NIP label stands before
+  it.
+- **The ML filter reviews spans only with the spaCy model it was fitted on.** Its weights read
+  the word vectors of `pl_core_news_md`, but it ran with any Polish model: on the vectors of
+  `pl_core_news_lg`, another space, and on `pl_core_news_sm`, which has none, where the weights
+  of the vectors silently counted for nothing. With another model the hand-written filters now
+  decide alone, as with `ml_filter=False`; with `pl_core_news_md` nothing changes.
+- **A zero-width space between a first name and a surname reads as a space.** The guards drop
+  invisible characters, so "Jan" and "Kowalski" with only a zero-width space between them were
+  read as one word, which no rule takes for a person, and only the spaCy model masked them.
+  Where such a space stands between a lowercase letter and a capital, it is now read as the
+  space it stands for; inside a word it is still dropped.
+- **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
+  default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
+  promises tests without network. The tests now switch it off, and the README and the Haystack
+  page say how to switch it off where nothing but the masked calls should leave the machine.
+- **A stream the provider breaks off keeps its last words.** When the provider broke off a
+  streamed answer with a connection error, the gateway ended the stream without the text it was
+  still holding back in case it began a token, so an answer that stopped on "Tak, <OSOBA"
+  reached the client as "Tak, ". It now sends that text first, as it already did for a stream
+  that ends without finishing. Nothing leaked, since what is held back is still masked.
+
 ## [0.4.0] - 2026-11-18
 
 A minor release, since masked text changes shape: a person named again in another case goes out

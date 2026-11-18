@@ -12,6 +12,7 @@ document.
 
 import argparse
 import codecs
+import contextlib
 import json
 import os
 import sys
@@ -193,8 +194,16 @@ def _strict(raw: bytes, encoding: str) -> str:
 
 
 def _write_mapping(path: str, mapping: Mapping[str, str]) -> None:
-    """Write the mapping as UTF-8 JSON, created readable by its owner only where the OS allows."""
+    """Write the mapping as UTF-8 JSON, readable by its owner only where the OS allows.
+
+    A file that already exists is narrowed to its owner too before anything is written to it:
+    the mode given to `os.open` applies only to a file it creates, and one left at 0644 by an
+    earlier run let anyone on the machine read the originals.
+    """
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if hasattr(os, "fchmod"):
+        with contextlib.suppress(OSError):  # not the file's owner: it keeps what its owner set
+            os.fchmod(descriptor, 0o600)
     with open(descriptor, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(mapping, handle, ensure_ascii=False, indent=2)
         handle.write("\n")

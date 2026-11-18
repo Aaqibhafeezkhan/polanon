@@ -162,6 +162,9 @@ def span_features(
     rules_found_it: bool,
     words: Sequence[Word] = (),
     vocab: Vocab | None = None,
+    text_english: bool | None = None,
+    repeated: bool | None = None,
+    line_language: str | None = None,
 ) -> dict[str, int]:
     """Return the features of a span the model found in `text`, each 0 or 1.
 
@@ -175,8 +178,19 @@ def span_features(
         vocab: the pipeline's word vectors. A word it knows only in lowercase, "nieokreślona"
             but not "Nieokreślona", is a common word written with a capital; a name it knows as
             written, or not at all.
+        text_english: whether the whole text is plainly English, when the caller already knows;
+            read from `text` otherwise. Reading it for every span of a long text made masking
+            it take time in the square of its length.
+        repeated: whether the span's words stand in the text more than once, when the caller
+            already knows; counted in `text` otherwise.
+        line_language: the language of the span's line, when the caller already knows; read
+            from the line otherwise. A text on one line, such as a tool's JSON, is one line.
     """
     fragment = text[span.start : span.end]
+    if text_english is None:
+        text_english = ner._is_english_text(text)
+    if repeated is None:
+        repeated = text.count(fragment) > 1
     letters = _LETTERS.findall(text[span.start : span.end])
     known = vocab.has_vector if vocab is not None else lambda _word: False
     tags = {word.pos for word in words}
@@ -184,10 +198,9 @@ def span_features(
     bare = [ner._bare(word) for word in written]
     folded = [word.lower() for word in bare if word]
     english = sum(word in ner._ENGLISH_WORDS or word in SOFTWARE_WORDS for word in folded)
-    line_start = text.rfind("\n", 0, span.start) + 1
-    line_end = text.find("\n", span.start)
-    line = text[line_start : None if line_end < 0 else line_end]
-    language = ner._language(line)
+    if line_language is None:
+        line_language = ner._language(text[slice(*line_bounds(text, span.start))])
+    language = line_language
     before = _PREVIOUS_WORD.search(text, max(0, span.start - 40), span.start)
     previous = before[1] if before is not None else ""
     found = {
@@ -216,12 +229,12 @@ def span_features(
         "line_polish": language == ner._POLISH,
         "line_english": language == ner._ENGLISH,
         "line_without_language": language == ner._UNKNOWN,
-        "text_english": ner._is_english_text(text),
+        "text_english": text_english,
         "opens_a_sentence": ner._opens_a_sentence(text, span.start),
         "after_a_form_of_address": fold(previous.rstrip(".").lower()) in HONORIFICS,
         "after_a_preposition": previous in _PREPOSITIONS,
         "after_a_colon": previous.endswith(":"),
-        "repeated_in_the_text": text.count(fragment) > 1,
+        "repeated_in_the_text": repeated,
         "rule_code": ner._is_code(fragment),
         "rule_inline_code": ner._in_inline_code(text, span),
         "rule_inside_a_word": ner._inside_a_word(text, span),
@@ -252,6 +265,12 @@ def span_features(
         "every_word_in_vocabulary": bool(letters) and all(known(word) for word in letters),
     }
     return {name: int(bool(found[name])) for name in FEATURES}
+
+
+def line_bounds(text: str, index: int) -> tuple[int, int]:
+    """Return where the line holding `index` begins and ends in `text`, its break left out."""
+    line_end = text.find("\n", index)
+    return text.rfind("\n", 0, index) + 1, len(text) if line_end < 0 else line_end
 
 
 def span_vector(fragment: str, vocab: Vocab) -> list[float]:

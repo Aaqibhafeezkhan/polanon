@@ -12,9 +12,10 @@ import importlib.util
 import logging
 import re
 import threading
+from bisect import bisect_left, bisect_right
 from collections import OrderedDict
 from collections.abc import Iterator
-from itertools import pairwise
+from itertools import accumulate, pairwise
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,9 @@ _CACHE_LOCK = threading.Lock()
 
 #: Texts whose words a guard remembers for the ML filter when it remembers no spans.
 _WORDS_KEPT = 64
+
+#: The spaCy model the ML filter was fitted on, as its pipeline names itself.
+_ML_FILTER_MODEL = "core_news_md"
 
 #: The parties of a Polish contract in their cases, which it writes with a capital letter.
 _CONTRACT_PARTIES = """
@@ -1017,11 +1021,19 @@ class NerGuard(Guard):
         return spans
 
     def _filters_by_ml(self) -> bool:
-        """Whether the ML filter reviews the spans: on, in the normal mode, with a Polish model."""
+        """Whether the ML filter reviews the spans: on, in the normal mode, with its own model.
+
+        Its weights read the word vectors of the model it was fitted on, `pl_core_news_md`.
+        Another model's vectors are another space, and the small model has none, so with any
+        other model the hand-written filters decide alone, as with `ml_filter=False`.
+        """
+        pipeline = self._get_pipeline()
+        meta = getattr(pipeline, "meta", None) or {}
         return (
             self.ml_filter
             and self.mode == "normal"
-            and getattr(self._get_pipeline(), "lang", "pl") == "pl"
+            and getattr(pipeline, "lang", "pl") == "pl"
+            and meta.get("name", _ML_FILTER_MODEL) == _ML_FILTER_MODEL
         )
 
     def _read(self, text: str, wanted: frozenset[str] | set[str], digest: str = "") -> list[Span]:
@@ -1063,6 +1075,7 @@ class NerGuard(Guard):
         if not spans or not self._filters_by_ml():
             return spans
         from polanon.guards._span_features import (
+            line_bounds,
             ml_filter_keeps,
             span_context,
             span_features,
@@ -1075,14 +1088,39 @@ class NerGuard(Guard):
         if words is None:
             return spans
         vocab = getattr(self._get_pipeline(), "vocab", None)
+        # What every span would read from the whole text, or from a line as long as the text, is
+        # read once: per span, a text of 100 KB took 13 s to mask instead of 2.5 s.
+        text_english = _is_english_text(text)
+        repeated: dict[str, bool] = {}
+        languages: dict[tuple[int, int], str] = {}
+        word_starts = [start for start, _, _ in words]
+        word_ends = [end for _, end, _ in words]
+        rule_spans = sorted(others, key=lambda other: other.start)
+        rule_starts = [other.start for other in rule_spans]
+        rule_reach = list(accumulate((other.end for other in rule_spans), max))
         kept = []
         for span in spans:
+            fragment = text[span.start : span.end]
+            if fragment not in repeated:
+                repeated[fragment] = text.count(fragment) > 1
+            line = line_bounds(text, span.start)
+            if line not in languages:
+                languages[line] = _language(text[slice(*line)])
+            before = bisect_left(rule_starts, span.end)
             features = span_features(
                 text,
                 span,
-                rules_found_it=any(o.start < span.end and span.start < o.end for o in others),
-                words=[word for start, end, word in words if start < span.end and span.start < end],
+                rules_found_it=before > 0 and rule_reach[before - 1] > span.start,
+                words=[
+                    word
+                    for _, _, word in words[
+                        bisect_right(word_ends, span.start) : bisect_left(word_starts, span.end)
+                    ]
+                ],
                 vocab=vocab,
+                text_english=text_english,
+                repeated=repeated[fragment],
+                line_language=languages[line],
             )
             vector = span_vector(text[span.start : span.end], vocab) if vocab is not None else []
             context = span_context(text, span)

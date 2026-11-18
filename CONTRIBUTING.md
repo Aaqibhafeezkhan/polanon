@@ -19,8 +19,8 @@ checks it with mypy and measures its coverage. Add `pip install anthropic openai
 ## Quality bar
 
 - `ruff check .`, `ruff format --check .`, `mypy polanon` and `pytest --cov` pass locally. CI runs
-  them, then runs the tests again against the built wheel on Python 3.11, 3.12 and 3.13, and masks a
-  document with a wheel installed on its own.
+  them, runs the tests on Windows as well, then runs them again against the built wheel on Python
+  3.11, 3.12 and 3.13, and masks a document with a wheel installed on its own.
 - The core imports nothing but the standard library at module level; spaCy and httpx are loaded
   inside the functions that need them. `tests/test_layering.py` enforces it.
 - Type hints on every signature, Google-style docstrings on the public API.

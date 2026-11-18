@@ -453,6 +453,10 @@ to, co dostaje każdy komponent, a maskownik dostaje oryginały. Nieudane urucho
 wejścia w snapshocie błędu, zapisywanym na dysk przy `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Oba
 są domyślnie wyłączone.
 
+**Telemetria samego Haystacka jest domyślnie włączona.** Haystack wysyła na własne serwery dane o
+tym, jak używane są jego potoki, chyba że ustawisz `HAYSTACK_TELEMETRY_ENABLED=False`; polanon nie
+wysyła niczego. Tam, gdzie z maszyny mają wychodzić tylko zamaskowane zapytania, ustaw tę zmienną.
+
 ## Bramka dla każdego narzędzia zgodnego z API OpenAI
 
 Narzędzia takie jak Hermes Agent, n8n, Open WebUI czy LibreChat rozmawiają z modelem przez API
@@ -620,7 +624,8 @@ literami też dostaje własny token, z powodu opisanego niżej.
 
 **Każde wystąpienie zamaskowanej wartości jest maskowane**, także tam, gdzie żaden detektor nie
 rozpoznałby jej samodzielnie: w oryginalnym zapisie, wielkimi literami, rozdzielona podziałem
-wiersza, ze znakiem o zerowej szerokości w środku, z inaczej rozdzielonymi grupami oraz w całości,
+wiersza, ze znakiem o zerowej szerokości w środku, z literami cyrylicy albo greki, które wyglądają
+jak łacińskie, z inaczej rozdzielonymi grupami oraz w całości,
 razem z tym, co detektor znalazł w jej wnętrzu. Dwa wyjątki sprawiają, że zwykłe słowa pozostają
 czytelne. Jednowyrazowa nazwa pisana wielką literą nie jest dopasowywana, gdy występuje zapisana
 samymi małymi literami, bo Zima, Kot i Wilk to nazwiska, a „zima” to pora roku; identyfikatory
@@ -698,7 +703,8 @@ znalazły tam reguły, dopasowana na publicznych polskich danych. Na każdym ben
 w całości te same wartości, a fragmentów, które niczego nie ukrywają, zostawia mniej więcej
 o jedną czwartą mniej: na części OpenPII odłożonej do samego końca 400 zamiast 539. Dokłada około
 pół milisekundy do tekstu, który model czyta dwanaście, i niczego nie uczy się z maskowanych
-tekstów: trafia do paczki jako gotowe wagi. Jest domyślnie włączony; jak go dopasowano
+tekstów: trafia do paczki jako gotowe wagi. Jego wagi czytają wektory `pl_core_news_md`, więc
+przy innym modelu spaCy decydują same ręczne filtry. Jest domyślnie włączony; jak go dopasowano
 i zmierzono, opisują
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-ml-filter),
 a tak zostawia się decyzję samym ręcznym filtrom:

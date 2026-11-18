@@ -386,6 +386,20 @@ async def test_a_provider_that_breaks_off_a_stream_ends_it():
     assert '"Tak"' in response.text
 
 
+async def test_a_provider_that_breaks_off_a_stream_still_gives_back_the_held_text():
+    lines = [
+        'data: {"id": "s1", "choices": [{"index": 0, "delta": {"content": "Tak, <OSOBA"}}]}\n\n',
+    ]
+    async with client(_stream_provider(lines, break_off=True)) as gw:
+        response = await gw.post("/v1/chat/completions", json=chat("Jan Kowalski?", stream=True))
+    contents = [
+        json.loads(line[6:])["choices"][0]["delta"]["content"]
+        for line in response.text.splitlines()
+        if line.startswith('data: {"')
+    ]
+    assert "".join(contents) == "Tak, <OSOBA"
+
+
 async def test_an_answer_that_is_not_json_gives_a_bad_gateway():
     async with client(lambda request: httpx.Response(200, text="oops")) as gw:
         response = await gw.post("/v1/chat/completions", json=chat("Hej."))

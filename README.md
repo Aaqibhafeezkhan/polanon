@@ -439,6 +439,10 @@ component receives, and the masker receives the originals. A run that fails keep
 the error's snapshot, written to disk with `HAYSTACK_PIPELINE_SNAPSHOT_SAVE_ENABLED`. Both are off
 by default.
 
+**Haystack's own telemetry is on by default.** Haystack reports how its pipelines are used to its
+own servers unless `HAYSTACK_TELEMETRY_ENABLED=False` is set; polanon sends nothing. Where nothing
+but the masked calls should leave the machine, set it.
+
 ## A gateway for any OpenAI-compatible tool
 
 Tools such as Hermes Agent, n8n, Open WebUI or LibreChat talk to a model through the OpenAI API.
@@ -598,8 +602,9 @@ a token with a name that reads alike. A one-word name found in all lowercase kee
 own too, for the reason below.
 
 **Every occurrence of a masked value is masked**, also where no detector would recognise it on its
-own: as written, in capitals, across a line break, with a zero-width character in it, with its
-groups spaced differently, and around whatever a detector found inside it. Two exceptions keep ordinary words readable. A capitalised
+own: as written, in capitals, across a line break, with a zero-width character in it, with
+Cyrillic or Greek letters that look Latin in it, with its groups spaced differently, and around
+whatever a detector found inside it. Two exceptions keep ordinary words readable. A capitalised
 one-word name is not matched in all lowercase, because Zima, Kot and Wilk are surnames and "zima"
 is winter; identifiers such as a VIN or an e-mail address are matched in any case. A number shorter
 than six digits, such as a PIN, is not matched inside a longer number, a date, a time or an
@@ -670,8 +675,9 @@ regression that weighs the span, its words and the words around it, their vector
 rules found there, fitted on public Polish data. It masks the same values whole on every
 benchmark and leaves about a quarter fewer spans that hide nothing: on a part of OpenPII held out
 until it was done, 400 instead of 539. It adds about half a millisecond to a text the model takes
-twelve to read, and it learns nothing from the texts it masks: it ships as fixed weights. It is
-on by default; the
+twelve to read, and it learns nothing from the texts it masks: it ships as fixed weights. Its
+weights read the vectors of `pl_core_news_md`, so with another spaCy model the hand-written
+filters decide alone. It is on by default; the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-ml-filter)
 tell how it was fitted and measured, and this leaves the decision to the hand-written filters:
 

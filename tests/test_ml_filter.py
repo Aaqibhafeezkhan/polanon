@@ -103,6 +103,48 @@ def test_a_text_whose_words_are_forgotten_keeps_every_span(seen):
     assert seen == []
 
 
+def test_a_review_reads_the_text_and_each_line_once_however_many_spans_they_hold(seen, monkeypatch):
+    """Read once for every span, a text of 100 KB took 13 s to mask instead of 2.5 s, and a text
+    on one line, as a tool's JSON is, read its line as often."""
+    from polanon.guards import ner
+
+    guard = NerGuard()
+    guard._nlp = lambda _text: _Document()
+    spans = guard.detect(TEXT, {"PERSON"})
+    reads: list[str] = []
+    for name in ("_is_english_text", "_language"):
+        read = getattr(ner, name)
+        monkeypatch.setattr(ner, name, lambda text, read=read: reads.append(text) or read(text))
+    guard._review(TEXT, spans, [])
+    assert len(spans) == 2
+    assert reads == [TEXT, TEXT]
+    assert [(f["text_english"], f["line_polish"]) for f in seen] == [(0, 0), (0, 0)]
+
+
+class _Pipeline:
+    """A made-up spaCy pipeline that names its model as a real one does."""
+
+    lang = "pl"
+
+    def __init__(self, name: str) -> None:
+        self.meta = {"lang": "pl", "name": name}
+
+    def __call__(self, _text: str) -> _Document:
+        return _Document()
+
+
+@pytest.mark.parametrize(
+    ("name", "reviewed"), [("core_news_md", 2), ("core_news_lg", 0), ("core_news_sm", 0)]
+)
+def test_the_ml_filter_reviews_only_with_the_model_it_was_fitted_on(seen, name, reviewed):
+    """Its weights read the vectors of pl_core_news_md: another model's are another space, and
+    the small model has none, so there the hand-written filters decide alone."""
+    guard = NerGuard()
+    guard._nlp = _Pipeline(name)
+    detect(TEXT, None, {"PERSON"}, [_Rule(), guard])
+    assert len(seen) == reviewed
+
+
 def test_the_switch_takes_true_or_false_only():
     with pytest.raises(TypeError, match="ml_filter is True or False, not 'after'"):
         NerGuard(ml_filter="after")  # type: ignore[arg-type]

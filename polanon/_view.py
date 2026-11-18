@@ -29,6 +29,9 @@ INVISIBLE = frozenset(
     "\u202d\u202e\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069\ufeff"
 )
 _PLAIN = {**dict.fromkeys(_SPACES, " "), **dict.fromkeys(DASHES, "-")}
+#: Dropped inside a word, but read as a space where a word ending in a lowercase letter meets one
+#: beginning with a capital: "Jan" and "Kowalski" with nothing else between them are two words.
+_ZERO_WIDTH_SPACE = "\N{ZERO WIDTH SPACE}"
 #: Fullwidth ASCII (U+FF01 to U+FF5E) sits this far above the characters it stands for.
 _FULLWIDTH_OFFSET = 0xFEE0
 #: A text containing none of these is read by the guards exactly as written, which is nearly always.
@@ -77,12 +80,20 @@ def detection_view(text: str) -> View | None:
         end = index + 1
         while end < len(text) and unicodedata.combining(text[end]):
             end += 1
-        for char in read_cluster(text[index:end]):
+        cluster = text[index:end]
+        if cluster == _ZERO_WIDTH_SPACE and _between_words(text, index, end):
+            cluster = " "
+        for char in read_cluster(cluster):
             chars.append(char)
             starts.append(index)
             ends.append(end)
         index = end
     return View("".join(chars), starts, ends)
+
+
+def _between_words(text: str, index: int, end: int) -> bool:
+    """Return whether `text[index:end]` stands where a lowercase letter meets a capital one."""
+    return index > 0 and end < len(text) and text[index - 1].islower() and text[end].isupper()
 
 
 def read_cluster(cluster: str) -> str:
