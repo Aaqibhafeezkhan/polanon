@@ -45,6 +45,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   and without "PL", while the stable tokens took each pair for one value. A value now keeps its
   token in every spelling its stable token covers; a person named in another case still gets
   the token with that case.
+- **A KRS number after its label is a KRS number.** One ten-digit number in eleven passes the
+  NIP checksum, and "KRS 0000012345" went out as `KRS <NIP_1>`: masked, under the wrong name. A
+  number right after a KRS label is now left to the KRS rule, unless a NIP label stands before
+  it.
 - **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
   default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
   promises tests without network. The tests now switch it off, and the README and the Haystack

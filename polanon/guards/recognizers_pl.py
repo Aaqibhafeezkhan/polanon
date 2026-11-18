@@ -413,6 +413,8 @@ _PESEL_LABEL = re.compile(
     r"(?i)(?:pesel\w*|(?:nr|numer\w*)\.?\s+ubezpieczenia(?:\s+społeczn\w*)?)"
     r"(?:\s+(?:nr|numer|to))?\.?\s*[:(-]?\s*$"
 )
+#: Words that end right before a KRS number: "KRS", "KRS nr", "wpisana do KRS pod numerem".
+_KRS_LABEL = re.compile(r"(?i)\bKRS(?:\s*(?:pod\s+)?(?:nr|numer\w*|no|number)\.?)?[\s:#-]*$")
 #: Words that end right before a NIP: "NIP:", "nr NIP", "NIP UE". A label starts a word.
 _NIP_LABEL = re.compile(r"(?i)(?<![^\W\d_])nip(?:\s+(?:ue|nr|numer|to))?\.?\s*[:(-]?\s*$")
 #: Words that end right before a payment card's number: "numer karty kredytowej", "nr karty:",
@@ -779,9 +781,11 @@ def _locate_nip(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     A NIP mistyped by one digit after "NIP:" is still the company's or the person's, and went out
     in clear; a number without the label is a NIP only when its checksum says so.
     """
-    if _follows(_NIP_LABEL, text, match) or is_valid_nip(match.group()):
+    if _follows(_NIP_LABEL, text, match):
         return [match.span()]
-    return []
+    if _follows(_KRS_LABEL, text, match):
+        return []  # one ten-digit KRS number in eleven passes the NIP checksum
+    return [match.span()] if is_valid_nip(match.group()) else []
 
 
 def _locate_passport(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
