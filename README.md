@@ -813,6 +813,14 @@ knows, such as a LinkedIn link with the name in it, as
 [Adding a detector](https://github.com/boromat/polanon#adding-a-detector) describes. polanon stays optional there: the app installs it on request, talks to it through a
 small JSON-lines bridge, and sends nothing at all while masking is on but polanon is not working.
 
+## Written about
+
+- [unknowNews](https://news.mrugalski.pl/post/833420581541117952/13-listopada-2026), Jakub Mrugalski's newsletter, 13 November 2026: "polanon -
+  zamaskuj polskie dane osobowe przed wysłaniem ich do LLM-a".
+- [blog.prokulski.science](https://blog.prokulski.science/2026/11/16/pamiec-agentow-ai-polskie-pesel-e-w-promptach-i-wykresy-gestosci-w-power-bi/),
+  Łukasz Prokulski's weekly review, 16 November 2026: how polanon masks PESEL, NIP and IBAN
+  reversibly, names in every case, before a text reaches a language model.
+
 ## Contributing
 
 Bug reports, missed values and new detectors are welcome: see

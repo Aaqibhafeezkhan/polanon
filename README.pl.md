@@ -849,6 +849,15 @@ to sekcja [Dodawanie detektora](https://github.com/boromat/polanon/blob/main/REA
 tam opcjonalny: aplikacja instaluje go na żądanie, komunikuje się z nim przez niewielki most
 JSON-lines i nie wysyła zupełnie nic, gdy maskowanie jest włączone, a polanon nie działa.
 
+## Pisali o polanon
+
+- [unknowNews](https://news.mrugalski.pl/post/833420581541117952/13-listopada-2026), newsletter Jakuba Mrugalskiego, 13 listopada 2026: „polanon -
+  zamaskuj polskie dane osobowe przed wysłaniem ich do LLM-a”.
+- [blog.prokulski.science](https://blog.prokulski.science/2026/11/16/pamiec-agentow-ai-polskie-pesel-e-w-promptach-i-wykresy-gestosci-w-power-bi/),
+  cotygodniowy przegląd Łukasza Prokulskiego, 16 listopada 2026: jak polanon odwracalnie maskuje
+  PESEL, NIP i IBAN, także imiona i nazwiska w każdym przypadku, zanim tekst trafi do modelu
+  językowego.
+
 ## Współtworzenie
 
 Mile widziane są zgłoszenia błędów i przeoczonych wartości oraz nowe detektory: zobacz
