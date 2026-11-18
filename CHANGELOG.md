@@ -16,6 +16,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   13 s to mask instead of 2.5 s without the filter, and the gateway masks one call at a time.
   Each of these is now read once per text and per line, and 100 KB takes 2.9 s. What is masked
   does not change.
+- **A PESEL right after its label is masked whole however its digits are grouped.** Only the
+  whole number, the birth date apart from the serial number and one digit per box were read as
+  a PESEL. Grouped 3-3-3-2, "PESEL 508 101 123 54" went out as `PESEL <TELEFON_1> 54`, its last
+  two digits in clear, and split after the fifth digit, "PESEL: 50810 112354", it was not masked
+  at all. After a PESEL label eleven digits split by single spaces or dashes anywhere are one
+  PESEL; without the label such groups still are not, since an order number has their shape.
 - **A stream the provider breaks off keeps its last words.** When the provider broke off a
   streamed answer with a connection error, the gateway ended the stream without the text it was
   still holding back in case it began a token, so an answer that stopped on "Tak, <OSOBA"

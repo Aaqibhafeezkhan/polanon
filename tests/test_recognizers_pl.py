@@ -1,5 +1,6 @@
 """Checksum validators and the regex guard. These run without a language model."""
 
+import re
 import time
 
 import pytest
@@ -863,6 +864,29 @@ def test_the_same_numbers_without_their_label_are_left_alone(text, enabled):
 )
 def test_eleven_digits_without_a_pesel_label_are_a_pesel_only_with_its_checksum(text, expected):
     assert masked(text, {"PESEL"}) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "PESEL 508 101 123 54",
+        "PESEL 508-101-123-54",
+        "PESEL 50 810 112 354",
+        "PESEL: 50810 112354",
+        "PESEL: 50810\u00a0112354",
+        "nr PESEL 5081 0112 354",
+    ],
+)
+def test_a_pesel_right_after_its_label_is_masked_whole_in_any_grouping(text):
+    """Grouped 3-3-3-2 a PESEL went out as a phone with its last two digits in clear, and split
+    after its fifth digit it was not masked at all."""
+    label = re.match(r"\D*", text).group()
+    assert masked(text) == f"{label}<PESEL_1>"
+
+
+@pytest.mark.parametrize("text", ["Zamówienie 508 101 123 54", "Zamówienie 50810 112354"])
+def test_grouped_digits_without_a_pesel_label_are_not_a_pesel(text):
+    assert masked(text, {"PESEL"}) == text
 
 
 def test_split_number_with_a_pesel_checksum_but_no_label_is_not_a_pesel():
