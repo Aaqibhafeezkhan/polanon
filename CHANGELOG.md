@@ -7,6 +7,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stream the provider breaks off keeps its last words.** When the provider broke off a
+  streamed answer with a connection error, the gateway ended the stream without the text it was
+  still holding back in case it began a token, so an answer that stopped on "Tak, <OSOBA"
+  reached the client as "Tak, ". It now sends that text first, as it already did for a stream
+  that ends without finishing. Nothing leaked, since what is held back is still masked.
+
 ## [0.4.0] - 2026-11-18
 
 A minor release, since masked text changes shape: a person named again in another case goes out

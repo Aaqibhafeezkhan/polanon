@@ -283,7 +283,8 @@ class Gateway:
         """Stream the answer back, restored chunk by chunk.
 
         Once the answer has started, a provider that breaks off can no longer be reported with an
-        error status: the stream simply ends, as the provider's own would.
+        error status: the stream simply ends, as the provider's own would, after the text it
+        still held back.
         """
         started = False
         try:
@@ -314,6 +315,8 @@ class Gateway:
             if not started:
                 raise _unreachable(exc) from exc
             logger.warning("the provider broke off a streamed answer: %s", type(exc).__name__)
+            for out in lines.end():
+                await send({"type": "http.response.body", "body": out, "more_body": True})
             await send({"type": "http.response.body", "body": b""})
             return 502
 
