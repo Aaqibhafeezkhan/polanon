@@ -9,6 +9,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ### Added
 
+- **`polanon --restore` and `polanon --json`.** The command line masked but could not put the
+  originals back: `--restore --mapping mapping.json` now restores masked text, such as a model's
+  answer, from arguments, `--file` or standard input, a person named in another case included,
+  and leaves a token the mapping does not hold as it is. `--json` writes one JSON object to
+  stdout for a script, the text and the mapping unless `--mapping` takes it, instead of the text
+  there and the mapping on stderr. A mapping file that is not one is refused without quoting it.
 - **The gateway hands a client the call's mapping when the operator allows it.** Started with
   `--pii-map`, it answers a request with `"return_pii_map": true` with the mapping of the call,
   token to original, under `return_pii_map`: in the answer of chat completions, the Responses
