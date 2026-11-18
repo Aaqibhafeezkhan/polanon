@@ -26,6 +26,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   originals, was created readable by its owner only, but a file already there kept its mode, so
   one left at 0644 by an earlier run or another tool stayed readable by everyone on the machine.
   It is now set to 0600 before anything is written to it, where the OS has such modes.
+- **A document in many passages is cut in time that grows with its length.** `mask_chunks` and
+  `index_chunks` mask the passages as one text and cut it apart again, and each passage read
+  every masked range of the whole document: 800 passages took 1.4 s, 3,200 took 19 s. Each
+  passage now finds its own ranges by halving, and 3,200 take 1.5 s. The test that guarded this
+  with a limit of 5 s for 800 passages failed under `pytest --cov` on slower machines, and
+  passed while the time still grew with the square; it now checks that four times the passages
+  take less than eight times as long.
 - **The tests make no network calls with Haystack installed.** Haystack's telemetry, on by
   default, looked up its server four times during `tests/test_haystack.py`, while CONTRIBUTING
   promises tests without network. The tests now switch it off, and the README and the Haystack

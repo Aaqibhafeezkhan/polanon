@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import re
 import threading
+from bisect import bisect_left, bisect_right
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from polanon import _canonical
 from polanon._canonical import base_form
@@ -160,9 +161,10 @@ def mask_chunks(
     _no_judge(anonymizer, "mask_chunks")
     result = _mask(anonymizer, _joined(texts), dict(mapping or {}))
     masked, mappings = [], []
+    replaced = _replaced(result)
     start = 0
     for text in texts:
-        piece, written = _cut(result, start, start + len(text))
+        piece, written = _cut(result, start, start + len(text), replaced)
         masked.append(piece)
         mappings.append(written)
         start += len(text) + len(_PASSAGE_BREAK)
@@ -296,26 +298,44 @@ def _joined(texts: Sequence[str]) -> str:
     return _PASSAGE_BREAK.join(texts)
 
 
-def _replaced(result: AnonymizationResult) -> list[tuple[int, int, str]]:
-    """Return every masked range of the original text with the token that replaced it."""
-    replaced: list[tuple[int, int, str]] = []
+class _Replaced(NamedTuple):
+    """Every masked range of a document, in order, with the token that replaced it."""
+
+    ranges: list[tuple[int, int, str]]
+    starts: list[int]
+    ends: list[int]
+
+    def within(self, start: int, end: int) -> list[tuple[int, int, str]]:
+        """Return the ranges that overlap `start`..`end`, found by halving, not by reading all."""
+        return self.ranges[bisect_right(self.ends, start) : bisect_left(self.starts, end)]
+
+
+def _replaced(result: AnonymizationResult) -> _Replaced:
+    """Return every masked range of the original text with the token that replaced it.
+
+    Read once per document: each passage reading them all made a document of 3,200 passages
+    take 19 s to cut where 800 took 1.4 s.
+    """
+    ranges: list[tuple[int, int, str]] = []
     shift = 0
     for span in result.spans:
         match = _TOKEN_RE.match(result.anonymized, span.start + shift)
         if match is None:  # pragma: no cover - every span was replaced by a token
             raise AssertionError("a masked span is not where its token is")
-        replaced.append((span.start, span.end, match.group(0)))
+        ranges.append((span.start, span.end, match.group(0)))
         shift += len(match.group(0)) - (span.end - span.start)
-    return replaced
+    return _Replaced(ranges, [first for first, _, _ in ranges], [last for _, last, _ in ranges])
 
 
-def _cut(result: AnonymizationResult, start: int, end: int) -> tuple[str, dict[str, str]]:
+def _cut(
+    result: AnonymizationResult, start: int, end: int, replaced: _Replaced
+) -> tuple[str, dict[str, str]]:
     """Return one passage of a masked document, and token -> the value as the passage wrote it."""
     original = result.original
     pieces: list[str] = []
     written: dict[str, str] = {}
     cursor = start
-    for first, last, token in _replaced(result):
+    for first, last, token in replaced.within(start, end):
         first, last = max(first, start), min(last, end)
         if first >= last or not original[first:last].strip():
             continue  # outside the passage, or only the blank line between two
