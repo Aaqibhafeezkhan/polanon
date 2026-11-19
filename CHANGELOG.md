@@ -7,6 +7,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-19
+
+A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was
+fixed, and a few additions. Nothing that worked stops working the same way, and the stable tokens
+are computed as before, so an index needs no rebuilding. With the default guards a long text is
+masked in time that grows with its length again, 100 KB in 2.9 s instead of 13 s, and a document
+of 3,200 passages is cut in 1.5 s instead of 19 s. Numbered tokens take the spellings the stable
+ones take for one value, and a value written with letters that only look Latin keeps its token.
+The command line restores masked text with `--restore`, the gateway hands a client the call's
+mapping when started with `--pii-map`, and CI runs on Windows too.
+
 ### Added
 
 - **`polanon --restore` and `polanon --json`.** The command line masked but could not put the
