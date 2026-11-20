@@ -24,7 +24,7 @@ from polanon import _canonical
 from polanon._canonical import base_form
 from polanon._known_parts import known_parts
 from polanon._matching import Ranges, type_of
-from polanon._view import detection_view
+from polanon._view import View, detection_view
 from polanon.guards.base import Guard
 from polanon.policy import TOKEN_PATTERN
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
@@ -159,6 +159,13 @@ def mask_chunks(
     """
     texts = _chunks(chunks)
     _no_judge(anonymizer, "mask_chunks")
+    return _masked_chunks(anonymizer, texts, mapping)[0]
+
+
+def _masked_chunks(
+    anonymizer: Anonymizer, texts: Sequence[str], mapping: Mapping[str, str] | None
+) -> tuple[MaskedChunks, AnonymizationResult]:
+    """Mask the passages as one text; return them cut apart, and the result for the whole."""
     result = _mask(anonymizer, _joined(texts), dict(mapping or {}))
     masked, mappings = [], []
     replaced = _replaced(result)
@@ -168,7 +175,7 @@ def mask_chunks(
         masked.append(piece)
         mappings.append(written)
         start += len(text) + len(_PASSAGE_BREAK)
-    return MaskedChunks(texts=masked, mappings=mappings, mapping=dict(result.mapping))
+    return MaskedChunks(texts=masked, mappings=mappings, mapping=dict(result.mapping)), result
 
 
 def index_chunks(
@@ -187,7 +194,7 @@ def index_chunks(
         held = _get(store, list(wanted)) if lookup else {}
         # Tokens the passages hold already, as when masked text is indexed again, are known
         # values: left whole, and restored as the store has them.
-        masked = mask_chunks(
+        masked, result = _masked_chunks(
             _with_hits(anonymizer, _hits(pseudonyms, wanted, held)),
             texts,
             stored_mapping(store, *texts),
@@ -197,12 +204,13 @@ def index_chunks(
         # A surname the document named by the full name is found alone in its other forms,
         # "Wróblowi" or "Wróbla", only by the lookup, which knew it only once it was stored. What
         # the document is about to store is looked up among the runs of words already read, and
-        # where it is still written in the clear, the document is masked once more with it.
+        # where one lies outside everything masked, the document is masked once more with it.
         pending = {token: entry for token, entry in entries.items() if token in wanted}
         pending = {token: entry for token, entry in pending.items() if token not in held}
-        if _left_in_the_clear(_hits(pseudonyms, wanted, pending), masked.texts):
+        found = _hits(pseudonyms, wanted, pending)
+        if _left_in_the_clear(found, result, detection_view(joined[0])):
             masker = _with_hits(anonymizer, _hits(pseudonyms, wanted, {**held, **pending}))
-            masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
+            masked = _masked_chunks(masker, texts, stored_mapping(store, *texts))[0]
             entries = _entries(pseudonyms, masked.mapping)
             entries = _surnames(pseudonyms, masked.mapping) | entries
         # Asked first, so a pass that meets a collision writes nothing: written and then masked
@@ -470,13 +478,24 @@ def _with_hits(anonymizer: Anonymizer, hits: Mapping[str, list[Span]]) -> Anonym
     )
 
 
-def _left_in_the_clear(hits: Mapping[str, list[Span]], masked: Sequence[str]) -> bool:
-    """Whether a value the store would hit is still written somewhere in the masked passages."""
-    words = {seen[span.start : span.end] for seen, spans in hits.items() for span in spans}
-    if not words:
-        return False
-    alternatives = "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
-    return re.search(rf"(?<!\w)(?:{alternatives})(?!\w)", _joined(masked)) is not None
+def _left_in_the_clear(
+    hits: Mapping[str, list[Span]], result: AnonymizationResult, view: View | None
+) -> bool:
+    """Whether a hit lies anywhere outside the ranges `result` masked.
+
+    The hits are spans of the text as the guards read it, so a soft hyphen or a combining accent
+    inside a surname does not hide it; each is taken back to the original and looked up among the
+    masked ranges by halving, so a document of thousands of names costs no more than reading them.
+    """
+    masked = sorted((span.start, span.end) for span in result.spans)
+    starts = [start for start, _ in masked]
+    for spans in hits.values():
+        for span in spans:
+            hit = span if view is None else view.to_original(span)
+            at = bisect_right(starts, hit.start) - 1
+            if at < 0 or masked[at][1] < hit.end:
+                return True
+    return False
 
 
 #: Token -> every run of words of a text that would get it: (the text as read, start, end, type).
