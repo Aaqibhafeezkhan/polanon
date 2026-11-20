@@ -15,6 +15,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   its port stays unpublished, Open WebUI gets the gateway's address and key, its Ollama connection
   is off, and port 3000 is on this machine alone. CI starts the stack with a stand-in provider and
   checks that a call leaves masked and comes back restored.
+- **`MaskedTurn.restore_data(value, as_held=True)`** and `restore(text, as_held=True)`, for tool
+  arguments a tool looks up in the records they were masked from: every value comes back as it
+  was masked and a case the model added is dropped, so `<OSOBA_1:dopełniacz>` is "Jan Kowalski",
+  as the records hold it, not "Jana Kowalskiego". The default still declines.
 
 ## [0.4.1] - 2026-11-19
 
