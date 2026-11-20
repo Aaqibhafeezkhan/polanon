@@ -46,6 +46,38 @@ def test_a_term_inside_a_longer_word_is_left_alone(text):
     assert _found(["Atlas"], text) == []
 
 
+def test_a_company_listed_with_its_legal_form_is_found_without_it():
+    """PolSales added the short name of every client by hand: an e-mail says "Siłownia Testowa",
+    the register says "Siłownia Testowa Sp. z o.o.", and the short name went out."""
+    terms = ["Siłownia Testowa Sp. z o.o.", "Budex sp. z o.o.", "Muster GmbH"]
+    text = "Siłownia Testowa, BUDEX i Muster pytają, a Siłownia Testowa Sp. z o.o. płaci."
+    assert _found(terms, text) == [
+        "Siłownia Testowa",
+        "BUDEX",
+        "Muster",
+        "Siłownia Testowa Sp. z o.o.",
+    ]
+
+
+@pytest.mark.parametrize("term", ["Kot Sp. j.", "Polska S.A.", "AB, sp. k.", "Group Sp. z o.o."])
+def test_a_legal_form_is_not_dropped_when_too_little_of_a_name_is_left(term):
+    text = f"Mój kot, Polska, AB i Group. Umowa z {term}"
+    assert _found([term], text) == [term]
+
+
+@pytest.mark.parametrize(
+    "term", ["1234567890", "123-456-78-90", "123-45-67-890", "123 456 78 90", "123.456.78.90"]
+)
+def test_a_number_is_found_however_its_digits_are_grouped(term):
+    text = "NIP 123-456-78-90, 123-45-67-890, 123 456 78 90, 1234567890; obcy 12345678901."
+    assert _found([term], text) == ["123-456-78-90", "123-45-67-890", "123 456 78 90", "1234567890"]
+
+
+def test_a_short_number_keeps_its_grouping():
+    """Five digits are a postcode as much as anything: grouped otherwise, they are left alone."""
+    assert _found(["12345"], "kod 12-345 albo 12345") == ["12345"]
+
+
 def test_nothing_is_returned_without_terms_or_when_org_masking_is_off():
     assert _found([], "Projekt Atlas") == []
     assert _found(["  ", ""], "Projekt Atlas") == []

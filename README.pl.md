@@ -673,6 +673,10 @@ wielkość liter, także rozdzielone podziałem wiersza:
 guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=False)
 ```
 
+Firma wpisana z formą prawną, „Siłownia Testowa Sp. z o.o.”, zostanie znaleziona także bez niej,
+a wpisany numer z co najmniej sześciu cyfr, na przykład NIP, bez względu na to, jak pogrupowano
+jego cyfry.
+
 **Sprawdzanie odpowiedzi.** Po przywróceniu `anonymizer.sweep(restored, mapping)` zgłasza tokeny
 wymyślone przez model i dane osobowe, które dodała jego odpowiedź: `report.is_clean`, a jeśli
 chcesz się im przyjrzeć, `report.unknown_tokens` i `report.new_spans`.

@@ -25,6 +25,15 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   was masked and a case the model added is dropped, so `<OSOBA_1:dopełniacz>` is "Jan Kowalski",
   as the records hold it, not "Jana Kowalskiego". The default still declines.
 
+### Fixed
+
+- **A denylisted company is found without its legal form, and a number however it is grouped.**
+  An e-mail says "Siłownia Testowa" where the list says "Siłownia Testowa Sp. z o.o.", and the
+  short name went out; it is masked now when two words, or one of five letters or more that is not
+  a word such as "Polska", are left. A listed number of six digits or more, such as a NIP, is
+  found with or without hyphens, spaces, dots or slashes between its digits. `MaskedTurn(known=...)`
+  gets both, since it masks known values with the denylist.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was
