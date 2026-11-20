@@ -661,7 +661,9 @@ odwraca. Przechowuj mapowanie tak samo jak oryginalny dokument.
 wcześniej każdą wartość, którą mapowanie już zawiera, na przykład w historii wysyłanej ponownie po
 tym, jak nowa wartość dostała swój token. To samo wywołanie sprawdza treść przed wysłaniem:
 `mask_known_values(payload, mapping) == payload` oznacza, że żadna wartość z mapowania nie została
-w miejscu, w którym biblioteka by ją zamaskowała.
+w miejscu, w którym biblioteka by ją zamaskowała. Dla całego ciała żądania
+`leaked_tokens(body, mapping)` podaje tokeny, których wartości nadal by wyszły, nigdy same
+wartości, więc wynik można zapisać w logu; bramka sprawdza tak każde wywołanie.
 
 **Własne słowa.** Wewnętrzne nazwy, których żadna reguła nie może znać, takie jak kryptonim projektu
 albo nazwa klienta, trafiają na denylistę i są maskowane wszędzie, gdzie się pojawią, bez względu na

@@ -637,7 +637,9 @@ it. Store the mapping the way you would store the original document.
 **Replaying a conversation?** `mask_known_values(text, mapping)` masks every value a mapping already
 holds in text that was masked earlier, such as history sent again after a new value got its token.
 The same call checks a payload before it leaves: `mask_known_values(payload, mapping) == payload`
-means no value the mapping holds is left where the library would mask it.
+means no value the mapping holds is left where the library would mask it. For a whole request
+body, `leaked_tokens(body, mapping)` names the tokens whose values would still go out, never the
+values, so the result may be logged; the gateway runs it on every call.
 
 **Words of your own.** In-house names no rule can know, such as a project codename or a client,
 go on a denylist and are masked wherever they appear, in any case and across line breaks:

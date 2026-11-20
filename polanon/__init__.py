@@ -51,6 +51,7 @@ from polanon.index import (
 )
 from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.mock import MockJudge
+from polanon.leaks import leaked_tokens
 from polanon.output_sweep import SweepReport, sweep
 from polanon.pipeline import _anonymize_stage1, anonymize, mask_known_values
 from polanon.policy import (
@@ -107,6 +108,7 @@ __all__ = [
     "StreamRestorer",
     "SweepReport",
     "default_guards",
+    "leaked_tokens",
     "mask_known_values",
     "merge_spans",
     "ner_available",
