@@ -273,7 +273,11 @@ class MaskedTurn:
             as_held: give every value as it was masked, and drop a case the model added. A tool
                 that looks a name up in the records it was masked from needs it written as those
                 records hold it: ``<OSOBA_1:dopełniacz>`` is then "Jan Kowalski" when the records
-                said "Jan Kowalski", not "Jana Kowalskiego".
+                said "Jan Kowalski", not "Jana Kowalskiego". A value first written in a message,
+                not in the records, is held in that message's case: after "Umów mnie z Janem
+                Kowalskim" it is "Janem Kowalskim". For such a value leave `as_held` off: the
+                Polish note asks for ``<OSOBA_1:mianownik>`` in tool arguments, which the
+                default restores as "Jan Kowalski".
         """
         if isinstance(value, str):
             return self.restore(value, as_held=as_held)
