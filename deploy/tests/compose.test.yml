@@ -1,0 +1,18 @@
+# Laid over a stack's docker-compose.yml by check_stack.py: the gateway comes from the image CI has
+# just built, and a stand-in written in upstream.py takes the provider's place, so nothing leaves
+# the machine and no real key is needed.
+
+services:
+  gateway:
+    image: polanon-gateway:ci
+    depends_on:
+      - upstream
+
+  upstream:
+    # The gateway's image, for the Python in it; the stand-in needs the standard library alone.
+    image: polanon-gateway:ci
+    entrypoint: ["python", "/stack-tests/upstream.py"]
+    healthcheck:
+      disable: true
+    volumes:
+      - "${STACK_TESTS:?check_stack.py sets STACK_TESTS}:/stack-tests:ro"

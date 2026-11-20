@@ -7,6 +7,15 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **Open WebUI behind the gateway in one command**, for a team that already works in Open WebUI;
+  a company choosing a chat is pointed to PolGate. `deploy/open-webui/` holds a Compose file
+  that starts the gateway's image and Open WebUI together: the gateway keeps the provider's key and
+  its port stays unpublished, Open WebUI gets the gateway's address and key, its Ollama connection
+  is off, and port 3000 is on this machine alone. CI starts the stack with a stand-in provider and
+  checks that a call leaves masked and comes back restored.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was

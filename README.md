@@ -490,7 +490,7 @@ The image is tagged with the version, such as `0.4.1`, the minor version, `0.4`,
 |---|---|
 | Hermes Agent | `base_url` of the model or of a named provider in `config.yaml` |
 | n8n | the Base URL of the OpenAI credential |
-| Open WebUI | the URL of an OpenAI API connection |
+| Open WebUI | the URL of an OpenAI API connection; a team already on it can start both with [deploy/open-webui](deploy/open-webui/), and one choosing a chat now has [PolGate](#used-by) |
 | LibreChat | the `baseURL` of a custom endpoint in `librechat.yaml` |
 | an app on Anthropic's SDK, Claude Code | `base_url`, or `ANTHROPIC_BASE_URL`, as `http://127.0.0.1:8787` |
 

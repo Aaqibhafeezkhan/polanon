@@ -505,7 +505,7 @@ z wersją pomniejszą, `0.4`, i `latest`.
 |---|---|
 | Hermes Agent | `base_url` modelu albo nazwanego dostawcy w `config.yaml` |
 | n8n | Base URL w poświadczeniach OpenAI |
-| Open WebUI | adres połączenia z API OpenAI |
+| Open WebUI | adres połączenia z API OpenAI; zespół, który już go używa, uruchomi oba naraz z [deploy/open-webui](deploy/open-webui/), a ten, który dopiero wybiera czat, ma [PolGate](#kto-korzysta-z-polanon) |
 | LibreChat | `baseURL` własnego endpointu w `librechat.yaml` |
 | aplikacja na SDK Anthropic, Claude Code | `base_url` albo `ANTHROPIC_BASE_URL` jako `http://127.0.0.1:8787` |
 
