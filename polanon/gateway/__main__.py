@@ -5,8 +5,8 @@
 
 The tool that talks to the model then points its base URL at ``http://127.0.0.1:8787/v1``. The
 gateway listens on this machine only unless told otherwise, and then only with a key every client
-must send. Keys come from the environment, never from the command line, where other users of the
-machine could read them:
+must send. ``--workers N`` masks N calls at once, in processes of their own. Keys come from the
+environment, never from the command line, where other users of the machine could read them:
 
     POLANON_UPSTREAM_KEY   the provider's key, sent in place of the client's own
     POLANON_GATEWAY_KEY    the key clients must send; required to listen beyond this machine
@@ -16,6 +16,7 @@ machine could read them:
 from __future__ import annotations
 
 import argparse
+import functools
 import ipaddress
 import logging
 import os
@@ -24,6 +25,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Literal
 
 from polanon.gateway._build import anonymizer as _anonymizer
+from polanon.gateway._build import worker_anonymizer
 
 #: Exit status for a setting the gateway refuses to start with.
 BAD_SETTING = 2
@@ -66,20 +68,21 @@ def main(
         return BAD_SETTING
     try:
         anonymizer, detection = _anonymizer(args, env)
+        config = GatewayConfig(
+            upstream=args.upstream,
+            upstream_key=env.get("POLANON_UPSTREAM_KEY") or None,
+            gateway_key=gateway_key,
+            instructions=None if args.instructions == "none" else args.instructions,
+            unsupported=_unsupported(args),
+            max_body=args.max_body_mb * 1024 * 1024,
+            timeout=args.timeout,
+            pii_map=args.pii_map,
+            workers=args.workers,
+        )
+        app = Gateway(anonymizer, config, build=functools.partial(worker_anonymizer, args))
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return BAD_SETTING
-    config = GatewayConfig(
-        upstream=args.upstream,
-        upstream_key=env.get("POLANON_UPSTREAM_KEY") or None,
-        gateway_key=gateway_key,
-        instructions=None if args.instructions == "none" else args.instructions,
-        unsupported=_unsupported(args),
-        max_body=args.max_body_mb * 1024 * 1024,
-        timeout=args.timeout,
-        pii_map=args.pii_map,
-    )
-    app = Gateway(anonymizer, config)
     print(_banner(args, config, detection), file=sys.stderr)
     (serve or _uvicorn)(app, args.host, args.port)
     return 0
@@ -162,6 +165,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout", type=float, default=600.0, help="seconds to wait for the provider"
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        metavar="N",
+        help="mask N calls at once, each in a process of its own with its own copy of the spaCy "
+        "model, about 330 MB each; one at a time in this process by default",
+    )
     return parser
 
 
@@ -190,9 +201,10 @@ def _banner(args: argparse.Namespace, config: Any, detection: str) -> str:
         keys = "the client's key is passed on"
     unmasked = "; images and files go to the provider unmasked" if args.pass_unsupported else ""
     mapping = "; clients may ask for each call's mapping" if config.pii_map else ""
+    workers = f" in {config.workers} processes" if config.workers > 1 else ""
     return (
         f"polanon gateway on http://{args.host}:{args.port}/v1 -> {args.upstream}; "
-        f"masking with {detection}; {keys}{unmasked}{mapping}"
+        f"masking{workers} with {detection}; {keys}{unmasked}{mapping}"
     )
 
 

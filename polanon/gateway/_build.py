@@ -1,8 +1,14 @@
-"""The anonymizer the gateway's command builds from its options."""
+"""The anonymizer the gateway's command builds from its options.
+
+The gateway's process builds one, and so does each of its masking processes with ``--workers``:
+this module is never run as ``__main__``, so a process started to mask finds
+:func:`worker_anonymizer` here by its name.
+"""
 
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
@@ -55,6 +61,15 @@ def anonymizer(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[Anonym
         pseudonyms=pseudonyms,
     )
     return anonymizer, detection
+
+
+def worker_anonymizer(args: argparse.Namespace) -> Anonymizer:
+    """The anonymizer of one masking process, built as the gateway built its own.
+
+    It runs in that process, and reads ``POLANON_KEY`` from the environment the process inherits
+    from the gateway: the key is never among the arguments, which are pickled to reach it.
+    """
+    return anonymizer(args, os.environ)[0]
 
 
 def names_in(path: str | None) -> list[str]:

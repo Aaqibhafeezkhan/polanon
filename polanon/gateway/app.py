@@ -6,7 +6,9 @@ Each call is masked by its own :class:`~polanon.MaskedTurn`, checked once more f
 value, sent to the provider and restored on the way back, streamed or not.
 
 The application keeps nothing between calls and writes nothing to disk. It logs the path, the
-status, the time taken and how many values of each type were masked, never a value.
+status, the time taken and how many values of each type were masked, never a value. It masks one
+call at a time in its own process, or, with ``workers`` above one, N calls at once in the
+processes of :mod:`polanon.gateway.workers`.
 """
 
 from __future__ import annotations
@@ -30,14 +32,11 @@ from polanon.gateway.payloads import (
     MessagesStream,
     ResponsesStream,
     leaked_tokens,
-    mask_chat_request,
-    mask_embeddings_request,
-    mask_messages_request,
-    mask_responses_request,
     restore_chat_response,
     restore_messages_response,
     restore_responses_response,
 )
+from polanon.gateway.workers import Build, Kind, MaskingPool, masked_request, new_turn
 
 logger = logging.getLogger("polanon.gateway")
 
@@ -77,6 +76,9 @@ class GatewayConfig:
         pii_map: whether a client that sends ``"return_pii_map": true`` gets the call's mapping,
             token to original, with the answer. The mapping holds what the client sent, and with
             stable tokens it tells which token stands for which value, so it is off by default.
+        workers: how many calls are masked at once. 1 masks one at a time in the gateway's own
+            process; more mask in as many processes of their own, each with its own anonymizer
+            and language model, which the gateway's `build` makes.
     """
 
     upstream: str
@@ -87,6 +89,12 @@ class GatewayConfig:
     max_body: int = 10 * 1024 * 1024
     timeout: float = 600.0
     pii_map: bool = False
+    workers: int = 1
+
+    def __post_init__(self) -> None:
+        """Refuse a number of workers that is not one or more."""
+        if isinstance(self.workers, bool) or not isinstance(self.workers, int) or self.workers < 1:
+            raise ValueError(f"workers is 1 or more, not {self.workers!r}")
 
 
 class _RefusalError(Exception):
@@ -103,7 +111,9 @@ class Gateway:
     """An ASGI application that masks calls to an OpenAI-compatible API and restores the answers.
 
     Build it once per process, with the anonymizer that masks every call; serve it with any ASGI
-    server, as ``polanon-gateway`` does with uvicorn.
+    server, as ``polanon-gateway`` does with uvicorn. With ``config.workers`` above one, the
+    server's lifespan events start the masking processes and stop them; without them the first
+    call starts them, and :meth:`aclose` stops them.
     """
 
     def __init__(
@@ -112,14 +122,25 @@ class Gateway:
         config: GatewayConfig,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        build: Build | None = None,
     ) -> None:
         """Set the gateway up.
 
         Args:
             anonymizer: the guards and the policy every call is masked with. It must have no
-                stage-2 judge, which a turn cannot run.
+                stage-2 judge, which a turn cannot run. With more than one worker it masks
+                nothing: the workers' anonymizers do, and the language model of this one is never
+                loaded.
             config: where calls go and who may make them.
             transport: what carries calls to the provider; tests pass one that answers itself.
+            build: with more than one worker, makes the anonymizer of each masking process, in
+                that process, as `anonymizer` was made. It is pickled, so it is a function
+                importable by its name or a :func:`functools.partial` of one, and it reads
+                ``POLANON_KEY`` from the environment, never from its arguments: a
+                :class:`~polanon.Pseudonyms` cannot be pickled, so the key never travels.
+
+        Raises:
+            ValueError: for more than one worker without `build`.
         """
         self._anonymizer = anonymizer
         self._config = config
@@ -129,9 +150,24 @@ class Gateway:
         self._client = httpx.AsyncClient(
             base_url=config.upstream, timeout=config.timeout, transport=transport
         )
-        # One call is masked at a time: the language model is not shared safely between threads,
-        # and masking runs in a thread so the event loop keeps serving streams meanwhile.
+        # With one worker, one call is masked at a time: the language model is not shared safely
+        # between threads, and masking runs in a thread so the event loop keeps serving streams
+        # meanwhile. With more, each process masks one call at a time.
         self._masking = asyncio.Lock()
+        self._pool: MaskingPool | None = None
+        if config.workers > 1:
+            if build is None:
+                raise ValueError(
+                    "a gateway with more than one worker needs build, which makes the "
+                    "anonymizer of each masking process"
+                )
+            self._pool = MaskingPool(build, config.workers)
+
+    async def aclose(self) -> None:
+        """Stop the masking processes and close the connections to the provider."""
+        if self._pool is not None:
+            await asyncio.to_thread(self._pool.close)
+        await self._client.aclose()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Serve one ASGI connection."""
@@ -184,11 +220,7 @@ class Gateway:
 
     async def _chat(self, scope: Scope, receive: Receive, send: Send) -> tuple[int, dict[str, int]]:
         body, wants_map = self._map_asked(await self._body(receive))
-        turn = self._turn()
-        masked = await self._mask(
-            lambda: mask_chat_request(turn, body, instructions=self._instructions)
-        )
-        self._check(masked, turn)
+        turn, masked = await self._mask("chat", body)
         headers = self._upstream_headers(scope)
         if body.get("stream"):
             lines = _ChatLines(turn.mapping, _returned(turn) if wants_map else None)
@@ -207,19 +239,7 @@ class Gateway:
         self, scope: Scope, receive: Receive, send: Send
     ) -> tuple[int, dict[str, int]]:
         body, wants_map = self._map_asked(await self._body(receive))
-        turn = self._turn()
-        drop = self._config.unsupported == "drop"
-        keep = self._config.unsupported == "pass"
-        masked = await self._mask(
-            lambda: mask_responses_request(
-                turn,
-                body,
-                instructions=self._instructions,
-                drop_unsupported=drop,
-                pass_unsupported=keep,
-            )
-        )
-        self._check(masked, turn)
+        turn, masked = await self._mask("responses", body)
         headers = self._upstream_headers(scope)
         if body.get("stream"):
             lines = _ResponsesLines(turn.mapping, _returned(turn) if wants_map else None)
@@ -238,9 +258,7 @@ class Gateway:
         self, scope: Scope, receive: Receive, send: Send
     ) -> tuple[int, dict[str, int]]:
         body, wants_map = self._map_asked(await self._body(receive))
-        turn = self._turn()
-        masked = await self._mask(lambda: mask_embeddings_request(turn, body))
-        self._check(masked, turn)
+        turn, masked = await self._mask("embeddings", body)
         response = await self._post("embeddings", masked, self._upstream_headers(scope))
         if response.is_success and wants_map:
             answer = _with_mapping(_json_of(response), turn)
@@ -254,11 +272,7 @@ class Gateway:
     ) -> tuple[int, dict[str, int]]:
         """Anthropic's Messages API, and the count of its tokens, which is asked masked too."""
         body, wants_map = self._map_asked(await self._body(receive))
-        turn = self._turn()
-        masked = await self._mask(
-            lambda: mask_messages_request(turn, body, instructions=self._instructions)
-        )
-        self._check(masked, turn)
+        turn, masked = await self._mask("messages", body)
         headers = self._upstream_headers(scope, anthropic=True)
         if endpoint == "messages" and body.get("stream"):
             lines = _MessagesLines(turn.mapping, _returned(turn) if wants_map else None)
@@ -386,16 +400,31 @@ class Gateway:
             )
         return {key: value for key, value in body.items() if key != "return_pii_map"}, wanted
 
-    def _turn(self) -> MaskedTurn:
-        blocks: dict[str, Literal["raise", "drop", "keep"]] = {"drop": "drop", "pass": "keep"}
-        unknown = blocks.get(self._config.unsupported, "raise")
-        return MaskedTurn(self._anonymizer, unknown_blocks=unknown)
+    async def _mask(self, kind: Kind, body: dict[str, Any]) -> tuple[MaskedTurn, dict[str, Any]]:
+        """Mask one request, check it, and turn a refusal into an error for the client.
 
-    async def _mask(self, masking: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-        """Mask in a thread, one call at a time, and turn a refusal into an error for the client."""
+        With one worker the request is masked in a thread of this process, one call at a time;
+        with more, in the next free masking process, which sends back the call's mapping, and the
+        turn that restores the answer is made here from it.
+        """
+        unsupported = self._config.unsupported
         try:
-            async with self._masking:
-                return await asyncio.to_thread(masking)
+            if self._pool is None:
+                turn = new_turn(self._anonymizer, unsupported)
+                async with self._masking:
+                    masked = await asyncio.to_thread(
+                        masked_request,
+                        turn,
+                        kind,
+                        body,
+                        instructions=self._instructions,
+                        unsupported=unsupported,
+                    )
+            else:
+                masked, mapping = await self._pool.mask(
+                    kind, body, instructions=self._instructions, unsupported=unsupported
+                )
+                turn = new_turn(self._anonymizer, unsupported, mapping)
         except GatewayRequestError as exc:
             raise _RefusalError(400, str(exc), "invalid_request") from exc
         except MaskingUnavailableError as exc:
@@ -415,6 +444,8 @@ class Gateway:
             raise _RefusalError(
                 400, "the request has a field of the wrong type", "invalid_request"
             ) from exc
+        self._check(masked, turn)
+        return turn, masked
 
     def _check(self, masked: dict[str, Any], turn: MaskedTurn) -> None:
         """The last check: refuse to send a payload that still holds an original value."""
@@ -462,13 +493,38 @@ class Gateway:
                     headers[name] = client_key
         return headers
 
+    async def _start_workers(self) -> str | None:
+        """Start the masking processes and wait until each has loaded its model.
+
+        The server opens its port only after this, so a call never waits for a model to load,
+        and a gateway whose workers cannot start does not start either, rather than refuse every
+        call while it reports itself healthy.
+
+        Returns:
+            None once the workers are ready, or why they could not start.
+        """
+        if self._pool is None:
+            return None
+        try:
+            processes = await asyncio.to_thread(self._pool.wait_ready)
+        except Exception as exc:
+            logger.error("the masking processes could not start: %s", type(exc).__name__)
+            await asyncio.to_thread(self._pool.close)
+            return f"the masking processes could not start ({type(exc).__name__})"
+        logger.info("%d masking processes ready", len(processes))
+        return None
+
     async def _lifespan(self, receive: Receive, send: Send) -> None:
         while True:
             message = await receive()
             if message["type"] == "lifespan.startup":
+                failed = await self._start_workers()
+                if failed:
+                    await send({"type": "lifespan.startup.failed", "message": failed})
+                    return
                 await send({"type": "lifespan.startup.complete"})
             elif message["type"] == "lifespan.shutdown":
-                await self._client.aclose()
+                await self.aclose()
                 await send({"type": "lifespan.shutdown.complete"})
                 return
 

@@ -539,6 +539,26 @@ What it does with a call:
   masked and restored on its own. With `POLANON_KEY` set to 64 hexadecimal characters, a person
   keeps one token in every call and in every grammatical case.
 
+By default the gateway masks one call at a time, in its own process: the spaCy model is not
+shared safely between threads, and Python runs one thread of a process at a time anyway. With
+the default guards 100 KB takes about 3 s to mask, so a second tool waits for the first.
+`--workers N` masks N calls at once, each in a process of its own with its own copy of the model,
+on as many cores, while the gateway's own process keeps serving, streaming and restoring; on a
+machine with 16 threads four calls at once took as long as one. More workers than cores gain
+nothing.
+
+Each worker holds its own spaCy model: with `pl_core_news_md` about 330 MB for every worker,
+while the gateway's own process then loads no model and stays near 55 MB. One process takes
+about 340 MB, `--workers 2` about 710 MB and `--workers 4` about 1.4 GB. In Docker the option goes after the image's name, and a
+memory limit such as `docker run --memory` has to leave room for every worker. The workers load
+the model before the gateway accepts calls, and stop with it. A call goes to a worker and comes
+back masked, with its mapping, through a pipe on the same machine, and the worker forgets the
+values once the call is masked. Each worker reads `POLANON_KEY` from the environment it inherits,
+so stable tokens are the same whichever worker masked a call. A worker that stops, killed for
+lack of memory say, fails the calls being masked at that moment: they are refused with a 503
+and nothing is sent, the error OpenAI's and Anthropic's SDKs send again, and the next call
+starts new workers.
+
 Keys stay with whoever runs the gateway, and come from the environment only. By default the
 tool's own key is passed on; `POLANON_UPSTREAM_KEY` sends another one instead, as a bearer
 token or, to Anthropic, as `x-api-key`. The gateway listens on `127.0.0.1`. To reach it from

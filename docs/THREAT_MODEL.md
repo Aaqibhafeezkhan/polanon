@@ -219,7 +219,11 @@ calls, the keys or the logs. What it protects:
 - **Who can use it.** It listens on `127.0.0.1`. On any other address it refuses to start without
   `POLANON_GATEWAY_KEY`, which every client must then send, compared in constant time.
 - **What it keeps.** Nothing on disk: each call is masked and restored with a mapping that lives as
-  long as the call. The log holds the path, the status, the time and counts of masked types.
+  long as the call. The log holds the path, the status, the time and counts of masked types. With
+  `--workers` a call goes to one of the gateway's own processes and comes back masked, with its
+  mapping, through a pipe on the same machine; the process forgets the values once the call is
+  masked, and builds its own `Pseudonyms` from `POLANON_KEY` in the environment it inherits, so
+  the key is never pickled or sent to it.
 
 What it does not protect, and is the operator's part:
 
@@ -229,8 +233,8 @@ What it does not protect, and is the operator's part:
   so a value glued into a name with underscores, as in "umowa_Jan_Kowalski.pdf", goes out.
 
 - **The machine.** Calls arrive in the clear and answers leave restored. Anyone who can read the
-  gateway's memory, or a tool's own history, reads them; so can anything the operator puts in
-  front of it, such as a reverse proxy that logs bodies.
+  gateway's memory or its workers', or a tool's own history, reads them; so can anything the
+  operator puts in front of it, such as a reverse proxy that logs bodies.
 - **The keys.** By default the client's key is passed on to the provider; `POLANON_UPSTREAM_KEY`
   and `POLANON_GATEWAY_KEY` are read from the environment and never printed. Keep them out of shell
   history and out of files others can read.

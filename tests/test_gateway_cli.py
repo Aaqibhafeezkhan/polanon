@@ -1,5 +1,6 @@
 """The polanon-gateway command: its safe defaults, and that it never prints a key."""
 
+import pickle
 import sys
 
 import pytest
@@ -190,3 +191,35 @@ def test_the_mapping_goes_back_to_clients_only_when_the_operator_says_so(capsys)
     assert status == 0
     assert served.app._config.pii_map is True
     assert "clients may ask for each call's mapping" in capsys.readouterr().err
+
+
+def test_one_call_is_masked_at_a_time_in_the_gateway_s_own_process_by_default(capsys):
+    status, served = run(UPSTREAM)
+    assert status == 0
+    assert served.app._config.workers == 1
+    assert served.app._pool is None
+    assert "processes" not in capsys.readouterr().err
+
+
+def test_workers_mask_calls_side_by_side_and_never_carry_the_key(capsys):
+    """Each process builds its anonymizer from the options and reads POLANON_KEY itself, so what
+    is pickled to reach it holds the options and no key."""
+    status, served = run(
+        [*UPSTREAM, "--workers", "3", "--allow", "Ola Nowak"], {"POLANON_KEY": KEY}
+    )
+    assert status == 0
+    assert served.app._config.workers == 3
+    assert served.app._pool.workers == 3
+    assert "masking in 3 processes with rules alone, stable tokens" in capsys.readouterr().err
+    build = pickle.dumps(served.app._pool._build)
+    assert b"Ola Nowak" in build
+    assert KEY.encode() not in build
+    assert bytes.fromhex(KEY) not in build
+
+
+@pytest.mark.parametrize("count", ["0", "-1"])
+def test_fewer_than_one_worker_is_refused(count, capsys):
+    status, served = run([*UPSTREAM, "--workers", count])
+    assert status == BAD_SETTING
+    assert served.calls == []
+    assert "workers is 1 or more" in capsys.readouterr().err

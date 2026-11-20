@@ -7,6 +7,29 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **`polanon-gateway --workers N` masks N calls at once, on as many cores.** The gateway masked
+  one call at a time in one thread, since the spaCy model is not shared safely between threads,
+  so one process used one core, and with the default guards a second tool waited about 3 s for
+  every 100 KB the first sent. With `--workers N` each call is masked in the next free of N
+  processes of the gateway's own, each with its own anonymizer and model, and the gateway's
+  process keeps serving, streaming and restoring; four calls at once took as long as one on a
+  machine with 16 threads. A process gets the request through a pipe and sends back the masked
+  request with the call's mapping, and forgets the values once it is masked. Each one builds its
+  anonymizer from the gateway's options and reads `POLANON_KEY` from the environment it inherits,
+  so the key is never pickled and stable tokens are the same in every process. The workers load
+  the model before the gateway accepts calls, and a gateway whose workers cannot start does not
+  start either; a worker that stops fails the calls being masked at that moment with a 503, and
+  the next call starts new ones; each ends with the gateway, also one killed outright. Every
+  worker holds a model of its own, about 330 MB with `pl_core_news_md`, while the gateway's own
+  process then loads none. The default stays one call at a time in the gateway's process, as
+  before. `Gateway` takes `build`, which makes each worker's anonymizer, and `GatewayConfig`
+  takes `workers`. uvicorn's own `--workers`, a whole gateway in each process, was measured too
+  and left aside: its processes share one socket and take calls as they come, so a busy one
+  still took a second call while another sat idle, and on Windows one of them failed to start
+  on the shared socket.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was

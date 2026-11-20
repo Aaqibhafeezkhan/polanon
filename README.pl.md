@@ -554,6 +554,26 @@ Co robi z jednym wywołaniem:
   wywołanie jest maskowane i przywracane osobno. Z `POLANON_KEY` ustawionym na 64 znaki
   szesnastkowe dana osoba ma jeden token w każdym wywołaniu i w każdym przypadku gramatycznym.
 
+Domyślnie bramka maskuje jedno wywołanie naraz, we własnym procesie: model spaCy nie jest
+bezpiecznie współdzielony między wątkami, a Python i tak wykonuje naraz jeden wątek procesu.
+Z domyślnymi strażnikami zamaskowanie 100 KB trwa około 3 s, więc drugie narzędzie czeka na
+pierwsze. `--workers N` maskuje N wywołań naraz, każde w osobnym procesie z własną kopią modelu,
+na tylu rdzeniach, a własny proces bramki dalej obsługuje połączenia, strumienie i przywracanie;
+na komputerze z 16 wątkami cztery wywołania naraz trwały tyle co jedno. Więcej workerów niż
+rdzeni nic nie daje.
+
+Każdy worker trzyma własny model spaCy: z `pl_core_news_md` to około 330 MB na każdego workera,
+a własny proces bramki nie wczytuje wtedy modelu i zostaje przy około 55 MB. Jeden proces zajmuje
+około 340 MB, `--workers 2` około 710 MB, a `--workers 4` około 1,4 GB. W Dockerze opcja idzie po nazwie obrazu, a limit pamięci,
+na przykład `docker run --memory`, musi zostawić miejsce dla każdego workera. Workery wczytują
+model, zanim bramka zacznie przyjmować wywołania, i kończą pracę razem z nią. Wywołanie trafia
+do workera i wraca zamaskowane, razem z mapowaniem, przez potok na tym samym komputerze, a worker
+zapomina wartości, gdy tylko je zamaskuje. Każdy worker czyta `POLANON_KEY` ze środowiska, które
+dziedziczy, więc stabilne tokeny są takie same, niezależnie od tego, który worker zamaskował
+wywołanie. Worker, który przestanie działać, na przykład zabity z braku pamięci, psuje wywołania
+maskowane w tej chwili: są odrzucane z kodem 503 i nic nie zostaje wysłane, a SDK OpenAI
+i Anthropic ponawiają taki błąd; następne wywołanie uruchamia nowe workery.
+
 Klucze zostają u tego, kto uruchamia bramkę, i są brane wyłącznie ze zmiennych środowiskowych.
 Domyślnie bramka przekazuje dalej klucz narzędzia; `POLANON_UPSTREAM_KEY` wysyła zamiast niego
 inny, jako token bearer albo, do Anthropic, jako `x-api-key`. Bramka słucha na `127.0.0.1`.

@@ -100,10 +100,10 @@ jobs:
       - name: Type-check with the gateway's packages installed
         run: mypy polanon
 
-      # test_gateway_server.py serves the gateway with uvicorn over real sockets; the main job
-      # has no uvicorn and skips it.
+      # test_gateway_server.py serves the gateway with uvicorn over real sockets, with and
+      # without workers; the main job has no uvicorn and skips it.
       - name: Test the gateway, end to end
-        run: pytest tests/test_gateway_payloads.py tests/test_gateway_app.py tests/test_gateway_cli.py tests/test_gateway_server.py tests/test_layering.py
+        run: pytest tests/test_gateway_payloads.py tests/test_gateway_app.py tests/test_gateway_cli.py tests/test_gateway_server.py tests/test_gateway_workers.py tests/test_layering.py
 
   # The command line reads files and pipes in Windows's code pages and UTF-16 and writes UTF-8 to
   # its console, which only Windows exercises; the rest of the suite runs there as well.
@@ -232,3 +232,23 @@ jobs:
           test "$status" = 401
           if docker logs gateway 2>&1 | grep -q ci-only-key; then exit 1; fi
           docker rm -f gateway
+
+      # Two workers, each with the model, and the health check still answered. Nobody listens at
+      # the upstream, so a call masked in a worker ends in 502; one that failed to mask is a 503.
+      - name: Mask in two workers, report healthy
+        run: |
+          docker run -d --name workers -p 127.0.0.1:8788:8787 -e POLANON_GATEWAY_KEY=ci-only-key \
+            polanon-gateway:ci --upstream http://127.0.0.1:9/v1 --workers 2
+          for attempt in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' workers)" = healthy ] && break
+            sleep 2
+          done
+          docker logs workers
+          test "$(docker inspect -f '{{.State.Health.Status}}' workers)" = healthy
+          docker logs workers 2>&1 | grep -q "masking in 2 processes"
+          test "$(docker top workers | grep -c spawn_main)" = 2
+          status="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8788/v1/chat/completions \
+            -H 'authorization: Bearer ci-only-key' -H 'content-type: application/json' \
+            -d '{"model": "m", "messages": [{"role": "user", "content": "Jan Kowalski mieszka w Gdańsku."}]}')"
+          test "$status" = 502
+          docker rm -f workers
