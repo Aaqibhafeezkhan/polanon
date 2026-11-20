@@ -648,8 +648,9 @@ go on a denylist and are masked wherever they appear, in any case and across lin
 guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=False)
 ```
 
-A company listed with its legal form, "Siłownia Testowa Sp. z o.o.", is found without it too, and
-a listed number of six digits or more, such as a NIP, however its digits are grouped.
+A company listed with its legal form, "Siłownia Testowa Sp. z o.o.", is found without it too when
+two words or more are left, written as on the list or in capitals, and a listed number of nine
+digits or more, such as a NIP, however its digits are grouped.
 
 **Checking the answer.** After restoring, `anonymizer.sweep(restored, mapping)` reports tokens the
 model invented and personal data its answer added: `report.is_clean`, or `report.unknown_tokens`

@@ -674,8 +674,8 @@ guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=
 ```
 
 Firma wpisana z formą prawną, „Siłownia Testowa Sp. z o.o.”, zostanie znaleziona także bez niej,
-a wpisany numer z co najmniej sześciu cyfr, na przykład NIP, bez względu na to, jak pogrupowano
-jego cyfry.
+jeśli zostają co najmniej dwa słowa, zapisane jak na liście albo wielkimi literami, a wpisany numer
+z co najmniej dziewięciu cyfr, na przykład NIP, bez względu na to, jak pogrupowano jego cyfry.
 
 **Sprawdzanie odpowiedzi.** Po przywróceniu `anonymizer.sweep(restored, mapping)` zgłasza tokeny
 wymyślone przez model i dane osobowe, które dodała jego odpowiedź: `report.is_clean`, a jeśli

@@ -29,10 +29,14 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 - **A denylisted company is found without its legal form, and a number however it is grouped.**
   An e-mail says "Siłownia Testowa" where the list says "Siłownia Testowa Sp. z o.o.", and the
-  short name went out; it is masked now when two words, or one of five letters or more that is not
-  a word such as "Polska", are left. A listed number of six digits or more, such as a NIP, is
-  found with or without hyphens, spaces, dots or slashes between its digits. `MaskedTurn(known=...)`
-  gets both, since it masks known values with the denylist.
+  short name went out; it is masked now, written as on the list or in capitals, when two words or
+  more are left and they are not a person's name. One word alone, such as "Partner" or "Budex", is
+  in too many sentences that do not name the company, a person named by a partnership, "Jan
+  Kowalski Sp. j.", stays one person, and "moje biuro rachunkowe" is not "Biuro Rachunkowe Sp. z
+  o.o.". A listed number of nine digits or more, such as a NIP, is found with or without spaces,
+  hyphens, dots or slashes between its digits; a shorter one is matched as written, since grouped
+  otherwise it is a date or an amount. `MaskedTurn(known=...)` gets both, since it masks known
+  values with the denylist.
 - **The sweep no longer reports a known person the restore declined.** "Janie Kowalski", restored
   from `<OSOBA_1:wołacz>` where the mapping held "Janowi Kowalskiemu", changes the stem, and every
   such answer was reported as naming a person nobody sent.
