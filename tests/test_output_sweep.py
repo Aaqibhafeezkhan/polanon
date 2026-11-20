@@ -89,6 +89,19 @@ def test_known_name_with_a_glued_ending_is_not_reported_as_new():
     assert report.new_spans == []
 
 
+def test_a_known_person_declined_by_the_restore_is_not_reported_as_new():
+    """PolGate restored every answer for the sweep without the cases, because "Janie Kowalski",
+    restored from <OSOBA_1:wołacz> where the mapping held "Janowi Kowalskiemu", changes the stem
+    and was reported as a person nobody sent."""
+    mapping = {"<OSOBA_1>": "Janowi Kowalskiemu", "<OSOBA_2>": "Annie Wróbel"}
+    answer = (
+        "Szanowny Panie Janie Kowalski, pismo Jana Kowalskiego, z Janem Kowalskim i Anna Wróbel."
+    )
+    assert sweep(answer, mapping, NAME_GUARDS, ALL).new_spans == []
+    report = sweep(f"{answer} Dzwonił też Janusz Nowak.", mapping, NAME_GUARDS, ALL)
+    assert [span.entity_type for span in report.new_spans] == ["PERSON"]
+
+
 def test_a_different_name_beside_an_inflected_known_one_is_still_reported():
     text = "Odpowiedź dla Jan Kowalskia. Pozdrawia Anna Nowak."
     report = sweep(text, {"<OSOBA_1>": "Jan Kowalski"}, NAME_GUARDS, ALL)

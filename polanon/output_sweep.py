@@ -12,6 +12,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from polanon._detection import detect
+from polanon._inflection import CASE_NAMES, inflected
 from polanon._matching import Haystack, fold, known_value_ranges, type_of
 from polanon._view import detection_view
 from polanon.allowlist import _ATTACHED_ENDINGS, Allowlist
@@ -45,6 +46,21 @@ def _glued_end(text: str, end: int) -> int:
         if candidate and fold(candidate) == ending:
             return end + len(ending)
     return end
+
+
+def _declined_people(known: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Every case a known person's name declines into, as ``(form, token)``, other than as held."""
+    forms: list[tuple[str, str]] = []
+    for value, token in known:
+        if type_of(token) != "PERSON":
+            continue
+        seen = {value}
+        for case in CASE_NAMES:
+            form = inflected(value, "PERSON", case)
+            if form is not None and form not in seen:
+                seen.add(form)
+                forms.append((form, token))
+    return forms
 
 
 @dataclass
@@ -85,6 +101,10 @@ def sweep(
     extension never crosses digits and never reaches left, so a known number inside a longer one
     and a name that starts inside another ("Joanna" beside "Anna") are still new.
 
+    A person also counts as known in every case the restore declines a name into: a token with a
+    case gives "Janie Kowalski" or "Janem Kowalskim" where the mapping holds "Janowi Kowalskiemu",
+    a stem that changes, which no glued ending spells.
+
     The answer is read the way :func:`~polanon.anonymize` reads a text: a PESEL with a zero-width
     space in it is still a PESEL, and a known name spelled in capitals or with a no-break space is
     still known.
@@ -94,6 +114,7 @@ def sweep(
     unknown = sorted(token for token in written if token not in mapping)
     view = detection_view(restored_text)
     known = [(value, token) for token, value in mapping.items() if value != token]
+    known += _declined_people(known)
     covered = bytearray(len(restored_text))
     haystack = Haystack.of(restored_text, view)
     ranges = [match.span() for match in tokens]

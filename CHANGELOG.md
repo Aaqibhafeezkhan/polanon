@@ -33,6 +33,9 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   a word such as "Polska", are left. A listed number of six digits or more, such as a NIP, is
   found with or without hyphens, spaces, dots or slashes between its digits. `MaskedTurn(known=...)`
   gets both, since it masks known values with the denylist.
+- **The sweep no longer reports a known person the restore declined.** "Janie Kowalski", restored
+  from `<OSOBA_1:wołacz>` where the mapping held "Janowi Kowalskiemu", changes the stem, and every
+  such answer was reported as naming a person nobody sent.
 
 ## [0.4.1] - 2026-11-19
 
