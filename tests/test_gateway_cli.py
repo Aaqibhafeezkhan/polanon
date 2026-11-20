@@ -114,7 +114,7 @@ def test_content_that_cannot_be_masked_may_be_passed_and_the_banner_says_so(caps
 
 
 def test_without_the_model_the_banner_says_places_are_not_masked(monkeypatch, capsys):
-    monkeypatch.setattr("polanon.gateway.__main__.ner_available", lambda model: False)
+    monkeypatch.setattr("polanon.gateway._build.ner_available", lambda model: False)
     run(["--upstream", "https://provider.test/v1"])
     assert "places are not masked" in capsys.readouterr().err
 
