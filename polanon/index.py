@@ -26,6 +26,7 @@ from polanon._known_parts import known_parts
 from polanon._matching import Ranges, type_of
 from polanon._view import detection_view
 from polanon.guards.base import Guard
+from polanon.guards.names_pl import noun_surname_nominatives
 from polanon.policy import TOKEN_PATTERN
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import tokens_written
@@ -377,7 +378,7 @@ def _surnames(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, S
     for token, value in mapping.items():
         if type_of(token) != "PERSON" or value == token:
             continue
-        for part in known_parts(value, "PERSON", trusted=False):
+        for part in known_parts(value, "PERSON", trusted=False, cases=False):
             entries.setdefault(
                 pseudonyms.token(part, "PERSON"),
                 StoredValue(base_form(part, "PERSON"), pseudonyms.fingerprint(part, "PERSON")),
@@ -436,29 +437,37 @@ def _with_store_hits(
     words that could be a name, and the ones the store holds for the same value are masked like
     any detection, so the question gets the token the documents have. A capitalised word alone
     counts only when it is no bare first name, as a lowercase one never does.
+
+    A surname in a case the rules cannot read, "Koziołowi" or "Kozieła" after "Adam Kozieł" was
+    stored, is looked up by the nominatives it may come from, so it is masked as well. It keeps a
+    token of its own, the one its own spelling gives: the tokens of the first scheme do not
+    change.
     """
     from polanon import Anonymizer as Facade  # the facade imports this module
 
-    wanted: dict[str, list[tuple[str, int, int, str]]] = {}
+    wanted: dict[str, list[tuple[str, int, int, str, str]]] = {}
     for text in texts:
         view = detection_view(text)
         seen = text if view is None else view.text
         for start, end in _candidates(seen):
+            written = seen[start:end]
             for entity_type in _LOOKED_UP:
-                token = pseudonyms.token(seen[start:end], entity_type)
-                wanted.setdefault(token, []).append((seen, start, end, entity_type))
+                token = pseudonyms.token(written, entity_type)
+                wanted.setdefault(token, []).append((seen, start, end, entity_type, written))
+            for surname in _surnames_declined(written):
+                token = pseudonyms.token(surname, "PERSON")
+                wanted.setdefault(token, []).append((seen, start, end, "PERSON", surname))
     held = _get(store, list(wanted))
-    hits: dict[str, list[Span]] = {}
+    hits: dict[str, set[Span]] = {}
     for token, entry in held.items():
-        for seen, start, end, entity_type in wanted.get(token, ()):
-            if pseudonyms.fingerprint(seen[start:end], entity_type) == entry.fingerprint:
-                hits.setdefault(seen, []).append(
-                    Span(start, end, entity_type, 0.9, _StoreHits.name)
-                )
+        for seen, start, end, entity_type, value in wanted.get(token, ()):
+            if pseudonyms.fingerprint(value, entity_type) == entry.fingerprint:
+                hit = Span(start, end, entity_type, 0.9, _StoreHits.name)
+                hits.setdefault(seen, set()).add(hit)
     if not hits:
         return anonymizer
     return Facade(
-        [*anonymizer.guards, _StoreHits(hits)],
+        [*anonymizer.guards, _StoreHits({seen: sorted(spans) for seen, spans in hits.items()})],
         enabled=anonymizer.enabled,
         allowlist=anonymizer.allowlist,
         pseudonyms=anonymizer.pseudonyms,
@@ -482,6 +491,17 @@ def _candidates(text: str) -> list[tuple[int, int]]:
             if last > first or _could_be_named_alone(word.group(0)):
                 runs.append((word.start(), words[last].end()))
     return runs
+
+
+def _surnames_declined(written: str) -> list[str]:
+    """Return the nominatives a lone word may be a case of, when the rules cannot read it.
+
+    "Wróbla" or "Kowalczykowi" give their surname's token anyway, since the rules read them;
+    "Koziołowi" gives "Kozieł", "Kozioł" and "Koziół" to look up.
+    """
+    if _WORD.fullmatch(written) is None or _canonical._surname(written):
+        return []
+    return noun_surname_nominatives(written)
 
 
 def _could_be_named_alone(word: str) -> bool:

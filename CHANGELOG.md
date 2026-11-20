@@ -7,6 +7,38 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A surname of three letters is masked in its other cases.** After "Katarzyna Lis" and "Tomasz
+  Kot" were masked in a turn, "Przekaż Lisowi notatkę." and "Przekaż Kotowi i Nowakowi." sent
+  "Lisowi" and "Kotowi" in the clear, while "Nowakowi" was masked: a known value shorter than
+  four letters is never masked inside a longer word, so that "Jan" leaves "Janusz" alone, and a
+  case ending glued on made one. A person's one-word name of three letters is now masked with a
+  case ending after it, "Lisa", "Lisowi", "Lisem", "Lisie", "Bąkiem" and, for the family,
+  "u Kotów", in a turn, in `mask_known_values` and in the gateway's last check, `leaked_tokens`.
+  Only a case ending counts: "Lista", "Kotara" and "Lisowski" stay, and so does a case in
+  lowercase, "lisowi", which is the animal's. A name first masked in another case, "Grzegorzem
+  Lisem", gave its surname in that case only, so "Lis" and "Lisowi" went out in the next message;
+  the nominative, where the rules read it for sure, now gives the surname too, and "Kowalski"
+  after "Jana Kowalskiego" is masked as well.
+- **A surname whose stem drops or changes a vowel is masked in its other cases.** After "Adam
+  Kozieł", "Paweł Wróbel" or "Jan Bednarek" was masked, the surname alone was masked too, but not
+  "Koziołowi", "Kozła", "Wróbla" or "Bednarkowi", which do not begin with it. Such cases are now
+  known values with the surname: a vowel that drops ("Wróbla", "Kozła", "Krawca", "Bednarka"),
+  "ie" written "io" ("Koziołowi") and "ó" written "o" ("Mroza"), and a locative that softens the
+  last consonant ("o Kocie"). In lowercase, "kozioł", "wróbla" and "o kocie" stay. In a search
+  index, a capitalised word the rules cannot read is looked up in the store by the nominatives it
+  may come from, so "Koziołowi", "Kozieła" or "Kozła" in a question is masked once "Adam Kozieł"
+  was indexed; it went out in the clear without the spaCy model and as a company with it. The
+  word keeps the token its own spelling gives, the store keeps the surname alone, not its cases,
+  and the stable tokens are computed as before, so an index needs no rebuilding.
+
+  The agent benchmark has these cases now, "Lisowi", "Lisa", "Dudkowi" and "Koziołowi" next to
+  "Lista" and a goat, "kozioł". With the spaCy model its numbers do not change, 2 leaks of 249
+  and 5 tokens for nothing; with the rules alone the 4 new surnames no longer leak and nothing
+  is masked for nothing. The parts of a value and the cases of a surname are worked out once per
+  call and forgotten with its other values.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was

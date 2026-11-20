@@ -110,6 +110,15 @@ def test_the_last_check_sees_a_value_written_with_lookalike_letters():
     assert leaked_tokens(payload, {"<OSOBA_1>": "Jan Kowalski"}) == ["<OSOBA_1>"]
 
 
+def test_the_last_check_sees_a_short_surname_with_a_case_ending():
+    """ "Lisowi" holds the surname "Lis", which the masking masks there too now."""
+    mapping = {"<OSOBA_1>": "Lis"}
+    payload = {"messages": [{"role": "user", "content": "Przekaż Lisowi notatkę."}]}
+    assert leaked_tokens(payload, mapping) == ["<OSOBA_1>"]
+    listed = {"messages": [{"role": "user", "content": "Lista zadań na listopad."}]}
+    assert leaked_tokens(listed, mapping) == []
+
+
 def test_an_image_and_a_file_go_as_they_are_when_the_turn_keeps_them():
     """The operator chose to let the model see them: the text is masked, they are not."""
     image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 2_000_000}}

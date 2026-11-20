@@ -630,6 +630,17 @@ def test_mask_known_values_leaves_a_short_value_inside_a_longer_word():
     assert mask_known_values("Janusz przyszedł.", {"<OSOBA_1>": "Jan"}) == "Janusz przyszedł."
 
 
+def test_mask_known_values_masks_a_short_surname_with_a_case_ending():
+    """ "Lis" stands for the man in "Lisowi" and "Lisa" too; "Lista" and "lisa" are other words."""
+    mapping = {"<OSOBA_1>": "Lis"}
+    masked = mask_known_values("Przekaż Lisowi, że od Lisa nic nie przyszło.", mapping)
+    assert masked == "Przekaż <OSOBA_1>, że od <OSOBA_1> nic nie przyszło."
+    assert mask_known_values("Lista: widziałem lisa.", mapping) == "Lista: widziałem lisa."
+    assert mask_known_values("LISOWI", mapping) == "<OSOBA_1>"
+    assert mask_known_values("KOLISOWI", mapping) == "KOLISOWI"  # the end of another word
+    assert mask_known_values("Lisowi", {"<FIRMA_1>": "Lis"}) == "Lisowi"
+
+
 def test_mask_known_values_never_rewrites_a_token_already_in_the_text():
     masked = mask_known_values("<OSOBA_1> pyta o OSOBA", {"<FIRMA_1>": "OSOBA"})
     assert masked == "<OSOBA_1> pyta o <FIRMA_1>"

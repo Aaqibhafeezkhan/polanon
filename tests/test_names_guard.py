@@ -9,6 +9,7 @@ from polanon.guards.names_pl import (
     decline_feminine,
     decline_masculine,
     is_common_adjective,
+    noun_surname_nominatives,
     person_name_parts,
     surname_reading,
 )
@@ -582,6 +583,40 @@ def test_a_name_with_no_known_first_name_gives_its_parts_only_when_trusted():
     assert person_name_parts("Politechnika Krakowska") == ["Politechnika"]
     assert person_name_parts("Politechnika Krakowska", needs_first_name=True) == []
     assert person_name_parts("Jan Kowalski", needs_first_name=True) == ["Kowalski"]
+
+
+def test_a_surname_whose_stem_changes_gives_the_cases_that_do_not_begin_with_it():
+    """ "Kozieł" is "Kozła" and "Koziołowi" in other cases, "Kot" is "Kocie": none of them begins
+    with the surname, so none was masked after the full name."""
+    assert {"Kozieł", "Kozła", "Kozłowi", "Kozioła", "Koziołowi", "Koziele"} <= set(
+        person_name_parts("Adam Kozieł")
+    )
+    assert person_name_parts("Tomasz Kot") == ["Kot", "Kocie"]
+    assert person_name_parts("Paweł Wróbel")[:3] == ["Wróbel", "Wróbla", "Wróblach"]
+    assert "KOZŁA" in person_name_parts("ADAM KOZIEŁ")
+    assert person_name_parts("Jan Nowak") == ["Nowak"]
+    assert person_name_parts("Adam Kozieł", cases=False) == ["Kozieł"]
+
+
+@pytest.mark.parametrize(
+    ("word", "nominative"),
+    [
+        ("Koziołowi", "Kozieł"),
+        ("Kozła", "Kozieł"),
+        ("Kozieła", "Kozieł"),
+        ("Koziele", "Kozieł"),
+        ("Krawca", "Krawiec"),
+        ("Kocie", "Kot"),
+        ("KOZŁA", "KOZIEŁ"),
+    ],
+)
+def test_a_case_of_a_noun_surname_gives_the_nominatives_it_may_come_from(word, nominative):
+    assert nominative in noun_surname_nominatives(word)
+
+
+def test_a_word_in_lowercase_or_with_no_case_ending_gives_no_nominative():
+    assert noun_surname_nominatives("koziołowi") == []
+    assert noun_surname_nominatives("Kozioł") == []
 
 
 @pytest.mark.parametrize(

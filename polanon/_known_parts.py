@@ -1,19 +1,24 @@
 """The parts of a masked value that give the same thing away on their own.
 
 A surname is the person: once "Jan Kowalski" is masked, "Kowalski" further down the text is the
-same man, and it went out in the clear, because no rule reads a lone surname as a name. A handle is
-the account: once "github.com/jkowalski" is masked, "jkowalski" in a JSON field, after "@" or in
-"jkowalski.github.io" is the same account. The pipeline treats such a part as a known value of the
-same type, so it is masked wherever it stands, by the rules every known value follows.
+same man, and it went out in the clear, because no rule reads a lone surname as a name. So is the
+surname in another case, also where its stem changes, "Wróbla" after "Paweł Wróbel" and
+"Koziołowi" after "Adam Kozieł", and in the nominative after the name was masked in another case:
+"Lis" and "Lisowi" after "Grzegorzem Lisem". A handle is the account: once "github.com/jkowalski"
+is masked, "jkowalski" in a JSON field, after "@" or in "jkowalski.github.io" is the same account.
+The pipeline treats such a part as a known value of the same type, so it is masked wherever it
+stands, by the rules every known value follows.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
+from polanon._canonical import base_form
 from polanon.allowlist import WELL_KNOWN_NAMES
-from polanon.guards.names_pl import fold, login_name_parts, person_name_parts
+from polanon.guards.names_pl import fold, forget_forms, login_name_parts, person_name_parts
 from polanon.guards.recognizers_pl import profile_handle
 
 #: A handle shorter than this is not masked on its own: "jk" or "ab" stand for nobody in prose.
@@ -24,7 +29,7 @@ MIN_HANDLE_LENGTH = 4
 _WELL_KNOWN_HANDLES = frozenset(fold(name).replace(" ", "") for name in WELL_KNOWN_NAMES)
 
 
-def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
+def known_parts(value: str, entity_type: str, *, trusted: bool, cases: bool = True) -> list[str]:
     """Return the parts of a masked value to mask wherever they appear, under the value's type.
 
     Args:
@@ -34,9 +39,30 @@ def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
             caller's, rather than a language model's guess. A model that reads "Google Ads" as a
             person would otherwise mask "Ads" in every sentence after it, so a name it found gives
             its surname only next to a first name the name guard knows.
+        cases: give a surname's cases that do not begin with it as well, "Wróbla" for "Wróbel".
+            A store of tokens keeps the surname alone and finds its cases by declining it.
     """
+    return list(_known_parts(value, entity_type, trusted, cases))
+
+
+#: How many values the parts stay worked out for: every text of a call reads the parts of every
+#: value of the mapping, and working out a name's nominative for each of them took longer than
+#: the rest of the masking of a short text.
+_PARTED_VALUES = 65_536
+
+
+@lru_cache(maxsize=_PARTED_VALUES)
+def _known_parts(value: str, entity_type: str, trusted: bool, cases: bool) -> tuple[str, ...]:
     if entity_type == "PERSON":
-        return person_name_parts(value, needs_first_name=not trusted) or login_name_parts(value)
+        parts = person_name_parts(value, needs_first_name=not trusted, cases=cases)
+        # A name first masked in another case gives its surname in that case; the nominative,
+        # where the rules read it for sure, gives the surname as it stands on its own.
+        nominative = base_form(value, entity_type)
+        if nominative != value.strip():
+            for part in person_name_parts(nominative, needs_first_name=not trusted, cases=cases):
+                if part not in parts:
+                    parts.append(part)
+        return tuple(parts or login_name_parts(value))
     if entity_type == "LINK":
         handle = profile_handle(value)
         if (
@@ -45,8 +71,14 @@ def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
             and any(char.isalpha() for char in handle)
             and fold(handle).replace("-", "") not in _WELL_KNOWN_HANDLES
         ):
-            return [handle]
-    return []
+            return (handle,)
+    return ()
+
+
+def forget() -> None:
+    """Drop the parts worked out for the latest values, and the values with them."""
+    _known_parts.cache_clear()
+    forget_forms()
 
 
 def person_parts(value: str, entity_type: str) -> list[str]:

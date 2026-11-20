@@ -354,8 +354,11 @@ przywrócony własnym mapowaniem zachowuje przypadek, w którym go napisano.
 której nie odczyta żadna reguła. `index_chunks` zapisuje w magazynie nazwisko każdej osoby, której
 imię znają reguły, obok pełnego imienia i nazwiska, a `mask_query` i `index_chunks` sprawdzają w
 magazynie każdy ciąg do czterech słów i maskują te, dla których ma token. Pytanie dostaje wtedy
-token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym. Przy
-magazynie, który jest na to za wolny, przekaż `lookup=False`.
+token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym.
+Nazwisko w przypadku, którego reguły nie odczytują, „Koziołowi” albo „Kozła” po „Adam Kozieł”, jest
+sprawdzane w magazynie przez mianowniki, od których może pochodzić, i też zostaje zamaskowane, pod
+tokenem, który daje jego własny zapis. Przy magazynie, który jest na to za wolny, przekaż
+`lookup=False`.
 
 **Klucz.** Co najmniej 32 losowe bajty, jeden klucz na firmę i osobny `scope=` dla indeksu, którego
 nie wolno powiązać z innym. Trzymaj go w menedżerze sekretów, poza indeksem, kodem i logami;
@@ -576,7 +579,8 @@ po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów 
 („nr rej.”), numery VIN, numery paszportów, numery praw jazdy po etykiecie, daty urodzenia, klucze API, tokeny i hasła, polskie
 imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp. z o.o.”, „S.A.”,
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
-maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”,
+maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”, także
+w innym przypadku, „Lisowi” po „Katarzyna Lis” i „Koziołowi” albo „Kozła” po „Adam Kozieł”, oraz
 „jkowalski” w polu JSON po „github.com/jkowalski”. Z dodatkiem `ner` model spaCy dokłada miejsca
 i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala małemu lokalnemu modelowi
 przejrzeć *zamaskowany* tekst pod kątem tego, co z kontekstu wciąż pozwala kogoś zidentyfikować.
@@ -641,10 +645,13 @@ literami też dostaje własny token, z powodu opisanego niżej.
 rozpoznałby jej samodzielnie: w oryginalnym zapisie, wielkimi literami, rozdzielona podziałem
 wiersza, ze znakiem o zerowej szerokości w środku, z literami cyrylicy albo greki, które wyglądają
 jak łacińskie, z inaczej rozdzielonymi grupami oraz w całości,
-razem z tym, co detektor znalazł w jej wnętrzu. Dwa wyjątki sprawiają, że zwykłe słowa pozostają
+razem z tym, co detektor znalazł w jej wnętrzu. Trzy wyjątki sprawiają, że zwykłe słowa pozostają
 czytelne. Jednowyrazowa nazwa pisana wielką literą nie jest dopasowywana, gdy występuje zapisana
 samymi małymi literami, bo Zima, Kot i Wilk to nazwiska, a „zima” to pora roku; identyfikatory
-takie jak VIN czy adres e-mail są dopasowywane bez względu na wielkość liter. Liczba krótsza niż
+takie jak VIN czy adres e-mail są dopasowywane bez względu na wielkość liter. Wartość krótsza niż
+cztery litery nie jest dopasowywana wewnątrz dłuższego słowa, więc „Jan” nie zabiera „Janusza”;
+trzyliterowe nazwisko jest dopasowywane z doklejoną końcówką przypadku, „Lisowi” albo „Lisem” od
+Lis, a „Lista” zostaje. Liczba krótsza niż
 sześć cyfr, na przykład PIN, nie jest dopasowywana wewnątrz dłuższej liczby, daty, godziny ani
 kwoty: „15.04.2025”, „2024-2025”, „2025,50” i „20250” zostają czytelne, gdy PIN to 2025,
 a „w 2025 roku” i „PIN/PUK 2025/36912874” już nie.

@@ -341,8 +341,10 @@ with its own mapping keeps the case it was written in.
 no rule reads. `index_chunks` stores the surname of every person whose first name the rules know,
 next to the full name, and `mask_query` and `index_chunks` look up every run of up to four words in
 the store and mask the ones it holds a token for. A question then gets the surname's token, and a
-surname masked in one document stays masked in the next. Pass `lookup=False` for a store too slow
-for that.
+surname masked in one document stays masked in the next. A surname in a case the rules cannot
+read, "Koziołowi" or "Kozła" after "Adam Kozieł", is looked up by the nominatives it may come from
+and masked as well, under the token its own spelling gives. Pass `lookup=False` for a store too
+slow for that.
 
 **The key.** At least 32 random bytes, one key per company and a `scope=` per index that must not be
 linked to another. Keep it in a secret manager, out of the index, the code and the logs;
@@ -560,7 +562,9 @@ and IPv6, MAC addresses, vehicle registrations after their label ("nr rej."), VI
 numbers, driving licence numbers after their label, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
 company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). Once a person or a
 profile link is masked, the surname or the handle alone is masked wherever it appears in the same
-text: "Kowalski" after "Jan Kowalski", "jkowalski" in a JSON field after "github.com/jkowalski".
+text: "Kowalski" after "Jan Kowalski", in another case too, "Lisowi" after "Katarzyna Lis" and
+"Koziołowi" or "Kozła" after "Adam Kozieł", and "jkowalski" in a JSON field after
+"github.com/jkowalski".
 With the `ner` extra, a spaCy model adds places and the names nothing else marks. An optional
 second stage lets a small local model review the *masked* text for what still identifies someone
 by context. Other dates are recognised too, but left readable unless you ask for them.
@@ -619,9 +623,12 @@ own too, for the reason below.
 **Every occurrence of a masked value is masked**, also where no detector would recognise it on its
 own: as written, in capitals, across a line break, with a zero-width character in it, with
 Cyrillic or Greek letters that look Latin in it, with its groups spaced differently, and around
-whatever a detector found inside it. Two exceptions keep ordinary words readable. A capitalised
+whatever a detector found inside it. Three exceptions keep ordinary words readable. A capitalised
 one-word name is not matched in all lowercase, because Zima, Kot and Wilk are surnames and "zima"
-is winter; identifiers such as a VIN or an e-mail address are matched in any case. A number shorter
+is winter; identifiers such as a VIN or an e-mail address are matched in any case. A value shorter
+than four letters is not matched inside a longer word, so "Jan" leaves "Janusz" alone; a surname
+of three letters is matched with a case ending glued on, "Lisowi" or "Lisem" for Lis, and "Lista"
+stays. A number shorter
 than six digits, such as a PIN, is not matched inside a longer number, a date, a time or an
 amount: "15.04.2025", "2024-2025", "2025,50" and "20250" stay readable when the PIN is 2025, while
 "w 2025 roku" and "PIN/PUK 2025/36912874" do not.

@@ -392,6 +392,39 @@ def test_a_name_a_language_model_guessed_gives_no_surname_to_the_store():
     assert len(store) == 1
 
 
+@pytest.mark.parametrize(
+    "question", ["Przekaż Koziołowi umowę.", "Umowa Kozieła.", "Nie ma Kozła.", "O Koziele."]
+)
+def test_a_stored_surname_is_masked_in_a_case_the_rules_cannot_read(question):
+    """The store held "Kozieł" with "Adam Kozieł", and "Koziołowi" in a question went out in the
+    clear: no rule reads a case of a surname it does not list, and this stem changes its vowel.
+    The word keeps the token its own spelling gives, as every token of the first scheme does."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    masked = anonymizer.mask_query(question, store)
+    assert "Koz" not in masked.anonymized
+    assert Anonymizer.restore(masked.anonymized, masked.mapping) == question
+    assert anonymizer.mask_query(question, store, lookup=False).anonymized == question
+
+
+def test_the_store_keeps_a_surname_and_not_its_cases():
+    """The cases are found by declining what the store holds, so it keeps nothing more of anyone."""
+    store = InMemoryMappingStore()
+    stable(store).index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    surname = Pseudonyms(KEY).token("Kozieł", "PERSON")
+    assert len(store) == 2
+    assert store.get([surname])[surname].value == "Kozieł"
+
+
+@pytest.mark.parametrize("question", ["Na łące stał kozioł.", "Kozioł stał na łące."])
+def test_an_animal_spelled_like_a_stored_surname_is_not_masked(question):
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    assert anonymizer.mask_query(question, store).anonymized == question
+
+
 def test_a_surname_alone_in_another_document_is_masked_through_the_store():
     anonymizer, store, surname = indexed()
     later = anonymizer.index_chunks(["Kowalczyk dzwonił w sprawie terminu."], store)

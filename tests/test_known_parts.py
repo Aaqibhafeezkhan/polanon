@@ -3,6 +3,8 @@
 Such parts stand alone in a profile written as JSON, a pasted CV or a list of repositories.
 """
 
+import re
+
 import pytest
 
 from polanon import Anonymizer, Guard, Span, default_guards
@@ -230,3 +232,111 @@ def test_a_five_letter_surname_gives_logins_written_with_a_separator():
     assert "nowak_j" not in masked, masked
     assert "nowak.j" not in masked, masked
     assert "nowakowie" in masked
+
+
+def test_a_short_surname_in_another_case_is_masked_in_a_later_text():
+    """After "Katarzyna Lis" and "Tomasz Kot" were masked, "Lisowi" and "Kotowi" went out in the
+    clear and "Nowakowi" did not: three letters are too few to be masked inside a longer word,
+    and a case ending glued on made one."""
+    turn = Anonymizer(default_guards(with_ner=False)).turn()
+    turn.mask("Lista: Katarzyna Lis, Tomasz Kot, Jan Nowak.")
+    later = [
+        "Przekaż Lisowi notatkę.",
+        "Przekaż Kotowi i Nowakowi.",
+        "Od Lisa nic nie przyszło, z Kotem i Lisem rozmawiałem, u Kotów nikt nie odbiera.",
+    ]
+    for text in later:
+        masked = turn.mask(text)
+        assert re.search("Lis|Kot|Nowak", masked) is None, masked
+        assert turn.restore(masked) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Lista zadań na listopad.",
+        "Kotara w oknie, kotlet na talerzu.",
+        "Lisy i koty mieszkają w lesie.",
+        "Daj lisowi spokój, a kotu mleka.",
+        "Lisowski i Kotarski dzwonili.",
+    ],
+)
+def test_a_short_surname_leaves_the_words_that_begin_with_it_alone(text):
+    """Only a case ending makes the word the surname: "Lista", "Kotara" or "Lisowski" are no
+    "Lis" and no "Kot", and a case in lowercase is the animal."""
+    mapping = {"<OSOBA_1>": "Katarzyna Lis", "<OSOBA_2>": "Tomasz Kot"}
+    assert mask(text, mapping).anonymized == text
+
+
+@pytest.mark.parametrize(
+    ("name", "later", "forms"),
+    [
+        ("Adam Kozieł", "Przekaż Koziołowi umowę, a Kozła zaproś.", ["Koziołowi", "Kozła"]),
+        ("Adam Kozieł", "Rozmawiałem o Koziele z Kozłem.", ["Koziele", "Kozłem"]),
+        ("Paweł Wróbel", "Nie ma Wróbla, przekaż Wróblowi notatkę.", ["Wróbla", "Wróblowi"]),
+        ("Jan Bednarek", "Bednarka nie było, Bednarkowi przekaż.", ["Bednarka", "Bednarkowi"]),
+        ("Jan Krawiec", "Krawca nie było, byliśmy u Krawców.", ["Krawca", "Krawców"]),
+        ("Jan Mróz", "Mroza nie było.", ["Mroza"]),
+        ("Tomasz Kot", "Rozmawialiśmy o Kocie.", ["Kocie"]),
+    ],
+)
+def test_a_surname_whose_stem_changes_is_masked_in_its_other_cases(name, later, forms):
+    """ "Koziołowi" and "Kozła" do not begin with "Kozieł", nor "Wróbla" with "Wróbel": the
+    surname alone was masked after the full name, its cases went out in the clear."""
+    turn = Anonymizer(default_guards(with_ner=False)).turn()
+    turn.mask(f"Umowę podpisał {name}.")
+    masked = turn.mask(later)
+    for form in forms:
+        assert form not in masked, masked
+    assert turn.restore(masked) == later
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Na łące stał kozioł, a wróbel siedział na płocie.",
+        "Bez kozła i bez wróbla, o kocie ani słowa.",
+        "Kozioł skoczył przez płot.",
+    ],
+)
+def test_an_animal_spelled_like_a_known_surname_stays(text):
+    mapping = {"<OSOBA_1>": "Adam Kozieł", "<OSOBA_2>": "Paweł Wróbel", "<OSOBA_3>": "Jan Kot"}
+    assert mask(text, mapping).anonymized == text
+
+
+@pytest.mark.parametrize(
+    ("first", "later", "forms"),
+    [
+        (
+            "Umowę zawarto z Grzegorzem Lisem.",
+            "Czy Lisowi wysłać ją poleconym? Lis nie odbiera.",
+            ["Lis"],
+        ),
+        ("Pismo Jana Kowalskiego.", "Kowalski dzwonił, Kowalskiemu oddzwonię.", ["Kowalski"]),
+    ],
+)
+def test_a_name_first_masked_in_another_case_gives_its_surname_in_the_nominative(
+    first, later, forms
+):
+    """ "Grzegorzem Lisem" gave the part "Lisem", which "Lis" and "Lisowi" do not hold, so both
+    went out in the clear in the next message."""
+    turn = Anonymizer(default_guards(with_ner=False)).turn()
+    turn.mask(first)
+    masked = turn.mask(later)
+    for form in forms:
+        assert form not in masked, masked
+    assert turn.restore(masked) == later
+
+
+def test_the_parts_of_a_call_s_names_are_forgotten_with_its_values():
+    """The parts are worked out once per value and kept until `forget`, which the gateway calls
+    after each call, as it does for the keys of the values."""
+    from polanon import _known_parts, _matching
+    from polanon.guards import names_pl
+
+    mask("Umowę podpisał Adam Kozieł.")
+    assert _known_parts._known_parts.cache_info().currsize > 0
+    _matching.forget()
+    assert _known_parts._known_parts.cache_info().currsize == 0
+    assert names_pl._noun_surname_forms.cache_info().currsize == 0
+    assert names_pl._nominatives.cache_info().currsize == 0
