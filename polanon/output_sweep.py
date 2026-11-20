@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from polanon._detection import detect
 from polanon._inflection import CASE_NAMES, inflected
@@ -48,19 +49,41 @@ def _glued_end(text: str, end: int) -> int:
     return end
 
 
-def _declined_people(known: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Every case a known person's name declines into, as ``(form, token)``, other than as held."""
-    forms: list[tuple[str, str]] = []
-    for value, token in known:
-        if type_of(token) != "PERSON":
-            continue
-        seen = {value}
-        for case in CASE_NAMES:
-            form = inflected(value, "PERSON", case)
-            if form is not None and form not in seen:
-                seen.add(form)
-                forms.append((form, token))
-    return forms
+#: Polish letters to plain ones, so a form is looked for in the answer however it was spelled.
+_PLAIN = str.maketrans("ąćęłńóśźż", "acelnoszz")
+#: Letters of a declined form that must be in the answer before the form is matched at all.
+_PREFIX = 3
+
+
+def _plain(text: str) -> str:
+    return fold(text).translate(_PLAIN)
+
+
+def _declined_people(known: list[tuple[str, str]], text: str) -> list[tuple[str, str]]:
+    """The cases a known person's name declines into, as ``(form, token)``, that `text` may hold.
+
+    A mapping of hundreds of people gives thousands of forms, so only a form whose first letters
+    are somewhere in the answer is matched, and each name is declined once per process.
+    """
+    plain = _plain(text)
+    return [
+        (form, token)
+        for value, token in known
+        if type_of(token) == "PERSON"
+        for form in _forms(value)
+        if _plain(form)[:_PREFIX] in plain
+    ]
+
+
+@lru_cache(maxsize=4096)
+def _forms(value: str) -> tuple[str, ...]:
+    """Every case `value` declines into, other than as it was written."""
+    forms: list[str] = []
+    for case in CASE_NAMES:
+        form = inflected(value, "PERSON", case)
+        if form is not None and form != value and form not in forms:
+            forms.append(form)
+    return tuple(forms)
 
 
 @dataclass
@@ -114,7 +137,7 @@ def sweep(
     unknown = sorted(token for token in written if token not in mapping)
     view = detection_view(restored_text)
     known = [(value, token) for token, value in mapping.items() if value != token]
-    known += _declined_people(known)
+    known += _declined_people(known, restored_text)
     covered = bytearray(len(restored_text))
     haystack = Haystack.of(restored_text, view)
     ranges = [match.span() for match in tokens]
