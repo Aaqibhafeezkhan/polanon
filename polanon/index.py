@@ -113,6 +113,24 @@ class InMemoryMappingStore:
         return len(self._entries)
 
 
+class _Pending:
+    """A store as it will be once `entries` are added: read from, never written to."""
+
+    def __init__(self, store: MappingStore, entries: Mapping[str, StoredValue]) -> None:
+        self._store = store
+        self._entries = entries
+
+    def get(self, tokens: Collection[str]) -> dict[str, StoredValue]:
+        held = dict(_get(self._store, tokens))
+        for token in tokens:
+            if token not in held and token in self._entries:
+                held[token] = self._entries[token]
+        return held
+
+    def add(self, entries: Mapping[str, StoredValue]) -> Mapping[str, StoredValue]:
+        raise AssertionError("a pending store is only read")  # pragma: no cover
+
+
 @dataclass(frozen=True)
 class MaskedChunks:
     """A document's passages, masked with one mapping.
@@ -189,6 +207,15 @@ def index_chunks(
         masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
         entries = _entries(pseudonyms, masked.mapping)
         entries = _surnames(pseudonyms, masked.mapping) | entries
+        hits = _store_hits(pseudonyms, joined, _Pending(store, entries)) if lookup else {}
+        if _left_in_the_clear(hits, masked.texts):
+            # A surname the document named by the full name is found alone in its other forms,
+            # "Wróblowi" or "Wróbla", only by the lookup, which knew it only once it was stored:
+            # the document is masked again with what it is about to store as if it were stored.
+            masker = _with_hits(anonymizer, hits)
+            masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
+            entries = _entries(pseudonyms, masked.mapping)
+            entries = _surnames(pseudonyms, masked.mapping) | entries
         # Asked first, so a pass that meets a collision writes nothing: written and then masked
         # again, a value moved to a longer token left its personal data under one nothing uses.
         if _record_collisions(pseudonyms, entries, _get(store, list(entries))):
@@ -437,8 +464,36 @@ def _with_store_hits(
     any detection, so the question gets the token the documents have. A capitalised word alone
     counts only when it is no bare first name, as a lowercase one never does.
     """
+    return _with_hits(anonymizer, _store_hits(pseudonyms, texts, store))
+
+
+def _with_hits(anonymizer: Anonymizer, hits: Mapping[str, list[Span]]) -> Anonymizer:
+    """The anonymizer with the store's hits as one more guard, or as it is without any."""
     from polanon import Anonymizer as Facade  # the facade imports this module
 
+    if not hits:
+        return anonymizer
+    return Facade(
+        [*anonymizer.guards, _StoreHits(hits)],
+        enabled=anonymizer.enabled,
+        allowlist=anonymizer.allowlist,
+        pseudonyms=anonymizer.pseudonyms,
+    )
+
+
+def _left_in_the_clear(hits: Mapping[str, list[Span]], masked: Sequence[str]) -> bool:
+    """Whether a value the store would hit is still written somewhere in the masked passages."""
+    words = {seen[span.start : span.end] for seen, spans in hits.items() for span in spans}
+    if not words:
+        return False
+    text = _joined(masked)
+    return any(re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text) for word in words)
+
+
+def _store_hits(
+    pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
+) -> dict[str, list[Span]]:
+    """Return, for each of `texts` as the guards read it, the spans of values the store holds."""
     wanted: dict[str, list[tuple[str, int, int, str]]] = {}
     for text in texts:
         view = detection_view(text)
@@ -455,14 +510,7 @@ def _with_store_hits(
                 hits.setdefault(seen, []).append(
                     Span(start, end, entity_type, 0.9, _StoreHits.name)
                 )
-    if not hits:
-        return anonymizer
-    return Facade(
-        [*anonymizer.guards, _StoreHits(hits)],
-        enabled=anonymizer.enabled,
-        allowlist=anonymizer.allowlist,
-        pseudonyms=anonymizer.pseudonyms,
-    )
+    return hits
 
 
 def _candidates(text: str) -> list[tuple[int, int]]:

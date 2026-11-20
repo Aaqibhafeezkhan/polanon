@@ -18,6 +18,7 @@ from polanon import (
     stored_mapping,
     tokens_in,
 )
+from polanon import index as index_module
 from polanon.guards.base import Guard
 from polanon.types import Span
 
@@ -390,6 +391,36 @@ def test_a_name_a_language_model_guessed_gives_no_surname_to_the_store():
     anonymizer = Anonymizer([Guess()], pseudonyms=Pseudonyms(KEY))
     anonymizer.index_chunks(["Kampania w Google Ads ruszyła."], store)
     assert len(store) == 1
+
+
+def test_a_surname_alone_in_another_case_is_masked_the_first_time_a_document_is_indexed():
+    """PolGate indexed every document twice: "Wróblowi" and "Wróbla" went to the index in the
+    clear until the store held the surname "Jan Wróbel" gave it, which only the first pass wrote."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    chunks = [
+        "Umowę podpisał Jan Wróbel.",
+        "Wróblowi przekazano klucze, a Wróbla poproszono o podpis. Wróbel się zgodził.",
+    ]
+    masked = anonymizer.index_chunks(chunks, store)
+    assert "Wróbl" not in masked.texts[1]
+    assert "Wróbel" not in masked.texts[1]
+    assert anonymizer.index_chunks(chunks, store).texts == masked.texts
+
+
+def test_a_document_with_nothing_left_in_the_clear_is_masked_once(monkeypatch):
+    """The second masking runs only where the lookup finds a value the first one left out."""
+    calls = []
+    original = index_module.mask_chunks
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(index_module, "mask_chunks", counted)
+    store = InMemoryMappingStore()
+    stable(store).index_chunks(["Umowę podpisał Jan Wróbel, PESEL 50810112354."], store)
+    assert len(calls) == 1
 
 
 def test_a_surname_alone_in_another_document_is_masked_through_the_store():

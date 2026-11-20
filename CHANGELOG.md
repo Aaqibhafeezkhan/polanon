@@ -36,6 +36,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 - **The sweep no longer reports a known person the restore declined.** "Janie Kowalski", restored
   from `<OSOBA_1:wołacz>` where the mapping held "Janowi Kowalskiemu", changes the stem, and every
   such answer was reported as naming a person nobody sent.
+- **A surname alone in another case is masked the first time a document is indexed.** "Jan
+  Wróbel" gave the store the surname, but "Wróblowi" and "Wróbla" further on went to the index in
+  the clear until the document was indexed again. The document is now masked once more with what it
+  is about to store, and only when that finds a value the first masking left out.
 
 ## [0.4.1] - 2026-11-19
 
