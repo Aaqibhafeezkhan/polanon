@@ -113,24 +113,6 @@ class InMemoryMappingStore:
         return len(self._entries)
 
 
-class _Pending:
-    """A store as it will be once `entries` are added: read from, never written to."""
-
-    def __init__(self, store: MappingStore, entries: Mapping[str, StoredValue]) -> None:
-        self._store = store
-        self._entries = entries
-
-    def get(self, tokens: Collection[str]) -> dict[str, StoredValue]:
-        held = dict(_get(self._store, tokens))
-        for token in tokens:
-            if token not in held and token in self._entries:
-                held[token] = self._entries[token]
-        return held
-
-    def add(self, entries: Mapping[str, StoredValue]) -> Mapping[str, StoredValue]:
-        raise AssertionError("a pending store is only read")  # pragma: no cover
-
-
 @dataclass(frozen=True)
 class MaskedChunks:
     """A document's passages, masked with one mapping.
@@ -201,18 +183,25 @@ def index_chunks(
     texts = _chunks(chunks)
     for _ in range(_ATTEMPTS):
         joined = [_joined(texts)]
-        masker = _with_store_hits(anonymizer, pseudonyms, joined, store) if lookup else anonymizer
+        wanted = _wanted(pseudonyms, joined) if lookup else {}
+        held = _get(store, list(wanted)) if lookup else {}
         # Tokens the passages hold already, as when masked text is indexed again, are known
         # values: left whole, and restored as the store has them.
-        masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
+        masked = mask_chunks(
+            _with_hits(anonymizer, _hits(pseudonyms, wanted, held)),
+            texts,
+            stored_mapping(store, *texts),
+        )
         entries = _entries(pseudonyms, masked.mapping)
         entries = _surnames(pseudonyms, masked.mapping) | entries
-        hits = _store_hits(pseudonyms, joined, _Pending(store, entries)) if lookup else {}
-        if _left_in_the_clear(hits, masked.texts):
-            # A surname the document named by the full name is found alone in its other forms,
-            # "Wróblowi" or "Wróbla", only by the lookup, which knew it only once it was stored:
-            # the document is masked again with what it is about to store as if it were stored.
-            masker = _with_hits(anonymizer, hits)
+        # A surname the document named by the full name is found alone in its other forms,
+        # "Wróblowi" or "Wróbla", only by the lookup, which knew it only once it was stored. What
+        # the document is about to store is looked up among the runs of words already read, and
+        # where it is still written in the clear, the document is masked once more with it.
+        pending = {token: entry for token, entry in entries.items() if token in wanted}
+        pending = {token: entry for token, entry in pending.items() if token not in held}
+        if _left_in_the_clear(_hits(pseudonyms, wanted, pending), masked.texts):
+            masker = _with_hits(anonymizer, _hits(pseudonyms, wanted, {**held, **pending}))
             masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
             entries = _entries(pseudonyms, masked.mapping)
             entries = _surnames(pseudonyms, masked.mapping) | entries
@@ -486,15 +475,28 @@ def _left_in_the_clear(hits: Mapping[str, list[Span]], masked: Sequence[str]) ->
     words = {seen[span.start : span.end] for seen, spans in hits.items() for span in spans}
     if not words:
         return False
-    text = _joined(masked)
-    return any(re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text) for word in words)
+    alternatives = "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
+    return re.search(rf"(?<!\w)(?:{alternatives})(?!\w)", _joined(masked)) is not None
+
+
+#: Token -> every run of words of a text that would get it: (the text as read, start, end, type).
+_Wanted = dict[str, list[tuple[str, int, int, str]]]
 
 
 def _store_hits(
     pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
 ) -> dict[str, list[Span]]:
     """Return, for each of `texts` as the guards read it, the spans of values the store holds."""
-    wanted: dict[str, list[tuple[str, int, int, str]]] = {}
+    wanted = _wanted(pseudonyms, texts)
+    return _hits(pseudonyms, wanted, _get(store, list(wanted)))
+
+
+def _wanted(pseudonyms: Pseudonyms, texts: Sequence[str]) -> _Wanted:
+    """Return the token of every run of words in `texts` that could be a name, of each type.
+
+    The expensive part of a lookup, a keyed hash per run and type, so it is done once per text.
+    """
+    wanted: _Wanted = {}
     for text in texts:
         view = detection_view(text)
         seen = text if view is None else view.text
@@ -502,11 +504,22 @@ def _store_hits(
             for entity_type in _LOOKED_UP:
                 token = pseudonyms.token(seen[start:end], entity_type)
                 wanted.setdefault(token, []).append((seen, start, end, entity_type))
-    held = _get(store, list(wanted))
+    return wanted
+
+
+def _hits(
+    pseudonyms: Pseudonyms, wanted: _Wanted, held: Mapping[str, StoredValue]
+) -> dict[str, list[Span]]:
+    """Return the runs of `wanted` whose token `held` has for the same value, as spans per text."""
     hits: dict[str, list[Span]] = {}
+    # A name is written many times in a document; its fingerprint is a keyed hash, taken once.
+    fingerprints: dict[tuple[str, str], str] = {}
     for token, entry in held.items():
         for seen, start, end, entity_type in wanted.get(token, ()):
-            if pseudonyms.fingerprint(seen[start:end], entity_type) == entry.fingerprint:
+            key = (seen[start:end], entity_type)
+            if key not in fingerprints:
+                fingerprints[key] = pseudonyms.fingerprint(*key)
+            if fingerprints[key] == entry.fingerprint:
                 hits.setdefault(seen, []).append(
                     Span(start, end, entity_type, 0.9, _StoreHits.name)
                 )
