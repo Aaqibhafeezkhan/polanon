@@ -63,4 +63,7 @@ same commit. It checks where this file points Open WebUI, with which key, and th
 on this machine alone; then it starts the gateway with a stand-in provider and sends a call as
 Open WebUI would, plain and streamed. The stand-in must not receive the invented person and PESEL
 number, the answer must come back with them, and a call without the key must be refused. Open
-WebUI's own image is not started there.
+WebUI's own image is not started there, so the test cannot show that its container reaches the
+gateway; the probe calls the gateway's address from inside the gateway's container. The test runs
+under a Compose project of its own, `polanon-stack-test-open-webui`, so running it beside a stack
+that is up leaves that stack and its data alone.

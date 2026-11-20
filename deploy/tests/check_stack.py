@@ -28,11 +28,26 @@ ENVIRONMENT = {
     "STACK_TESTS": str(TESTS),
 }
 
-# For each stack: the service that is the tool, and the variables that carry the gateway's
-# address and key to it.
+# For each stack: the service that is the tool, the variables that carry the gateway's address
+# and key to it, and what else the tool must be told so that nothing goes around the gateway.
 TOOLS = {
-    "open-webui": ("open-webui", "OPENAI_API_BASE_URL", "OPENAI_API_KEY"),
+    "open-webui": (
+        "open-webui",
+        "OPENAI_API_BASE_URL",
+        "OPENAI_API_KEY",
+        {"ENABLE_OLLAMA_API": "false"},
+    ),
 }
+
+
+def project(stack: str) -> str:
+    """The Compose project the test runs under: never the stack's own.
+
+    Run under the stack's own name on a machine where the stack is up, `up` would put the test's
+    image and keys in place of the real gateway, and `down --volumes` would delete Open WebUI's
+    accounts and chats.
+    """
+    return f"polanon-stack-test-{stack}"
 
 
 def compose(stack: str, *arguments: str, stdin: str | None = None) -> str:
@@ -40,6 +55,8 @@ def compose(stack: str, *arguments: str, stdin: str | None = None) -> str:
     command = [
         "docker",
         "compose",
+        "--project-name",
+        project(stack),
         "--file",
         str(DEPLOY / stack / "docker-compose.yml"),
         "--file",
@@ -63,11 +80,15 @@ def compose(stack: str, *arguments: str, stdin: str | None = None) -> str:
 
 def check_wiring(stack: str) -> tuple[str, str]:
     """Check where the stack points its tool, and return that address and key."""
-    service, url_variable, key_variable = TOOLS[stack]
-    services = json.loads(compose(stack, "config", "--format", "json"))["services"]
+    service, url_variable, key_variable, also = TOOLS[stack]
+    config = json.loads(compose(stack, "config", "--format", "json"))
+    assert config["name"] == project(stack), config["name"]
+    services = config["services"]
     tool = services[service]["environment"]
     assert tool[url_variable] == "http://gateway:8787/v1", tool[url_variable]
     assert tool[key_variable] == ENVIRONMENT["POLANON_GATEWAY_KEY"], "the tool got another key"
+    for variable, value in also.items():
+        assert tool.get(variable) == value, f"{variable} is {tool.get(variable)!r}, not {value!r}"
     assert ENVIRONMENT["POLANON_UPSTREAM_KEY"] not in json.dumps(services[service]), (
         "the tool was given the provider's key"
     )
