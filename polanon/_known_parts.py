@@ -2,9 +2,10 @@
 
 A surname is the person: once "Jan Kowalski" is masked, "Kowalski" further down the text is the
 same man, and it went out in the clear, because no rule reads a lone surname as a name. So is the
-surname in another case, also where its stem changes, "Wróbla" after "Paweł Wróbel" and
-"Koziołowi" after "Adam Kozieł", and in the nominative after the name was masked in another case:
-"Lis" and "Lisowi" after "Grzegorzem Lisem". A handle is the account: once "github.com/jkowalski"
+surname in another case, also where its stem changes, "Wróbla" after "Paweł Wróbel",
+"Koziołowi" after "Adam Kozieł" and "Dudzie" after "Anna Duda", and in the nominative after the
+name was masked in another case: "Lis" and "Lisowi" after "Grzegorzem Lisem", "Kozieł" after
+"Adama Kozieła". A handle is the account: once "github.com/jkowalski"
 is masked, "jkowalski" in a JSON field, after "@" or in "jkowalski.github.io" is the same account.
 The pipeline treats such a part as a known value of the same type, so it is masked wherever it
 stands, by the rules every known value follows.
@@ -18,7 +19,14 @@ from functools import lru_cache
 
 from polanon._canonical import base_form
 from polanon.allowlist import WELL_KNOWN_NAMES
-from polanon.guards.names_pl import fold, forget_forms, login_name_parts, person_name_parts
+from polanon.guards.names_pl import (
+    declined_surname_nominatives,
+    fold,
+    forget_forms,
+    login_name_parts,
+    person_name_parts,
+    surname_forms,
+)
 from polanon.guards.recognizers_pl import profile_handle
 
 #: A handle shorter than this is not masked on its own: "jk" or "ab" stand for nobody in prose.
@@ -58,10 +66,16 @@ def _known_parts(value: str, entity_type: str, trusted: bool, cases: bool) -> tu
         # A name first masked in another case gives its surname in that case; the nominative,
         # where the rules read it for sure, gives the surname as it stands on its own.
         nominative = base_form(value, entity_type)
+        more: list[str] = []
         if nominative != value.strip():
-            for part in person_name_parts(nominative, needs_first_name=not trusted, cases=cases):
-                if part not in parts:
-                    parts.append(part)
+            more = person_name_parts(nominative, needs_first_name=not trusted, cases=cases)
+        elif cases and parts:
+            # Where they cannot, a first name in no nominative tells the surname's case, and the
+            # nominatives it may have are masked with their cases: "Kozieł", "Kozioł" and
+            # "Koziołowi" after "Adama Kozieła". Only for masking: a store keeps no guess.
+            for surname in declined_surname_nominatives(value):
+                more += [surname, *surname_forms(surname)]
+        parts += [part for part in dict.fromkeys(more) if part not in parts]
         return tuple(parts or login_name_parts(value))
     if entity_type == "LINK":
         handle = profile_handle(value)

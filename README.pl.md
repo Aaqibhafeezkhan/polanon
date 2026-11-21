@@ -356,9 +356,10 @@ imię znają reguły, obok pełnego imienia i nazwiska, a `mask_query` i `index_
 magazynie każdy ciąg do czterech słów i maskują te, dla których ma token. Pytanie dostaje wtedy
 token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym.
 Nazwisko w przypadku, którego reguły nie odczytują, „Koziołowi” albo „Kozła” po „Adam Kozieł”, jest
-sprawdzane w magazynie przez mianowniki, od których może pochodzić, i też zostaje zamaskowane, pod
-tokenem, który daje jego własny zapis. Przy magazynie, który jest na to za wolny, przekaż
-`lookup=False`.
+sprawdzane w magazynie przez mianowniki, od których może pochodzić, też zostaje zamaskowane i
+dostaje token nazwiska: magazyn odróżnia „Kozieł” od „Kozioł”, czego nie potrafi żadna reguła. Gdy
+ma oba, słowo zachowuje token, który daje jego własny zapis. Przy magazynie, który jest na to za
+wolny, przekaż `lookup=False`.
 
 **Klucz.** Co najmniej 32 losowe bajty, jeden klucz na firmę i osobny `scope=` dla indeksu, którego
 nie wolno powiązać z innym. Trzymaj go w menedżerze sekretów, poza indeksem, kodem i logami;
@@ -374,10 +375,11 @@ zamienia odgadniętą wartość z powrotem w token.
 w magazynie albo w jednym tekście, ta, która przyszła druga, dostaje cztery cyfry więcej.
 
 **Ograniczenia.** Imię albo nazwisko, którego reguły nie umieją odmienić, na przykład rzadkie imię
-albo „Krawca” od „Krawiec”, i nazwa firmy w innym przypadku, „Firmą Kot” obok „Firma Kot”, mają token na
-każdą formę, co kosztuje chybione wyszukiwanie, ale niczego nie ujawnia. Samotne słowo pisane małą
-literą nigdy nie jest sprawdzane w magazynie. A jeden token wszędzie to cel i zarazem cena: kto czyta
-wiele zamaskowanych fragmentów, widzi, które dotyczą tej samej osoby. Co to oznacza, opisuje
+albo „Jana Krawca” od „Jan Krawiec”, i nazwa firmy w innym przypadku, „Firmą Kot” obok „Firma
+Kot”, mają token na każdą formę, co kosztuje chybione wyszukiwanie, ale niczego nie ujawnia.
+Samotne słowo pisane małą literą nigdy nie jest sprawdzane w magazynie. A jeden token wszędzie to
+cel i zarazem cena: kto czyta wiele zamaskowanych fragmentów, widzi, które dotyczą tej samej osoby.
+Co to oznacza, opisuje
 [model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#stable-pseudonyms-for-search-indexes).
 
 ## Z Haystackiem
@@ -580,11 +582,12 @@ po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów 
 imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp. z o.o.”, „S.A.”,
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
 maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”, także
-w innym przypadku, „Lisowi” po „Katarzyna Lis” i „Koziołowi” albo „Kozła” po „Adam Kozieł”, oraz
-„jkowalski” w polu JSON po „github.com/jkowalski”. Z dodatkiem `ner` model spaCy dokłada miejsca
-i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala małemu lokalnemu modelowi
-przejrzeć *zamaskowany* tekst pod kątem tego, co z kontekstu wciąż pozwala kogoś zidentyfikować.
-Pozostałe daty też są rozpoznawane, ale zostają czytelne, chyba że poprosisz o ich maskowanie.
+w innym przypadku, „Lisowi” po „Katarzyna Lis”, „Dudzie” po „Anna Duda” i „Koziołowi” albo „Kozła”
+po „Adam Kozieł”, oraz „jkowalski” w polu JSON po „github.com/jkowalski”. Z dodatkiem `ner` model
+spaCy dokłada miejsca i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala
+małemu lokalnemu modelowi przejrzeć *zamaskowany* tekst pod kątem tego, co z kontekstu wciąż
+pozwala kogoś zidentyfikować. Pozostałe daty też są rozpoznawane, ale zostają czytelne, chyba że
+poprosisz o ich maskowanie.
 
 Tekst skopiowany z PDF-ów, Worda albo macOS jest czytany tak, jak przeczytałby go człowiek: litery
 zapisane jako litera bazowa plus znak diakrytyczny, spacje niełamiące i półpauzy wewnątrz liczb oraz

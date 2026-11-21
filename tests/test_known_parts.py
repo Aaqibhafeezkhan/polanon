@@ -340,3 +340,43 @@ def test_the_parts_of_a_call_s_names_are_forgotten_with_its_values():
     assert _known_parts._known_parts.cache_info().currsize == 0
     assert names_pl._noun_surname_forms.cache_info().currsize == 0
     assert names_pl._nominatives.cache_info().currsize == 0
+
+
+@pytest.mark.parametrize(
+    ("name", "later", "forms"),
+    [
+        ("Anna Duda", "Dudy nie było, przekaż Dudzie notatkę.", ["Dudy", "Dudzie"]),
+        ("Jan Sowa", "Z Sową rozmawiałem, Sowie wysłałem umowę.", ["Sową", "Sowie"]),
+        ("Ewa Mucha", "Musze przekaż, że Muchy szukał kurier.", ["Musze", "Muchy"]),
+    ],
+)
+def test_a_surname_in_a_is_masked_in_its_other_cases(name, later, forms):
+    """No case of "Duda" but the nominative holds "Duda", so the surname alone was masked after
+    the full name and "Dudy" and "Dudzie" went out."""
+    turn = Anonymizer(default_guards(with_ner=False)).turn()
+    turn.mask(f"Umowę podpisał(a) {name}.")
+    masked = turn.mask(later)
+    for form in forms:
+        assert form not in masked, masked
+    assert turn.restore(masked) == later
+
+
+def test_a_bird_spelled_like_a_known_surname_in_a_stays():
+    mapping = {"<OSOBA_1>": "Jan Sowa", "<OSOBA_2>": "Anna Wrona"}
+    text = "Na drzewie siedziała sowa, a obok wrony; o sowie i wronie ani słowa."
+    assert mask(text, mapping).anonymized == text
+
+
+def test_a_name_first_masked_in_a_case_the_rules_cannot_read_gives_its_nominatives():
+    """ "Adama Kozieła" gave the part "Kozieła" alone, so "Kozieł" and "Koziołowi" went out in the
+    next message. "Adama" is only a genitive, so the surname is one too, of "Kozieł" or "Kozioł"."""
+    text = "Kozieł dzwonił, przekaż Koziołowi notatkę."
+    masked = mask(text, {"<OSOBA_1>": "Adama Kozieła"})
+    assert "Koz" not in masked.anonymized, masked.anonymized
+    assert Anonymizer.restore(masked.anonymized, masked.mapping) == text
+
+
+def test_a_first_name_that_may_be_a_nominative_gives_no_guess_at_the_surname():
+    """ "Kamila Kozieła" may be a woman of that name, whose surname is "Kozieła" itself."""
+    text = "Kozieł dzwonił."
+    assert mask(text, {"<OSOBA_1>": "Kamila Kozieła"}).anonymized == text

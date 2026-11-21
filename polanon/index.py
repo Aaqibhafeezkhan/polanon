@@ -17,7 +17,7 @@ import re
 import threading
 from bisect import bisect_left, bisect_right
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from polanon import _canonical
@@ -184,11 +184,14 @@ def index_chunks(
     texts = _chunks(chunks)
     for _ in range(_ATTEMPTS):
         joined = [_joined(texts)]
-        masker = _with_store_hits(anonymizer, pseudonyms, joined, store) if lookup else anonymizer
+        found = _with_store_hits(anonymizer, pseudonyms, joined, store) if lookup else None
         # Tokens the passages hold already, as when masked text is indexed again, are known
         # values: left whole, and restored as the store has them.
-        masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
-        entries = _entries(pseudonyms, masked.mapping)
+        before = stored_mapping(store, *texts)
+        masked = mask_chunks(found.masker if found else anonymizer, texts, before)
+        renamed = found.renames(masked.mapping, before) if found else {}
+        masked = _renamed_chunks(masked, renamed)
+        entries = _entries(pseudonyms, masked.mapping, _nominatives(renamed))
         entries = _surnames(pseudonyms, masked.mapping) | entries
         # Asked first, so a pass that meets a collision writes nothing: written and then masked
         # again, a value moved to a longer token left its personal data under one nothing uses.
@@ -214,13 +217,15 @@ def mask_query(
     if not isinstance(text, str):
         raise TypeError(f"mask_query takes a str, not {type(text).__name__}")
     for _ in range(_ATTEMPTS):
-        masker = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else anonymizer
+        found = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else None
         before = stored_mapping(store, text) | dict(mapping or {})
-        result = _mask(masker, text, before)
+        result = _mask(found.masker if found else anonymizer, text, before)
+        renamed = found.renames(result.mapping, before) if found else {}
+        result = _renamed_result(result, renamed)
         # Tokens the conversation held before keep their values, collision or not: masking the
         # question again cannot change them, and refusing every later turn would help nobody.
         new = {t: v for t, v in result.mapping.items() if t not in before}
-        entries = _entries(pseudonyms, new)
+        entries = _entries(pseudonyms, new, _nominatives(renamed))
         held = _get(store, list(entries))
         if not _record_collisions(pseudonyms, entries, held):
             return result
@@ -353,17 +358,74 @@ def _cut(
     return passage, written
 
 
-def _entries(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, StoredValue]:
-    """Return what the store keeps for each token of a mapping; placeholders are left out."""
+def _entries(
+    pseudonyms: Pseudonyms, mapping: Mapping[str, str], nominatives: Mapping[str, str]
+) -> dict[str, StoredValue]:
+    """Return what the store keeps for each token of a mapping; placeholders are left out.
+
+    A token a surname's case took from the store, as in `nominatives`, is kept for the surname
+    it stands for, as the store holds it: "Kozieł", not "Koziołowi".
+    """
     entries: dict[str, StoredValue] = {}
     for token, value in mapping.items():
         entity_type = type_of(token)
         if entity_type is None or value == token:
             continue
+        value = nominatives.get(token, value)
         entries[token] = StoredValue(
             base_form(value, entity_type), pseudonyms.fingerprint(value, entity_type)
         )
     return entries
+
+
+class _Renamed(NamedTuple):
+    """The token a lone surname's case takes from the store, and the surname it stands for."""
+
+    token: str
+    surname: str
+
+
+def _nominatives(renamed: Mapping[str, _Renamed]) -> dict[str, str]:
+    return {new.token: new.surname for new in renamed.values()}
+
+
+def _swap_tokens(text: str, renamed: Mapping[str, _Renamed]) -> str:
+    return _TOKEN_RE.sub(lambda match: _token_for(match[0], renamed), text)
+
+
+def _token_for(token: str, renamed: Mapping[str, _Renamed]) -> str:
+    new = renamed.get(token)
+    return token if new is None else new.token
+
+
+def _swap_keys(mapping: Mapping[str, str], renamed: Mapping[str, _Renamed]) -> dict[str, str]:
+    """Return `mapping` with the tokens renamed; where two meet, the first spelling stays."""
+    swapped: dict[str, str] = {}
+    for token, value in mapping.items():
+        swapped.setdefault(_token_for(token, renamed), value)
+    return swapped
+
+
+def _renamed_result(
+    result: AnonymizationResult, renamed: Mapping[str, _Renamed]
+) -> AnonymizationResult:
+    if not renamed:
+        return result
+    return replace(
+        result,
+        anonymized=_swap_tokens(result.anonymized, renamed),
+        mapping=_swap_keys(result.mapping, renamed),
+    )
+
+
+def _renamed_chunks(masked: MaskedChunks, renamed: Mapping[str, _Renamed]) -> MaskedChunks:
+    if not renamed:
+        return masked
+    return MaskedChunks(
+        texts=[_swap_tokens(text, renamed) for text in masked.texts],
+        mappings=[_swap_keys(mapping, renamed) for mapping in masked.mappings],
+        mapping=_swap_keys(masked.mapping, renamed),
+    )
 
 
 def _surnames(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, StoredValue]:
@@ -427,9 +489,32 @@ class _StoreHits(Guard):
         return list(self._hits.get(text, ()))
 
 
+@dataclass(frozen=True)
+class _Found:
+    """What the store knows of a text: the anonymizer to mask it with, and the surnames' cases.
+
+    `surnames` holds each lone word in a case the rules cannot read, lowercase, with the token of
+    the one surname the store holds that it is a case of.
+    """
+
+    masker: Anonymizer
+    surnames: Mapping[str, _Renamed]
+
+    def renames(self, mapping: Mapping[str, str], before: Mapping[str, str]) -> dict[str, _Renamed]:
+        """Return the new tokens of a masked mapping that take a stored surname's token instead."""
+        renamed: dict[str, _Renamed] = {}
+        for token, value in mapping.items():
+            new = self.surnames.get(value.strip().lower())
+            if new is None or token in before or token == new.token:
+                continue
+            if type_of(token) == "PERSON":
+                renamed[token] = new
+        return renamed
+
+
 def _with_store_hits(
     anonymizer: Anonymizer, pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
-) -> Anonymizer:
+) -> _Found:
     """Return the anonymizer with one more guard: the values of `texts` the store knows.
 
     A surname written alone, "Co podpisał Kowalczyk?", is a name no rule reads, and a question
@@ -439,9 +524,10 @@ def _with_store_hits(
     counts only when it is no bare first name, as a lowercase one never does.
 
     A surname in a case the rules cannot read, "Koziołowi" or "Kozieła" after "Adam Kozieł" was
-    stored, is looked up by the nominatives it may come from, so it is masked as well. It keeps a
-    token of its own, the one its own spelling gives: the tokens of the first scheme do not
-    change.
+    stored, is looked up by the nominatives it may come from, so it is masked as well, and it
+    takes the stored surname's token, so a search for the person finds it: the store tells which
+    of "Kozieł" and "Kozioł" the word is, where no rule could. Where the store holds two of them,
+    or the word's own spelling, the word keeps the token that spelling gives.
     """
     from polanon import Anonymizer as Facade  # the facade imports this module
 
@@ -459,19 +545,32 @@ def _with_store_hits(
                 wanted.setdefault(token, []).append((seen, start, end, "PERSON", surname))
     held = _get(store, list(wanted))
     hits: dict[str, set[Span]] = {}
+    as_written: set[str] = set()
+    declined: dict[str, set[_Renamed]] = {}
     for token, entry in held.items():
         for seen, start, end, entity_type, value in wanted.get(token, ()):
-            if pseudonyms.fingerprint(value, entity_type) == entry.fingerprint:
-                hit = Span(start, end, entity_type, 0.9, _StoreHits.name)
-                hits.setdefault(seen, set()).add(hit)
+            if pseudonyms.fingerprint(value, entity_type) != entry.fingerprint:
+                continue
+            hits.setdefault(seen, set()).add(Span(start, end, entity_type, 0.9, _StoreHits.name))
+            word = seen[start:end].lower()
+            if value == seen[start:end]:
+                as_written.add(word)
+            else:
+                declined.setdefault(word, set()).add(_Renamed(token, value))
+    surnames = {
+        word: next(iter(found))
+        for word, found in declined.items()
+        if word not in as_written and len({new.token for new in found}) == 1
+    }
     if not hits:
-        return anonymizer
-    return Facade(
+        return _Found(anonymizer, surnames)
+    masker = Facade(
         [*anonymizer.guards, _StoreHits({seen: sorted(spans) for seen, spans in hits.items()})],
         enabled=anonymizer.enabled,
         allowlist=anonymizer.allowlist,
         pseudonyms=anonymizer.pseudonyms,
     )
+    return _Found(masker, surnames)
 
 
 def _candidates(text: str) -> list[tuple[int, int]]:

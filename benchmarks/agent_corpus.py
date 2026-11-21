@@ -226,7 +226,11 @@ TOOLS = [
 
 
 def _home() -> list[dict[str, Any]]:
-    """The smart home: a person's whereabouts, the lights, notifications, the vacuum."""
+    """The smart home: a person's whereabouts, the lights, notifications, the vacuum.
+
+    The last question names the doctor by her surname alone in the dative, "Sowie", which does
+    not begin with "Sowa"; a lowercase "sowa" would be an owl.
+    """
     return [
         _user("Zgaś światło w salonie i sprawdź, czy Tomek już wrócił."),
         _assistant(None, _call("call_h1", "home_state", entity_id="person.tomek")),
@@ -385,7 +389,7 @@ def _home() -> list[dict[str, Any]]:
         ),
         _user(
             "Dzięki. Ile stopni jest w pokoju Zosi? jutro jedziemy do [[LOCATION:sopotu]], ustaw "
-            "ogrzewanie na 17."
+            "ogrzewanie na 17. Wyniki badań wyślij [[PERSON:Sowie]] przed wizytą."
         ),
     ]
 
