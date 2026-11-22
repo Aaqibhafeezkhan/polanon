@@ -201,9 +201,10 @@ def test_one_call_is_masked_at_a_time_in_the_gateway_s_own_process_by_default(ca
     assert "processes" not in capsys.readouterr().err
 
 
-def test_workers_mask_calls_side_by_side_and_never_carry_the_key(capsys):
-    """Each process builds its anonymizer from the options and reads POLANON_KEY itself, so what
-    is pickled to reach it holds the options and no key."""
+def test_workers_mask_calls_side_by_side_and_never_carry_the_key(capsys, monkeypatch):
+    """Each process builds its anonymizer from the options and reads POLANON_KEY itself, from
+    the environment it inherits, so what is pickled to reach it holds the options and no key."""
+    monkeypatch.setenv("POLANON_KEY", KEY)
     status, served = run(
         [*UPSTREAM, "--workers", "3", "--allow", "Ola Nowak"], {"POLANON_KEY": KEY}
     )
@@ -215,6 +216,29 @@ def test_workers_mask_calls_side_by_side_and_never_carry_the_key(capsys):
     assert b"Ola Nowak" in build
     assert KEY.encode() not in build
     assert bytes.fromhex(KEY) not in build
+
+
+@pytest.mark.parametrize("inherited", [None, "cd" * 32])
+def test_workers_that_would_read_another_key_than_the_gateway_s_are_refused(
+    inherited, capsys, monkeypatch
+):
+    """The workers inherit this process's environment, not the one the keys were read from: they
+    would mask without the key the banner names, or with another, and their tokens would differ
+    from one process to the next."""
+    if inherited is None:
+        monkeypatch.delenv("POLANON_KEY", raising=False)
+    else:
+        monkeypatch.setenv("POLANON_KEY", inherited)
+    status, served = run([*UPSTREAM, "--workers", "2"], {"POLANON_KEY": KEY})
+    assert status == BAD_SETTING
+    assert served.calls == []
+    refusal = capsys.readouterr().err
+    assert "reads POLANON_KEY from this process's environment" in refusal
+    assert KEY not in refusal
+    assert "cd" * 32 not in refusal
+    monkeypatch.delenv("POLANON_KEY", raising=False)
+    status, served = run([*UPSTREAM, "--workers", "2"])
+    assert status == 0
 
 
 @pytest.mark.parametrize("count", ["0", "-1"])

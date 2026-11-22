@@ -45,7 +45,8 @@ def main(
 
     Args:
         argv: the arguments; None reads them from the command line.
-        environ: where the keys are read from; None reads the process's environment.
+        environ: where the keys are read from; None reads the process's environment. With
+            ``--workers`` its POLANON_KEY must be the process's own, which the workers inherit.
         serve: runs the application; None serves it with uvicorn.
 
     Returns:
@@ -63,6 +64,15 @@ def main(
         print(
             f"refusing to listen on {args.host} without a key: anyone who reaches it could send "
             "through it. Set POLANON_GATEWAY_KEY, or keep the default --host 127.0.0.1.",
+            file=sys.stderr,
+        )
+        return BAD_SETTING
+    if args.workers > 1 and _key(env) != _key(os.environ):
+        # Each worker reads the key from the environment it inherits, which is this process's:
+        # with another key, or none, its tokens would not be the ones the banner promises.
+        print(
+            "with --workers each masking process reads POLANON_KEY from this process's "
+            "environment, which does not hold the key given: set it there",
             file=sys.stderr,
         )
         return BAD_SETTING
@@ -183,6 +193,10 @@ def _loopback(host: str) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def _key(env: Mapping[str, str]) -> str | None:
+    return env.get("POLANON_KEY") or None
 
 
 def _unsupported(args: argparse.Namespace) -> Literal["refuse", "drop", "pass"]:
