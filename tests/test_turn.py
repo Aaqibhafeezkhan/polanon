@@ -198,6 +198,19 @@ def test_a_tool_that_looks_records_up_gets_the_values_as_they_were_masked():
     )
 
 
+def test_a_word_after_a_token_s_colon_that_names_no_case_is_masked():
+    """The masking took everything after the colon for a case and sent "Kowalski" out."""
+    turn = anonymizer.turn()
+    turn.mask("Jan Kowalski dzwonił.")
+    turn.mask("Kowalski oddzwoni.")
+    typed = "Przekaż to <OSOBA_1:Kowalski>."
+    masked = turn.mask(typed)
+    assert "Kowalski" not in masked
+    assert masked == "Przekaż to <OSOBA_1:<OSOBA_2>>."
+    assert turn.restore(masked) == typed
+    assert turn.mask("Dzwoniłem do <OSOBA_1:celownik>.") == "Dzwoniłem do <OSOBA_1:celownik>."
+
+
 def test_an_application_checks_what_it_is_about_to_send_with_the_core_s_last_check():
     """PolGate wrote its own check, with the masking's thresholds copied by hand; the gateway's
     check is in the core now, with the rules the masking follows."""

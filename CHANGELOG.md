@@ -7,6 +7,23 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+Gaps PolGate found in the core's last check once it moved onto 0.4.2, each reproduced before it
+was fixed.
+
+### Fixed
+
+- **A word after a token's colon that names no case is masked and checked.** "<OSOBA_1:Kowalski>"
+  typed after "Kowalski" was masked went out with the surname: the masking and the last check took
+  every word after a colon for a case, which a model writes there, and left the whole token alone.
+  Now only a case, "<OSOBA_1:celownik>" in any letter case and with or without Polish letters,
+  makes the token one; any other word is read as text, and the token's frame is left alone, so
+  the masking sends `<OSOBA_1:<OSOBA_2>>` and the restore gives the text back.
+- **The last check reads a value inside a placeholder that stands for itself.** A password typed
+  as "<ADMIN_2024>" went out past `leaked_tokens`, which left the placeholders that stand for
+  themselves out of the mapping and so read "<ADMIN_2024>" as a token of another conversation.
+  The masking itself masked it, so this mattered where the masking had missed one, which is what
+  the last check is for.
+
 ## [0.4.2] - 2026-11-22
 
 A patch release that gathers four changes. Nothing that worked stops working the same way, and

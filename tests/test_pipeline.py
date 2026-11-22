@@ -646,6 +646,12 @@ def test_mask_known_values_never_rewrites_a_token_already_in_the_text():
     assert masked == "<OSOBA_1> pyta o <FIRMA_1>"
 
 
+def test_mask_known_values_reads_a_word_after_a_token_s_colon_that_names_no_case():
+    mapping = {"<OSOBA_1>": "Jan Kowalski", "<OSOBA_2>": "Kowalski"}
+    assert mask_known_values("To <OSOBA_1:Kowalski>.", mapping) == "To <OSOBA_1:<OSOBA_2>>."
+    assert mask_known_values("To <OSOBA_1:celownik>.", mapping) == "To <OSOBA_1:celownik>."
+
+
 def test_mask_known_values_places_the_longest_value_first():
     mapping = {"<OSOBA_1>": "Anna", "<OSOBA_2>": "Anna Wiśniewska"}
     assert mask_known_values("Anna Wiśniewska i Anna", mapping) == "<OSOBA_2> i <OSOBA_1>"
