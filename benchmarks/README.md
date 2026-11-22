@@ -93,7 +93,7 @@ English stands next to Polish on one line, there is code, a traceback, a system 
 configuration file with keys in it, a lease with two PESEL numbers, mail in German and Ukrainian,
 a page in Chinese, identifiers such as `notify.mobile_app_pixel_7_tomka`, and every call sends
 the history again. Seven calls use Chat Completions, one the Responses API. The 103 values that
-must not reach the model are marked where they are written, and stand 243 times in the eight
+must not reach the model are marked where they are written, and stand 250 times in the eight
 calls; 27 more, such as a first name alone or the byline of a published review, may be masked or
 not.
 
@@ -104,10 +104,10 @@ made a token is a word it cannot read, and a value masked once is masked whereve
 
 | Configuration | Leaked | Tokens that hide nothing | Their uses |
 |---|---:|---:|---:|
-| polanon, guards only, no model | 26 of 243 | 0 | 0 of 275 |
+| polanon, guards only, no model | 26 of 250 | 0 | 0 of 282 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
-| polanon, guards + `pl_core_news_md` | **2 of 243** | 5 | **5 of 309** |
-| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 697 |
+| polanon, guards + `pl_core_news_md` | **2 of 250** | 5 | **5 of 316** |
+| the same, `mode="paranoid"` | 1 of 250 | 240 | 386 of 704 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
 nothing is masked for nothing. With the model one value leaks by design: "sopotu", a place typed

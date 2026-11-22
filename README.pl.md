@@ -504,7 +504,7 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.1`,
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.2`,
 z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |
@@ -630,7 +630,7 @@ co zostaje przeoczone i dlaczego, i podają wynik Presidio na nich z tym samym m
 zamaskowanych w całości, 77% przy najłagodniejszym sposobie liczenia. Osiem
 wymyślonych wywołań agenta AI, z jego angielskim promptem, narzędziami i ich JSON-em, kodem,
 logami, umową najmu i pocztą w trzech językach, mierzy, ile kosztuje ruch agenta:
-z `pl_core_news_md` do modelu trafiają 2 z 243 oznaczonych wystąpień, a 5 z 309 użyć tokenów nic
+z `pl_core_news_md` do modelu trafiają 2 z 250 oznaczonych wystąpień, a 5 z 316 użyć tokenów nic
 nie ukrywa, tylko zasłania słowo, którego model nie może przeczytać. Odpowiedzi modelu wracają ze
 wszystkimi tokenami przywróconymi, jako tekst, jako odpowiedź i jako strumień, a 39 z ich 40 linii
 brzmi dokładnie tak, jak napisałby je człowiek.
@@ -751,7 +751,7 @@ zdanie albo „jadę do gdyni”, które wychodzą bez zmian. `mode="paranoid"` 
 guards = default_guards(mode="paranoid")
 ```
 
-Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 3 z 243 oznaczonych wystąpień,
+Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 2 z 250 oznaczonych wystąpień,
 a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 1, imię zapisane cyrylicą, którego nie
 znajduje żaden strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
 tryb niczego nie zmienia.

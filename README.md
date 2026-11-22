@@ -489,7 +489,7 @@ Inside a container the gateway listens on every interface, so it starts only wit
 keeps the port on this machine. Every option of `polanon-gateway` goes after the image's
 name. A model on the same machine, such as Ollama, is `--upstream
 http://host.docker.internal:11434/v1`, on Linux with `--add-host=host.docker.internal:host-gateway`.
-The image is tagged with the version, such as `0.4.1`, the minor version, `0.4`, and `latest`.
+The image is tagged with the version, such as `0.4.2`, the minor version, `0.4`, and `latest`.
 
 | Tool | Where the base URL goes |
 |---|---|
@@ -609,8 +609,8 @@ documents are a regression check, not a research benchmark: see the
 missed and why, and for Presidio on them with the same model: 67% fully masked, 77% at its
 most lenient. Eight invented calls of an AI agent, with its English prompt,
 its tools and their JSON, code, logs, a lease and mail in three languages, measure what an
-agent's traffic costs: with `pl_core_news_md`, 2 of the 243 marked occurrences reach the model,
-and 5 of 309 uses of a token hide nothing, a word the model could not read. The model's answers
+agent's traffic costs: with `pl_core_news_md`, 2 of the 250 marked occurrences reach the model,
+and 5 of 316 uses of a token hide nothing, a word the model could not read. The model's answers
 to them come back with every token restored, as text, as a response and as a stream, and 39 of
 their 40 lines read exactly as a person would write them.
 
@@ -722,7 +722,7 @@ which go out as written. `mode="paranoid"` masks all of it:
 guards = default_guards(mode="paranoid")
 ```
 
-On the calls of an AI agent in `benchmarks/`, "normal" lets 3 of 243 marked occurrences through,
+On the calls of an AI agent in `benchmarks/`, "normal" lets 2 of 250 marked occurrences through,
 and 2% of the token uses hide nothing; "paranoid" lets 1 through, a name in Cyrillic no guard
 finds, and more than half of the token uses hide nothing. The rules are the same in both, so without the model
 the mode changes nothing.
