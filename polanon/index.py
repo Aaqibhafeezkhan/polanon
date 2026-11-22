@@ -17,15 +17,16 @@ import re
 import threading
 from bisect import bisect_left, bisect_right
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from polanon import _canonical
 from polanon._canonical import base_form
-from polanon._known_parts import known_parts
+from polanon._known_parts import known_forms, known_parts
 from polanon._matching import Ranges, type_of
-from polanon._view import View, detection_view
+from polanon._view import detection_view
 from polanon.guards.base import Guard
+from polanon.guards.names_pl import capital_tells_a_name, noun_surname_nominatives
 from polanon.policy import TOKEN_PATTERN
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import tokens_written
@@ -194,25 +195,18 @@ def index_chunks(
         held = _get(store, list(wanted)) if lookup else {}
         # Tokens the passages hold already, as when masked text is indexed again, are known
         # values: left whole, and restored as the store has them.
-        masked, result = _masked_chunks(
-            _with_hits(anonymizer, _hits(pseudonyms, wanted, held)),
-            texts,
-            stored_mapping(store, *texts),
-        )
-        entries = _entries(pseudonyms, masked.mapping)
-        entries = _surnames(pseudonyms, masked.mapping) | entries
+        before = stored_mapping(store, *texts)
+        found = _found(anonymizer, pseudonyms, wanted, held)
+        masked, result, entries = _index_pass(found, pseudonyms, texts, before)
         # A surname the document named by the full name is found alone in its other forms,
         # "Wróblowi" or "Wróbla", only by the lookup, which knew it only once it was stored. What
         # the document is about to store is looked up among the runs of words already read, and
         # where one lies outside everything masked, the document is masked once more with it.
         pending = {token: entry for token, entry in entries.items() if token in wanted}
         pending = {token: entry for token, entry in pending.items() if token not in held}
-        found = _hits(pseudonyms, wanted, pending)
-        if _left_in_the_clear(found, result, detection_view(joined[0])):
-            masker = _with_hits(anonymizer, _hits(pseudonyms, wanted, {**held, **pending}))
-            masked = _masked_chunks(masker, texts, stored_mapping(store, *texts))[0]
-            entries = _entries(pseudonyms, masked.mapping)
-            entries = _surnames(pseudonyms, masked.mapping) | entries
+        if _left_in_the_clear(_hits(pseudonyms, wanted, pending)[0], result, joined[0]):
+            found = _found(anonymizer, pseudonyms, wanted, {**held, **pending})
+            masked, _, entries = _index_pass(found, pseudonyms, texts, before)
         # Asked first, so a pass that meets a collision writes nothing: written and then masked
         # again, a value moved to a longer token left its personal data under one nothing uses.
         if _record_collisions(pseudonyms, entries, _get(store, list(entries))):
@@ -237,13 +231,15 @@ def mask_query(
     if not isinstance(text, str):
         raise TypeError(f"mask_query takes a str, not {type(text).__name__}")
     for _ in range(_ATTEMPTS):
-        masker = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else anonymizer
+        found = _with_store_hits(anonymizer, pseudonyms, [text], store) if lookup else None
         before = stored_mapping(store, text) | dict(mapping or {})
-        result = _mask(masker, text, before)
+        result = _mask(found.masker if found else anonymizer, text, before)
+        renamed = found.renames(result.mapping, before) if found else {}
+        result = _renamed_result(result, renamed)
         # Tokens the conversation held before keep their values, collision or not: masking the
         # question again cannot change them, and refusing every later turn would help nobody.
         new = {t: v for t, v in result.mapping.items() if t not in before}
-        entries = _entries(pseudonyms, new)
+        entries = _entries(pseudonyms, new, _nominatives(renamed))
         held = _get(store, list(entries))
         if not _record_collisions(pseudonyms, entries, held):
             return result
@@ -376,17 +372,74 @@ def _cut(
     return passage, written
 
 
-def _entries(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, StoredValue]:
-    """Return what the store keeps for each token of a mapping; placeholders are left out."""
+def _entries(
+    pseudonyms: Pseudonyms, mapping: Mapping[str, str], nominatives: Mapping[str, str]
+) -> dict[str, StoredValue]:
+    """Return what the store keeps for each token of a mapping; placeholders are left out.
+
+    A token a surname's case took from the store, as in `nominatives`, is kept for the surname
+    it stands for, as the store holds it: "Kozieł", not "Koziołowi".
+    """
     entries: dict[str, StoredValue] = {}
     for token, value in mapping.items():
         entity_type = type_of(token)
         if entity_type is None or value == token:
             continue
+        value = nominatives.get(token, value)
         entries[token] = StoredValue(
             base_form(value, entity_type), pseudonyms.fingerprint(value, entity_type)
         )
     return entries
+
+
+class _Renamed(NamedTuple):
+    """The token a lone surname's case takes from the store, and the surname it stands for."""
+
+    token: str
+    surname: str
+
+
+def _nominatives(renamed: Mapping[str, _Renamed]) -> dict[str, str]:
+    return {new.token: new.surname for new in renamed.values()}
+
+
+def _swap_tokens(text: str, renamed: Mapping[str, _Renamed]) -> str:
+    return _TOKEN_RE.sub(lambda match: _token_for(match[0], renamed), text)
+
+
+def _token_for(token: str, renamed: Mapping[str, _Renamed]) -> str:
+    new = renamed.get(token)
+    return token if new is None else new.token
+
+
+def _swap_keys(mapping: Mapping[str, str], renamed: Mapping[str, _Renamed]) -> dict[str, str]:
+    """Return `mapping` with the tokens renamed; where two meet, the first spelling stays."""
+    swapped: dict[str, str] = {}
+    for token, value in mapping.items():
+        swapped.setdefault(_token_for(token, renamed), value)
+    return swapped
+
+
+def _renamed_result(
+    result: AnonymizationResult, renamed: Mapping[str, _Renamed]
+) -> AnonymizationResult:
+    if not renamed:
+        return result
+    return replace(
+        result,
+        anonymized=_swap_tokens(result.anonymized, renamed),
+        mapping=_swap_keys(result.mapping, renamed),
+    )
+
+
+def _renamed_chunks(masked: MaskedChunks, renamed: Mapping[str, _Renamed]) -> MaskedChunks:
+    if not renamed:
+        return masked
+    return MaskedChunks(
+        texts=[_swap_tokens(text, renamed) for text in masked.texts],
+        mappings=[_swap_keys(mapping, renamed) for mapping in masked.mappings],
+        mapping=_swap_keys(masked.mapping, renamed),
+    )
 
 
 def _surnames(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, StoredValue]:
@@ -450,9 +503,71 @@ class _StoreHits(Guard):
         return list(self._hits.get(text, ()))
 
 
+@dataclass(frozen=True)
+class _Found:
+    """What the store knows of a text: the anonymizer to mask it with, and the surnames' cases.
+
+    `surnames` holds each lone word in a case the rules cannot read, lowercase, with the token of
+    the one surname the store holds that it is a case of.
+    """
+
+    masker: Anonymizer
+    surnames: Mapping[str, _Renamed]
+
+    def renames(self, mapping: Mapping[str, str], before: Mapping[str, str]) -> dict[str, _Renamed]:
+        """Return the new tokens of a masked mapping that take a stored surname's token instead.
+
+        A word that is a case of a person the text or the conversation names, other than the one
+        the store holds, stays that person's: after "Jan Kozioł", "Koziołowi" is his, not the
+        stored Adam Kozieł's, and taking Kozieł's token joined the two in every search.
+        """
+        if not self.surnames:
+            return {}
+        people = [_Person.of(value) for token, value in mapping.items() if _named(token, value)]
+        renamed: dict[str, _Renamed] = {}
+        for token, value in mapping.items():
+            word = value.strip().lower()
+            new = self.surnames.get(word)
+            if new is None or token in before or token == new.token or type_of(token) != "PERSON":
+                continue
+            surname = new.surname.lower()
+            if all(surname in person.words for person in people if person.names(word)):
+                renamed[token] = new
+        return renamed
+
+
+def _named(token: str, value: str) -> bool:
+    """Whether a mapping holds a person's name of two words or more for `token`."""
+    return type_of(token) == "PERSON" and value != token and len(value.split()) > 1
+
+
+@dataclass(frozen=True)
+class _Person:
+    """A person a text names: the parts of the name and the forms of its surname, lowercase."""
+
+    parts: frozenset[str]
+    words: frozenset[str]
+
+    @classmethod
+    def of(cls, value: str) -> _Person:
+        parts = {part.lower() for part in known_parts(value, "PERSON", trusted=False)}
+        forms = {form.lower() for form in known_forms(value, "PERSON", trusted=False)}
+        return cls(frozenset(parts), frozenset(parts | forms))
+
+    def names(self, word: str) -> bool:
+        """Whether a lowercase word is one of the person's words or a part with an ending."""
+        return word in self.words or any(
+            len(part) >= _SHORTEST_PART and word.startswith(part) for part in self.parts
+        )
+
+
+#: A part this long or longer names its person with an ending glued on: "Lisowi" is Lis's.
+_SHORTEST_PART = 3
+
+
 def _with_store_hits(
     anonymizer: Anonymizer, pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
-) -> Anonymizer:
+) -> _Found:
     """Return the anonymizer with one more guard: the values of `texts` the store knows.
 
     A surname written alone, "Co podpisał Kowalczyk?", is a name no rule reads, and a question
@@ -460,8 +575,23 @@ def _with_store_hits(
     words that could be a name, and the ones the store holds for the same value are masked like
     any detection, so the question gets the token the documents have. A capitalised word alone
     counts only when it is no bare first name, as a lowercase one never does.
+
+    A surname in a case the rules cannot read, "Koziołowi" or "Kozieła" after "Adam Kozieł" was
+    stored, is looked up by the nominatives it may come from, so it is masked as well, and it
+    takes the stored surname's token, so a search for the person finds it: the store tells which
+    of "Kozieł" and "Kozioł" the word is, where no rule could. Where the store holds two of them,
+    or the word's own spelling, the word keeps the token that spelling gives.
     """
-    return _with_hits(anonymizer, _store_hits(pseudonyms, texts, store))
+    wanted = _wanted(pseudonyms, texts)
+    return _found(anonymizer, pseudonyms, wanted, _get(store, list(wanted)))
+
+
+def _found(
+    anonymizer: Anonymizer, pseudonyms: Pseudonyms, wanted: _Wanted, held: Mapping[str, StoredValue]
+) -> _Found:
+    """Return what `held` tells of the runs of `wanted`: the anonymizer, and the surnames' cases."""
+    hits, surnames = _hits(pseudonyms, wanted, held)
+    return _Found(_with_hits(anonymizer, hits), surnames)
 
 
 def _with_hits(anonymizer: Anonymizer, hits: Mapping[str, list[Span]]) -> Anonymizer:
@@ -478,15 +608,29 @@ def _with_hits(anonymizer: Anonymizer, hits: Mapping[str, list[Span]]) -> Anonym
     )
 
 
+def _index_pass(
+    found: _Found, pseudonyms: Pseudonyms, texts: Sequence[str], before: Mapping[str, str]
+) -> tuple[MaskedChunks, AnonymizationResult, dict[str, StoredValue]]:
+    """Mask a document's passages; return them, the result for the whole, and what to store."""
+    masked, result = _masked_chunks(found.masker, texts, before)
+    renamed = found.renames(masked.mapping, before)
+    masked = _renamed_chunks(masked, renamed)
+    entries = _entries(pseudonyms, masked.mapping, _nominatives(renamed))
+    return masked, result, _surnames(pseudonyms, masked.mapping) | entries
+
+
 def _left_in_the_clear(
-    hits: Mapping[str, list[Span]], result: AnonymizationResult, view: View | None
+    hits: Mapping[str, list[Span]], result: AnonymizationResult, text: str
 ) -> bool:
-    """Whether a hit lies anywhere outside the ranges `result` masked.
+    """Whether a hit lies anywhere outside the ranges `result` masked in `text`.
 
     The hits are spans of the text as the guards read it, so a soft hyphen or a combining accent
     inside a surname does not hide it; each is taken back to the original and looked up among the
     masked ranges by halving, so a document of thousands of names costs no more than reading them.
     """
+    if not hits:
+        return False
+    view = detection_view(text)
     masked = sorted((span.start, span.end) for span in result.spans)
     starts = [start for start, _ in masked]
     for spans in hits.values():
@@ -498,51 +642,68 @@ def _left_in_the_clear(
     return False
 
 
-#: Token -> every run of words of a text that would get it: (the text as read, start, end, type).
-_Wanted = dict[str, list[tuple[str, int, int, str]]]
-
-
-def _store_hits(
-    pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
-) -> dict[str, list[Span]]:
-    """Return, for each of `texts` as the guards read it, the spans of values the store holds."""
-    wanted = _wanted(pseudonyms, texts)
-    return _hits(pseudonyms, wanted, _get(store, list(wanted)))
+#: Token -> every run of words of a text that would get it: (the text as read, start, end, type,
+#: and the value the token is of: the run as written, or a nominative it may be a case of).
+_Wanted = dict[str, list[tuple[str, int, int, str, str]]]
 
 
 def _wanted(pseudonyms: Pseudonyms, texts: Sequence[str]) -> _Wanted:
     """Return the token of every run of words in `texts` that could be a name, of each type.
 
-    The expensive part of a lookup, a keyed hash per run and type, so it is done once per text.
+    A lone word in a case the rules cannot read is wanted by the nominatives it may come from as
+    well. The expensive part of a lookup, a keyed hash per run and type, so it is done once per
+    text.
     """
     wanted: _Wanted = {}
     for text in texts:
         view = detection_view(text)
         seen = text if view is None else view.text
         for start, end in _candidates(seen):
+            written = seen[start:end]
             for entity_type in _LOOKED_UP:
-                token = pseudonyms.token(seen[start:end], entity_type)
-                wanted.setdefault(token, []).append((seen, start, end, entity_type))
+                token = pseudonyms.token(written, entity_type)
+                wanted.setdefault(token, []).append((seen, start, end, entity_type, written))
+            nominatives = _surnames_declined(written)
+            # "Kozła widziałem" opens a sentence, "Sokołów Podlaski" is a town.
+            if nominatives and capital_tells_a_name(seen, start, end):
+                for surname in nominatives:
+                    token = pseudonyms.token(surname, "PERSON")
+                    wanted.setdefault(token, []).append((seen, start, end, "PERSON", surname))
     return wanted
 
 
 def _hits(
     pseudonyms: Pseudonyms, wanted: _Wanted, held: Mapping[str, StoredValue]
-) -> dict[str, list[Span]]:
-    """Return the runs of `wanted` whose token `held` has for the same value, as spans per text."""
-    hits: dict[str, list[Span]] = {}
+) -> tuple[dict[str, list[Span]], dict[str, _Renamed]]:
+    """Return the runs of `wanted` whose token `held` has for the same value, as spans per text.
+
+    Also return each lone word found as a case of one stored surname only, lowercase, with that
+    surname's token: a word found as written too, or as a case of two, keeps its own.
+    """
+    hits: dict[str, set[Span]] = {}
+    as_written: set[str] = set()
+    declined: dict[str, set[_Renamed]] = {}
     # A name is written many times in a document; its fingerprint is a keyed hash, taken once.
     fingerprints: dict[tuple[str, str], str] = {}
     for token, entry in held.items():
-        for seen, start, end, entity_type in wanted.get(token, ()):
-            key = (seen[start:end], entity_type)
+        for seen, start, end, entity_type, value in wanted.get(token, ()):
+            key = (value, entity_type)
             if key not in fingerprints:
                 fingerprints[key] = pseudonyms.fingerprint(*key)
-            if fingerprints[key] == entry.fingerprint:
-                hits.setdefault(seen, []).append(
-                    Span(start, end, entity_type, 0.9, _StoreHits.name)
-                )
-    return hits
+            if fingerprints[key] != entry.fingerprint:
+                continue
+            hits.setdefault(seen, set()).add(Span(start, end, entity_type, 0.9, _StoreHits.name))
+            word = seen[start:end].lower()
+            if value == seen[start:end]:
+                as_written.add(word)
+            else:
+                declined.setdefault(word, set()).add(_Renamed(token, value))
+    surnames = {
+        word: next(iter(found))
+        for word, found in declined.items()
+        if word not in as_written and len({new.token for new in found}) == 1
+    }
+    return {seen: sorted(spans) for seen, spans in hits.items()}, surnames
 
 
 def _candidates(text: str) -> list[tuple[int, int]]:
@@ -562,6 +723,17 @@ def _candidates(text: str) -> list[tuple[int, int]]:
             if last > first or _could_be_named_alone(word.group(0)):
                 runs.append((word.start(), words[last].end()))
     return runs
+
+
+def _surnames_declined(written: str) -> list[str]:
+    """Return the nominatives a lone word may be a case of, when the rules cannot read it.
+
+    "Wróbla" or "Kowalczykowi" give their surname's token anyway, since the rules read them;
+    "Koziołowi" gives "Kozieł", "Kozioł" and "Koziół" to look up.
+    """
+    if _WORD.fullmatch(written) is None or _canonical._surname(written):
+        return []
+    return noun_surname_nominatives(written)
 
 
 def _could_be_named_alone(word: str) -> bool:

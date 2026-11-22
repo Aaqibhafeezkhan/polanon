@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property, lru_cache
 
@@ -32,6 +32,14 @@ _ToOriginal = Callable[[int, int], tuple[int, int]]
 #: A known value shorter than this is not masked inside a longer word. Widening "Jan" to "Janusz",
 #: or a stray two-letter detection to every word that contains it, would mask half a document.
 MIN_EMBEDDED_LENGTH = 4
+
+#: The case endings Polish glues straight onto a short surname for one person, longest first:
+#: "Lisa", "Lisowi", "Lisem", "Lisie", "Bąku", "Bąkiem". A surname of three letters takes one of
+#: them and nothing else: "Lista" is no "Lis". The family's plural is left out, since "Kurów" and
+#: "Kurowie" are a town's name as often as the Kurs.
+_SHORT_NAME_ENDINGS = ("owi", "iem", "em", "ie", "a", "u")
+#: A name shorter than this takes no ending here: "Li" or "Wu" with an "a" make other words.
+_SHORTEST_DECLINED = 3
 
 #: A number shorter than this is left alone inside a longer number, a date, a time or an amount.
 SHORT_NUMBER = 6
@@ -425,6 +433,22 @@ class Needle:
         """
         return self.folds and self.read.isalpha() and not self.read.islower()
 
+    @property
+    def declines(self) -> bool:
+        """Whether this is a short capitalised surname, masked with a case ending glued on.
+
+        "Lis" is shorter than any value masked inside a longer word, yet "Lisowi" and "Lisa" are
+        the same man. A person's one-word name of three letters is masked with one of the
+        endings of :data:`_SHORT_NAME_ENDINGS` after it; in lowercase it is left alone, as the
+        name itself is, since "lisa" is a fox's.
+        """
+        entity_type = type_of(self.payload) or self.payload
+        return (
+            entity_type == "PERSON"
+            and self.lowercase_is_a_common_word
+            and len(self.read) >= _SHORTEST_DECLINED
+        )
+
 
 #: How many sets of values the search stays prepared for. Masking one call reads every text of
 #: it against the same values, so a set is used thousands of times before the mapping grows.
@@ -434,15 +458,19 @@ _PREPARED = 16
 def forget() -> None:
     """Drop what was prepared for the latest values, and the values with it.
 
-    That is the search for the latest sets of values and the keys computed for the latest values.
+    That is the search for the latest sets of values, the keys computed for the latest values,
+    and the parts of them and the cases of the surnames worked out for the latest names.
 
     A long-running process, such as the gateway, calls it after each call, so the values of a call
     stay in memory no longer than the call does.
     """
+    from polanon._known_parts import forget as forget_parts  # it reads values through this one
+
     _prepared_needles.cache_clear()
     _prepared_tables.cache_clear()
     _value_keys.cache_clear()
     _token_keys.cache_clear()
+    forget_parts()
 
 
 def needles(values: Iterable[tuple[str, str]]) -> list[Needle]:
@@ -600,6 +628,57 @@ def known_value_ranges(
         for start in where.ungrouped[index]:
             ranges.append(haystack.to_original(*haystack.regrouped(start, start + length)))
     return ranges
+
+
+#: A word, as a surname's form is one.
+_WORD = re.compile(r"[^\W\d_]+")
+
+
+def form_matches(
+    haystack: Haystack,
+    forms: Mapping[str, str],
+    taken: Iterable[tuple[int, int]],
+    reads_as_a_name: Callable[[str, int, int], bool],
+) -> list[tuple[int, int, str]]:
+    """Find the capitalised words that are a known surname's forms, as ``(start, end, payload)``.
+
+    A form, "Kozła" of "Kozieł", is a whole word, never part of a longer one, and found only
+    where `reads_as_a_name` says its capital tells a name. Looking each word of the text up
+    costs the same however many forms the conversation knows; searching for every form the way
+    a known value is searched for made a turn of 400 people twice as slow.
+
+    Args:
+        haystack: the text, prepared.
+        forms: each form, as :func:`skeleton` reads it, with its payload.
+        taken: ranges of the original text already masked or detected; a form there is left.
+        reads_as_a_name: whether the word at a range of the guards' reading reads as a name.
+    """
+    if not forms:
+        return []
+    blocked = Ranges(_union(taken))
+    found: list[tuple[int, int, str]] = []
+    for word in _WORD.finditer(haystack.text):
+        start, end = word.span()
+        payload = forms.get(haystack.folded[start:end])
+        if payload is None or not word[0][0].isupper():
+            continue
+        if not reads_as_a_name(haystack.text, start, end):
+            continue
+        original = haystack.to_original(start, end)
+        if not blocked.overlaps(*original):
+            found.append((*original, payload))
+    return found
+
+
+def _union(ranges: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Join ranges that overlap or touch, so that :class:`Ranges` can hold them."""
+    joined: list[tuple[int, int]] = []
+    for start, end in sorted(ranges):
+        if joined and start <= joined[-1][1]:
+            joined[-1] = (joined[-1][0], max(joined[-1][1], end))
+        else:
+            joined.append((start, end))
+    return joined
 
 
 @dataclass(frozen=True)
@@ -783,7 +862,8 @@ def _occurrence(text: str, start: int, end: int, needle: Needle, through_view: b
             return None
         return "alone"
     if len(needle.read) < MIN_EMBEDDED_LENGTH:
-        return None
+        declined = needle.declines and _with_a_case_ending(text, start, end)
+        return "inside a word" if declined else None
     if needle.is_short_number and (
         _next_to_a_digit(text, start, end) or _a_year_with_r(text, start, end)
     ):
@@ -816,6 +896,22 @@ def _stands_alone(text: str, start: int, end: int) -> bool:
         or not _is_word_character(text[end])
     )
     return left_clear and right_clear
+
+
+def _with_a_case_ending(text: str, start: int, end: int) -> bool:
+    """Return whether a match begins a word that a case ending finishes: "Lis" in "Lisowi"."""
+    if start > 0 and _is_word_character(text[start - 1]):
+        return False
+    for ending in _SHORT_NAME_ENDINGS:
+        last = end + len(ending)
+        if fold(text[end:last]) == ending and not _stands_inside(text, last):
+            return True
+    return False
+
+
+def _stands_inside(text: str, position: int) -> bool:
+    """Return whether a word character follows `position`, so a word goes on past it."""
+    return position < len(text) and _is_word_character(text[position])
 
 
 def _whole_words(text: str, start: int, end: int) -> tuple[int, int]:

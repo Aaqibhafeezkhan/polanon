@@ -226,7 +226,11 @@ TOOLS = [
 
 
 def _home() -> list[dict[str, Any]]:
-    """The smart home: a person's whereabouts, the lights, notifications, the vacuum."""
+    """The smart home: a person's whereabouts, the lights, notifications, the vacuum.
+
+    The last question names the doctor by her surname alone in the dative, "Sowie", which does
+    not begin with "Sowa"; a lowercase "sowa" would be an owl.
+    """
     return [
         _user("Zgaś światło w salonie i sprawdź, czy Tomek już wrócił."),
         _assistant(None, _call("call_h1", "home_state", entity_id="person.tomek")),
@@ -385,7 +389,7 @@ def _home() -> list[dict[str, Any]]:
         ),
         _user(
             "Dzięki. Ile stopni jest w pokoju Zosi? jutro jedziemy do [[LOCATION:sopotu]], ustaw "
-            "ogrzewanie na 17."
+            "ogrzewanie na 17. Wyniki badań wyślij [[PERSON:Sowie]] przed wizytą."
         ),
     ]
 
@@ -740,7 +744,12 @@ def _mail() -> list[dict[str, Any]]:
 
 
 def _contacts() -> list[dict[str, Any]]:
-    """A contact book and a calendar: names in their cases, birthdays, phones written three ways."""
+    """A contact book and a calendar: names in their cases, birthdays, phones written three ways.
+
+    The last question names two of the people by their surname alone, in the dative: "Dudkowi"
+    drops the "e" of "Dudek", "Koziołowi" changes the vowel of "Kozieł". A goat, "kozioł", is
+    one too.
+    """
     return [
         _user(
             "Kto ma urodziny w tym miesiącu? I dodaj spotkanie z [[PERSON:Ireną Nowicką]] na "
@@ -773,8 +782,14 @@ def _contacts() -> list[dict[str, Any]]:
                         "notes": "hydraulik, polecił go [[?PERSON:Jerzy]]; faktury na NIP "
                         "[[NIP:6762309816]]",
                     },
+                    {
+                        "name": "[[PERSON:Adam Kozieł]]",
+                        "phone": "[[PHONE:+48 517 302 846]]",
+                        "birthday": None,
+                        "notes": "sąsiad z działki, hoduje kozy; jego kozioł zjadł nam żywopłot",
+                    },
                 ],
-                "total": 3,
+                "total": 4,
             },
         ),
         _assistant(
@@ -801,12 +816,20 @@ def _contacts() -> list[dict[str, Any]]:
                 ],
             },
         ),
-        _user("Super. Napisz [[?PERSON:Wiesławie]] życzenia, ale jeszcze nie wysyłaj."),
+        _user(
+            "Super. Napisz [[?PERSON:Wiesławie]] życzenia, ale jeszcze nie wysyłaj. Przypomnij "
+            "[[PERSON:Dudkowi]] o przeglądzie pieca, a [[PERSON:Koziołowi]] napisz, że kozioł "
+            "znowu był w naszym ogrodzie."
+        ),
     ]
 
 
 def _lease() -> list[dict[str, Any]]:
-    """A Polish lease read from a file: two people, PESEL, an ID card, addresses, an account."""
+    """A Polish lease read from a file: two people, PESEL, an ID card, addresses, an account.
+
+    The question after it names the landlord by his surname of three letters in two cases,
+    "Lisowi" and "Lisa", next to "Lista", which begins with it.
+    """
     lease = (
         "UMOWA NAJMU LOKALU MIESZKALNEGO\n"
         "\n"
@@ -849,7 +872,10 @@ def _lease() -> list[dict[str, Any]]:
             "wypowiedzenia to **3 miesiące** ze skutkiem na koniec miesiąca (§ 9), więc "
             "wypowiedzenie musi dotrzeć do wynajmującego **do 30 listopada**."
         ),
-        _user("Napisz jej wzór wypowiedzenia."),
+        _user(
+            "Napisz jej wzór wypowiedzenia. Czy [[PERSON:Lisowi]] trzeba go wysłać poleconym? "
+            "Lista załączników jest w mailu, a w piśmie od [[PERSON:Lisa]] był inny adres."
+        ),
     ]
 
 

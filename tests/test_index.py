@@ -460,6 +460,90 @@ def test_a_document_of_many_people_is_checked_in_time_that_grows_with_its_length
     assert fastest(800) < 8 * fastest(200)
 
 
+@pytest.mark.parametrize(
+    "question", ["Przekaż Koziołowi umowę.", "Umowa Kozieła.", "Nie ma Kozła.", "O Koziele."]
+)
+def test_a_stored_surname_is_masked_in_a_case_the_rules_cannot_read(question):
+    """The store held "Kozieł" with "Adam Kozieł", and "Koziołowi" in a question went out in the
+    clear: no rule reads a case of a surname it does not list, and this stem changes its vowel.
+    It takes the surname's token, so the question finds the passages that name him alone."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    surname = Pseudonyms(KEY).token("Kozieł", "PERSON")
+    masked = anonymizer.mask_query(question, store)
+    assert [match[0] for match in TOKEN.finditer(masked.anonymized)] == [surname]
+    assert Anonymizer.restore(masked.anonymized, masked.mapping) == question
+    assert anonymizer.mask_query(question, store, lookup=False).anonymized == question
+
+
+def test_a_document_names_a_stored_surname_in_its_cases_with_the_surname_s_token():
+    """The rules cannot tell "Kozła" as Kozieł's from Kozioł's; the store can, holding one."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    surname = Pseudonyms(KEY).token("Kozieł", "PERSON")
+    passages = ["Aneks wysłano Koziołowi.", "Na spotkaniu nie było Kozła."]
+    masked = anonymizer.index_chunks(passages, store)
+    assert masked.texts == [f"Aneks wysłano {surname}.", f"Na spotkaniu nie było {surname}."]
+    restored = map(Anonymizer.restore, masked.texts, masked.mappings)
+    assert list(restored) == passages
+    assert len(store) == 2
+    assert store.get([surname])[surname].value == "Kozieł"
+
+
+def test_a_case_that_could_be_of_two_stored_surnames_keeps_a_token_of_its_own():
+    """ "Koziołowi" is a case of "Kozieł" and of "Kozioł"; with both stored, it names neither."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisali Adam Kozieł i Piotr Kozioł."], store)
+    pseudonyms = Pseudonyms(KEY)
+    masked = anonymizer.mask_query("Przekaż Koziołowi umowę.", store)
+    assert [match[0] for match in TOKEN.finditer(masked.anonymized)] == [
+        pseudonyms.token("Koziołowi", "PERSON")
+    ]
+
+
+def test_a_case_the_store_holds_as_written_keeps_its_token():
+    """Passages indexed with the word's own token are still found by it."""
+    store = InMemoryMappingStore()
+    pseudonyms = Pseudonyms(KEY)
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    own = pseudonyms.token("Koziołowi", "PERSON")
+    store.add({own: StoredValue("Koziołowi", pseudonyms.fingerprint("Koziołowi", "PERSON"))})
+    masked = anonymizer.mask_query("Przekaż Koziołowi umowę.", store)
+    assert [match[0] for match in TOKEN.finditer(masked.anonymized)] == [own]
+
+
+def test_a_case_keeps_the_token_the_conversation_gave_it():
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    first = anonymizer.mask_query("Przekaż Koziołowi umowę.", store, lookup=False)
+    assert first.anonymized == "Przekaż Koziołowi umowę."
+    held = {"<OSOBA_1>": "Koziołowi"}
+    again = anonymizer.mask_query("Czy Koziołowi wysłano?", store, held)
+    assert again.anonymized == "Czy <OSOBA_1> wysłano?"
+
+
+def test_the_store_keeps_a_surname_and_not_its_cases():
+    """The cases are found by declining what the store holds, so it keeps nothing more of anyone."""
+    store = InMemoryMappingStore()
+    stable(store).index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    surname = Pseudonyms(KEY).token("Kozieł", "PERSON")
+    assert len(store) == 2
+    assert store.get([surname])[surname].value == "Kozieł"
+
+
+@pytest.mark.parametrize("question", ["Na łące stał kozioł.", "Kozioł stał na łące."])
+def test_an_animal_spelled_like_a_stored_surname_is_not_masked(question):
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisał Adam Kozieł."], store)
+    assert anonymizer.mask_query(question, store).anonymized == question
+
+
 def test_a_surname_alone_in_another_document_is_masked_through_the_store():
     anonymizer, store, surname = indexed()
     later = anonymizer.index_chunks(["Kowalczyk dzwonił w sprawie terminu."], store)
@@ -653,3 +737,44 @@ class Unwritable(InMemoryMappingStore):
 def test_a_store_that_cannot_write_refuses_the_document():
     with pytest.raises(MaskingUnavailableError, match="OSError"):
         stable().index_chunks(["Umowę podpisał Jan Kowalski."], Unwritable())
+
+
+def _indexed_kozieł():
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Aneks podpisał Adam Kozieł; Kozieł zapłaci 5000 zł kary."], store)
+    return anonymizer, store, Pseudonyms(KEY).token("Kozieł", "PERSON")
+
+
+def test_a_case_of_a_person_the_conversation_names_keeps_a_token_of_its_own():
+    """After "Jan Kozioł", "Koziołowi" took the token of the stored Kozieł, Adam: a search for
+    one found the other, and the store restored "Czy Kozieł przysługuje zwrot?"."""
+    anonymizer, store, kozieł = _indexed_kozieł()
+    first = anonymizer.mask_query("Mój klient Jan Kozioł pyta o umowę.", store)
+    second = anonymizer.mask_query("Czy Koziołowi przysługuje zwrot?", store, first.mapping)
+    assert "Koz" not in second.anonymized
+    assert kozieł not in second.anonymized
+
+
+def test_a_case_of_a_person_the_document_names_keeps_a_token_of_its_own():
+    anonymizer, store, kozieł = _indexed_kozieł()
+    masked = anonymizer.index_chunks(
+        ["Pełnomocnik Jan Kozioł prosi przekazać Koziołowi aneks."], store
+    )
+    assert "Koz" not in masked.texts[0]
+    assert kozieł not in masked.texts[0]
+
+
+def test_a_case_next_to_the_stored_person_s_own_name_takes_the_stored_token():
+    anonymizer, store, kozieł = _indexed_kozieł()
+    masked = anonymizer.mask_query("Adam Kozieł pyta, czy przekazać Koziołowi aneks.", store)
+    assert kozieł in masked.anonymized
+
+
+@pytest.mark.parametrize("question", ["Kozła widziałem na łące.", "Byliśmy w Sokołów Podlaski."])
+def test_a_word_that_opens_a_sentence_or_a_place_s_name_is_not_looked_up_as_a_case(question):
+    """ "Kozła" opening a sentence is a goat as often as Kozieł's genitive."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    anonymizer.index_chunks(["Umowę podpisali Adam Kozieł i Jan Sokół."], store)
+    assert anonymizer.mask_query(question, store).anonymized == question

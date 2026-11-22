@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from polanon._canonical import canonical
 from polanon._detection import detect
 from polanon._inflection import CASE_NAMES, inflected
-from polanon._known_parts import known_parts, logins_of, person_parts
+from polanon._known_parts import known_forms, known_parts, logins_of, person_parts
 from polanon._matching import (
     CASED_TOKEN_RE,
     TOKEN_RE,
@@ -27,8 +27,11 @@ from polanon._matching import (
     Ranges,
     base_token,
     folds,
+    form_matches,
     known_value_matches,
     place_known_values,
+    reading,
+    skeleton,
     token_keys,
     type_of,
     value_keys,
@@ -36,6 +39,7 @@ from polanon._matching import (
 from polanon._view import detection_view
 from polanon.allowlist import Allowlist
 from polanon.guards.base import Guard
+from polanon.guards.names_pl import capital_tells_a_name
 from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.judge.parsing import MIN_FINDING_CHARS
 from polanon.policy import ENTITY_TYPES, token_for
@@ -400,14 +404,24 @@ _TRUSTED_SCORE = 0.9
 
 
 def _remember(
-    known: dict[tuple[str, bool], tuple[str, str]], value: str, entity_type: str, *, trusted: bool
+    known: dict[tuple[str, bool], tuple[str, str]],
+    forms: dict[str, str],
+    value: str,
+    entity_type: str,
+    *,
+    trusted: bool,
 ) -> None:
-    """Add a value to the known values, with the parts of it that identify on their own."""
+    """Add a value to the known values, with the parts of it that identify on their own.
+
+    The forms of a person's surname go to `forms`, read as :func:`skeleton` reads them.
+    """
     known.setdefault((value.strip(), folds(entity_type)), (value, entity_type))
     for part in known_parts(value, entity_type, trusted=trusted):
         known.setdefault((part, folds(entity_type)), (part, entity_type))
     for part in person_parts(value, entity_type):
         known.setdefault((part, folds("PERSON")), (part, "PERSON"))
+    for form in known_forms(value, entity_type, trusted=trusted):
+        forms.setdefault(skeleton(form), entity_type)
 
 
 def _mask_stage1(
@@ -431,7 +445,9 @@ def _mask_stage1(
     detections are, so no letter of either reaches the model.
 
     The parts of a value that point to the same thing on their own are known values too: the
-    surname of a person, the handle in a link to a profile. See :mod:`polanon._known_parts`.
+    surname of a person, the handle in a link to a profile. The forms of a surname, its cases the
+    stem gives, are masked as whole words where a capital tells a name. See
+    :mod:`polanon._known_parts`.
 
     A token the mapping already holds is left whole: neither a detection nor a known value cuts
     into it, and a detection that runs past it keeps what lies outside.
@@ -447,13 +463,15 @@ def _mask_stage1(
     )
 
     known: dict[tuple[str, bool], tuple[str, str]] = {}
+    forms: dict[str, str] = {}
     for token, value in existing_mapping.items():
         entity_type = type_of(token)
         if entity_type is not None and value != token:
-            _remember(known, value, entity_type, trusted=False)
+            _remember(known, forms, value, entity_type, trusted=False)
     for span in merged:
         value = text[span.start : span.end]
-        _remember(known, value, span.entity_type, trusted=span.score >= _TRUSTED_SCORE)
+        trusted = span.score >= _TRUSTED_SCORE
+        _remember(known, forms, value, span.entity_type, trusted=trusted)
     for login in logins_of(text, known.values()):
         known.setdefault((login, folds("PERSON")), (login, "PERSON"))
     occupied = [(span.start, span.end) for span in merged] + tokens
@@ -467,6 +485,10 @@ def _mask_stage1(
     occurrences = matches + [
         found for found in placement.crossing if not held.overlaps(found[0], found[1])
     ]
+    for value, _ in known.values():
+        forms.pop(skeleton(reading(value)), None)  # a known value is masked as one
+    taken = occupied + [(start, end) for start, end, _ in occurrences]
+    occurrences += form_matches(haystack, forms, taken, capital_tells_a_name)
     spans = merge_spans(
         kept + [Span(start, end, kind, 0.9, "known_value") for start, end, kind in occurrences],
         text,
