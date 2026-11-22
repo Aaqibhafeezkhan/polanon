@@ -266,6 +266,42 @@ ADDRESS_NUMBER_FIELD_PATTERN = re.compile(
     r"|(?:house|building|flat|apartment)[ \t]+(?:no|number)\.?)[ \t]*:[ \t]*"
     rf"(?P<value>{_SHORT_HOUSE})(?![\w]|[.,:/-]\d)"
 )
+#: One word of a town's name, capitalised or in capitals, with its hyphenated parts:
+#: "Kraków", "RADOM", "Bielsko-Biała", "Kędzierzyn-Koźle", "Lądek-Zdrój".
+_TOWN_WORD = r"[A-ZŁŚŻŹĆÓĄĘŃ][^\W\d_]*(?:-[^\W\d_]+)*"
+#: A town's name, up to four words with the small words between them: "Zielona Góra", "Nowe
+#: Miasto nad Pilicą", "Stare Babice k. Warszawy". A trailing dot is left out: "30-001 Kraków."
+#: ends a sentence, and in "Mińsk Maz." it hides nothing.
+_TOWN = rf"{_TOWN_WORD}(?:[ \t]+(?:(?i:nad|pod|n\.|k\.)[ \t]+)?{_TOWN_WORD}){{0,3}}"
+#: The town after a Polish postcode on the same line: "26-600 Radom", "UL. LIPOWA 5, 26-600 RADOM".
+#: Places came from the language model alone, which does not read a town written in capitals
+#: unless it knows it, so the town of an address printed in capitals went out in clear.
+TOWN_AFTER_POSTCODE_PATTERN = re.compile(rf"\b\d{{2}}-\d{{3}}[ \t]+(?P<value>{_TOWN})")
+#: A town in a field of its own, as a form writes it: "Miasto: Kraków", "MIEJSCE URODZENIA:
+#: RADOM", "City: Bristol". The colon makes it a field, as with a street; a value in lowercase,
+#: "Miasto: do ustalenia", is none.
+TOWN_FIELD_PATTERN = re.compile(
+    r"(?<![\w.])(?i:miejscowo[śs][ćc]|miasto|miejsce[ \t]+urodzenia|city|town"
+    r"|place[ \t]+of[ \t]+birth|birthplace)"
+    rf"[ \t]*:[ \t]*(?P<value>{_TOWN})"
+)
+#: Words that start no town: units after a number range, "10-200 PLN", "50-100 MB", and the
+#: pronouns a form capitalises to address its reader, "kod pocztowy 50-223 Twojego miejsca".
+_NEVER_A_TOWN = frozenset(
+    {"pln", "zł", "eur", "usd", "gbp", "chf", "sek", "nok", "dkk", "czk", "huf", "uah"}
+    | {"kb", "mb", "gb", "tb", "kbps", "mbps", "gbps", "hz", "khz", "mhz", "ghz", "kw", "kwh"}
+    | {"km", "kg", "szt", "sztuk", "osób", "lat", "dni", "min", "zl", "ms"}
+    | {"ty", "ciebie", "tobie", "tobą", "twój", "twoja", "twoje", "twojego", "twojej", "twojemu"}
+    | {"twoim", "twoją", "twoich", "twoimi", "wasz", "wasza", "wasze", "waszego", "waszej"}
+    | {"waszemu", "waszym", "waszą", "waszych", "waszymi"}
+)
+#: Words that follow a town on an invoice or a form line and are no part of it: "26-600 RADOM
+#: NIP 123…", "30-001 Kraków Polska", "Kraków tel. 12 …".
+_NOT_PART_OF_A_TOWN = frozenset(
+    {"nip", "regon", "krs", "pesel", "bdo", "tel", "telefon", "fax", "mail", "email"}
+    | {"e-mail", "www", "konto", "nr", "polska", "poland", "pl", "rp"}
+)
+
 #: The endings of a street after "z", "na", "przy" or "do": "Długiej", "Mickiewicza",
 #: "Piłsudskiego", "Kościuszki", "Rynku", "Kwiatów". A product's name has none: "Windows".
 _STREET_IN_AN_OBLIQUE_CASE = re.compile(r"(?:ej|a|ego|i|y|u|ów)$")
@@ -570,6 +606,8 @@ PATTERNS: list[Rule] = [
     ("ADDRESS", ADDRESS_BEFORE_TOWN_PATTERN, None),
     ("ADDRESS", ADDRESS_STREET_FIELD_PATTERN, None),
     ("ADDRESS", ADDRESS_NUMBER_FIELD_PATTERN, None),
+    ("LOCATION", TOWN_AFTER_POSTCODE_PATTERN, None),
+    ("LOCATION", TOWN_FIELD_PATTERN, None),
     ("VIN", re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b"), is_valid_vin),
     # A lowercase VIN only after its label: seventeen lowercase letters and digits are a request
     # id, a session key or a hash far more often, and a European VIN carries no check digit.
@@ -878,6 +916,27 @@ def _locate_address(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     return [match.span()]
 
 
+def _locate_town(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return a town after a postcode or a place label, up to the first word that is no part of it.
+
+    "10-200 PLN" is a range of amounts, not a postcode and its town, "26-600 RADOM NIP" ends at
+    "RADOM", so the label after it stays readable, and in "20-204 Miasto: Łódź" the word after
+    the postcode is the label of the next field.
+    """
+    start, end = match.span("value")
+    words = list(re.finditer(r"\S+", text[start:end]))
+    if text[end:].lstrip(" \t").startswith(":"):
+        words.pop()
+    if not words or words[0].group().lower() in _NEVER_A_TOWN or len(words[0].group()) < 2:
+        return []
+    kept = words[:1]
+    for word in words[1:]:
+        if word.group().lower() in _NOT_PART_OF_A_TOWN:
+            break
+        kept.append(word)
+    return [(start, start + kept[-1].end())]
+
+
 def _locate_profile_link(text: str, match: re.Match[str]) -> list[tuple[int, int]]:
     """Return a profile link up to its handle, unless the path is one of the site's own pages."""
     return [match.span()] if _handle_of(match) is not None else []
@@ -904,6 +963,7 @@ def profile_handle(link: str) -> str | None:
 _LOCATORS: dict[str, Locator] = {
     "ADDRESS": _locate_address,
     "LINK": _locate_profile_link,
+    "LOCATION": _locate_town,
     "PESEL": _locate_pesel,
     "NIP": _locate_nip,
     "REGON": _locate_regon,

@@ -7,6 +7,22 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The town after a Polish postcode, and in a form field, is masked in capitals too.** Places
+  came from the spaCy model alone, which reads a town written in capitals only when it knows it,
+  so "UL. LIPOWA 5, 26-600 RADOM" and "MIEJSCE URODZENIA: RADOM" left the town in clear, as
+  every address and town printed in capitals by a form or an OCR pass could. A rule now masks the
+  town after a postcode on the same line and after "Miasto:", "Miejscowość:", "Miejsce urodzenia:",
+  "City:" and the like, in any case and without a model, up to a label such as "NIP" or "tel."
+  after it; a range such as "10-200 PLN" is no town. Without a model the sample documents are
+  masked 93% whole instead of 86% and the agent's calls leak 26 values instead of 35, nothing
+  masked for nothing in either; with `pl_core_news_md` the samples go from 98% to 99%, and on
+  OpenPII's test part cities from 78% to 84% and all values from 3,733 to 3,764 masked whole,
+  with the same 306 spans outside them. KPWr's real text, which writes no postcodes, is unchanged.
+  The ML filter is now also checked to drop no name the model finds in hard cases: a long surname
+  in the instrumental, small towns, surnames that are words, names from Ukraine and Turkey.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was
