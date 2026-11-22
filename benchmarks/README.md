@@ -14,8 +14,8 @@ can only come out the same or better.
 
 | Configuration | Fully masked | Partially masked | Missed | Over-masked spans |
 |---|---:|---:|---:|---:|
-| polanon, guards only, no model | 164 / 190 (86%) | 0 | 26 | 0 |
-| polanon, guards + `pl_core_news_md` | **187 / 190 (98%)** | 0 | 3 | 6 |
+| polanon, guards only, no model | 177 / 190 (93%) | 0 | 13 | 0 |
+| polanon, guards + `pl_core_news_md` | **188 / 190 (99%)** | 0 | 2 | 6 |
 | Presidio 2.2.366, set up for Polish with the same model | 127 / 190 (67%) | 28 | 35 | 53 |
 | Presidio, phone recognizer at leniency 0 | 146 / 190 (77%) | 32 | 12 | 89 |
 
@@ -35,15 +35,16 @@ With polanon, identifiers, contact details, bank accounts, secrets and people ar
 without any model at all. Polish identifiers come from regex plus a checksum; foreign ones from the label or official
 shape an invoice prints them in; people from `PersonNameGuard`, which knows Polish first names in
 every grammatical case, and, on foreign letters, from a form of address, a label or a closing
-formula. What the model adds is places and company names without a legal form.
+formula. A town after a Polish postcode or in a form field comes from a rule as well. What the
+model adds is the other places and company names without a legal form.
 
 <details>
 <summary>Per entity type, with the model</summary>
 
 | Entity | Annotated | Masked | Partial | Missed | Right type |
 |---|---:|---:|---:|---:|---:|
-| `PERSON` | 39 | 39 | 0 | 0 | 39 |
-| `LOCATION` | 25 | 22 | 0 | 3 | 22 |
+| `PERSON` | 42 | 42 | 0 | 0 | 42 |
+| `LOCATION` | 25 | 23 | 0 | 2 | 23 |
 | `ADDRESS` | 17 | 17 | 0 | 0 | 17 |
 | `ORG` | 17 | 17 | 0 | 0 | 17 |
 | `POSTAL_CODE` | 16 | 16 | 0 | 0 | 16 |
@@ -69,14 +70,14 @@ formula. What the model adds is places and company names without a legal form.
 **Read the number honestly.** Thirteen short documents are a regression check, not a research
 benchmark, and the corpus was written by the same person who wrote the guards, who tuned them
 against it; Presidio was never tuned on it. The misses are
-instructive: the word *Kraków* is masked in one document and missed in another, and *Bristol* and
-one *Zürich* are missed on the foreign invoices, because places come from a statistical model and not
-a rule. So do the over-masked spans: *ksiegowosci* typed without Polish letters, which the model
-takes for a place, the hospital ward *Oddział Chorób Wewnętrznych*, read as a company, and on the
+instructive: *Bristol* and one *Zürich* are missed on the foreign invoices, where the town stands
+before a British postcode and after a Swiss one, and a place anywhere but after a Polish postcode
+or in a form field comes from a statistical model, not a rule. So do the over-masked spans:
+*ksiegowosci* typed without Polish letters, which the model takes for a place, the hospital ward *Oddział Chorób Wewnętrznych*, read as a company, and on the
 foreign invoices country names, a Swedish line item, the month *August*, which a Polish model reads
 as names, and the label phrase *Company Registered in England and Wales*, read as a company. Without
-the model the discharge summary loses only its two places, *Białystok* and *Choroszcz*: the
-patient, her daughter and both doctors, the PESEL, the birth date, the addresses, the phones and
+the model the discharge summary loses nothing: the patient, her daughter and both doctors, the
+PESEL, the birth date, the addresses with their towns, *Białystok* and *Choroszcz*, the phones and
 the hospital's company name are all masked by rules.
 [`tests/test_benchmark.py`](../tests/test_benchmark.py) turns these numbers into floors so they
 cannot quietly get worse.
@@ -92,7 +93,7 @@ English stands next to Polish on one line, there is code, a traceback, a system 
 configuration file with keys in it, a lease with two PESEL numbers, mail in German and Ukrainian,
 a page in Chinese, identifiers such as `notify.mobile_app_pixel_7_tomka`, and every call sends
 the history again. Seven calls use Chat Completions, one the Responses API. The 103 values that
-must not reach the model are marked where they are written, and stand 243 times in the eight
+must not reach the model are marked where they are written, and stand 250 times in the eight
 calls; 27 more, such as a first name alone or the byline of a published review, may be masked or
 not.
 
@@ -103,10 +104,10 @@ made a token is a word it cannot read, and a value masked once is masked whereve
 
 | Configuration | Leaked | Tokens that hide nothing | Their uses |
 |---|---:|---:|---:|
-| polanon, guards only, no model | 35 of 243 | 0 | 0 of 266 |
+| polanon, guards only, no model | 26 of 250 | 0 | 0 of 282 |
 | polanon 0.3.5, guards + `pl_core_news_md` | 5 of 243 | 37 | 110 of 410 |
-| polanon, guards + `pl_core_news_md` | **2 of 243** | 5 | **5 of 309** |
-| the same, `mode="paranoid"` | 1 of 243 | 240 | 386 of 697 |
+| polanon, guards + `pl_core_news_md` | **2 of 250** | 5 | **5 of 316** |
+| the same, `mode="paranoid"` | 1 of 250 | 240 | 386 of 704 |
 
 Without a model the places, the companies without a legal form and the foreign names leak, and
 nothing is masked for nothing. With the model one value leaks by design: "sopotu", a place typed
@@ -118,7 +119,7 @@ Two birthdays under a contact's `birthday` key and a login made of a surname in 
 `/home/tmalinowski`, leaked too until a key that names a birthday was read as its label and a
 login made of a known surname was masked with the person. `mode="paranoid"` takes every name the
 model finds and wastes more than half of the token uses, on "return", "message", "notify" and
-"That's". On the thirteen documents it masks the same 187 values as the default, with 8
+"That's". On the thirteen documents it masks the same 188 values as the default, with 8
 over-masked spans instead of 6. What the default still masks for nothing, five uses in all, is
 three German nouns, the name of a speaker in a smart home and "thanks" in Ukrainian; before the
 filters for products, code, the English of software, Chinese and the parties of a contract it
@@ -166,10 +167,10 @@ On the 1,000 OpenPII texts never read, with 5,255 values:
 
 | Configuration | Masked whole | Spans outside the values |
 |---|---:|---:|
-| polanon, guards only, no model | 2,668 (51%) | 105 |
-| polanon, guards + `pl_core_news_md` | **3,733 (71%)** | **306** |
-| the same with its ML filter off | 3,733 (71%) | 434 |
-| the same, `mode="paranoid"` | 3,780 (72%) | 868 |
+| polanon, guards only, no model | 2,795 (53%) | 104 |
+| polanon, guards + `pl_core_news_md` | **3,764 (72%)** | **306** |
+| the same with its ML filter off | 3,764 (72%) | 434 |
+| the same, `mode="paranoid"` | 3,811 (73%) | 868 |
 | Presidio 2.2.366, set up for Polish with the same model | 3,456 (66%) | 2,641 |
 
 | Value | Annotated | polanon, with the model | Presidio |
@@ -177,7 +178,7 @@ On the 1,000 OpenPII texts never read, with 5,255 values:
 | People | 1,558 | 79% | 70% |
 | Streets with their house numbers | 701 | 64% | 33% |
 | E-mail addresses | 554 | 99% | 99% |
-| Cities | 503 | 78% | 81% |
+| Cities | 503 | 84% | 81% |
 | Phone numbers | 437 | 60% | 34% |
 | Postcodes | 300 | 98% | 0% |
 | Driving licences | 189 | 51% | 89% |
@@ -223,8 +224,8 @@ above never use, and measured on data nothing else read:
 |---|---:|---:|
 | OpenPII held out, 1,290 texts: the hand-written filters alone | 4,878 | 539 |
 | the same with the ML filter | 4,878 | **400** |
-| OpenPII test part above: the hand-written filters alone | 3,733 | 434 |
-| the same with the ML filter | 3,733 | **306** |
+| OpenPII test part above: the hand-written filters alone | 3,764 | 434 |
+| the same with the ML filter | 3,764 | **306** |
 
 On KPWr's test part and its held-out documents it masks the same values whole, and on the agent's
 calls and the sample documents it changes nothing: what wastes tokens there, the English of

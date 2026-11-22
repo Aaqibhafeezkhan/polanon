@@ -60,7 +60,9 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   the price is this.
 - **Names and places are found partly by rule, partly statistically.** A surname on its own in
   lowercase ("napisz do kowalskiego") or in a text where the full name never appears, a rare or
-  foreign first name and every place name depend on the spaCy model, which leans on capital letters and misses what people type in lowercase. A miss
+  foreign first name and every place but the town after a Polish postcode or in a form field
+  depend on the spaCy model, which leans on capital letters: it misses what people type in
+  lowercase, and a town in capitals it does not know. A miss
   is a detection gap, not a bypass, but the value still reaches the provider. The stage-2 judge
   exists to narrow this gap, not to close it.
 - **A one-word name later written in lowercase.** A capitalised one-word name is not matched in all
@@ -87,7 +89,7 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   of manuals and code. A person in lowercase still is. A word in inline code and a span that
   opens with an English small word are dropped too. `mode="paranoid"` turns all of this off and
   masks every span the model finds with a letter in it: on the calls of an AI agent in
-  `benchmarks/`, only what no guard finds leaks, 1 of 243 marked occurrences against 3, and more
+  `benchmarks/`, only what no guard finds leaks, 1 of 250 marked occurrences against 2, and more
   than half of the token uses hide an ordinary word, against 2%. Nothing finds a name written in
   Cyrillic.
 - **Identification by context.** "The finance director of the only steelworks in Stalowa Wola" names
@@ -219,7 +221,11 @@ calls, the keys or the logs. What it protects:
 - **Who can use it.** It listens on `127.0.0.1`. On any other address it refuses to start without
   `POLANON_GATEWAY_KEY`, which every client must then send, compared in constant time.
 - **What it keeps.** Nothing on disk: each call is masked and restored with a mapping that lives as
-  long as the call. The log holds the path, the status, the time and counts of masked types.
+  long as the call. The log holds the path, the status, the time and counts of masked types. With
+  `--workers` a call goes to one of the gateway's own processes and comes back masked, with its
+  mapping, through a pipe on the same machine; the process forgets the values once the call is
+  masked, and builds its own `Pseudonyms` from `POLANON_KEY` in the environment it inherits, so
+  the key is never pickled or sent to it.
 
 What it does not protect, and is the operator's part:
 
@@ -229,8 +235,8 @@ What it does not protect, and is the operator's part:
   so a value glued into a name with underscores, as in "umowa_Jan_Kowalski.pdf", goes out.
 
 - **The machine.** Calls arrive in the clear and answers leave restored. Anyone who can read the
-  gateway's memory, or a tool's own history, reads them; so can anything the operator puts in
-  front of it, such as a reverse proxy that logs bodies.
+  gateway's memory or its workers', or a tool's own history, reads them; so can anything the
+  operator puts in front of it, such as a reverse proxy that logs bodies.
 - **The keys.** By default the client's key is passed on to the provider; `POLANON_UPSTREAM_KEY`
   and `POLANON_GATEWAY_KEY` are read from the environment and never printed. Keep them out of shell
   history and out of files others can read.

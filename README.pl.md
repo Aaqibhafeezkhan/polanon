@@ -95,8 +95,8 @@ pocztowe.
 | Polskie identyfikatory z sumą kontrolną | PESEL, NIP, REGON, dowód osobisty, IBAN, karty płatnicze | PESEL; IBAN i karty płatnicze w wersji ogólnej | PESEL, NIP, REGON, IBAN, karty płatnicze; dowód osobisty i paszport tylko według wzorca | Brak; IBAN i karty płatnicze w wersji ogólnej |
 | Polskie imiona i nazwiska w każdym przypadku gramatycznym | Dla imion z listy i zgodnych z nimi nazwisk, bez modelu językowego; resztę dokłada spaCy | Z polskim modelem spaCy i zmapowaną etykietą `persName` | Nie są wykrywane | Nie są wykrywane; jego README sugeruje dodanie modelu NER |
 | Czego potrzebuje rdzeń | Niczego poza biblioteką standardową | spaCy, numpy, pydantic i kilku innych pakietów; modelu językowego tylko do imion i nazwisk oraz miejsc | pii-core i typer | Niczego poza biblioteką standardową |
-| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 306 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
-| Na własnych [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon, na których była strojona | 98% zamaskowanych w całości z `pl_core_news_md`, 86% przy samych regułach | 67% z tym samym modelem | Nie mierzono | Nie mierzono |
+| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 72% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 306 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
+| Na własnych [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon, na których była strojona | 99% zamaskowanych w całości z `pl_core_news_md`, 93% przy samych regułach | 67% z tym samym modelem | Nie mierzono | Nie mierzono |
 | Licencja | MIT | MIT | Apache-2.0 | MIT |
 
 Porównanie na podstawie własnej dokumentacji i kodu źródłowego każdego z projektów, stan na
@@ -354,8 +354,13 @@ przywrócony własnym mapowaniem zachowuje przypadek, w którym go napisano.
 której nie odczyta żadna reguła. `index_chunks` zapisuje w magazynie nazwisko każdej osoby, której
 imię znają reguły, obok pełnego imienia i nazwiska, a `mask_query` i `index_chunks` sprawdzają w
 magazynie każdy ciąg do czterech słów i maskują te, dla których ma token. Pytanie dostaje wtedy
-token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym. Przy
-magazynie, który jest na to za wolny, przekaż `lookup=False`.
+token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane w następnym.
+Nazwisko w przypadku, którego reguły nie odczytują, „Koziołowi” albo „Kozła” po „Adam Kozieł”, jest
+sprawdzane w magazynie przez mianowniki, od których może pochodzić, też zostaje zamaskowane i
+dostaje token nazwiska: magazyn odróżnia „Kozieł” od „Kozioł”, czego nie potrafi żadna reguła. Gdy
+ma oba albo gdy tekst lub rozmowa wymienia inną osobę, której przypadkiem może być to słowo, jak
+„Jan Kozioł”, słowo zachowuje token, który daje jego własny zapis. Przy magazynie, który jest na to
+za wolny, przekaż `lookup=False`.
 
 **Klucz.** Co najmniej 32 losowe bajty, jeden klucz na firmę i osobny `scope=` dla indeksu, którego
 nie wolno powiązać z innym. Trzymaj go w menedżerze sekretów, poza indeksem, kodem i logami;
@@ -371,10 +376,11 @@ zamienia odgadniętą wartość z powrotem w token.
 w magazynie albo w jednym tekście, ta, która przyszła druga, dostaje cztery cyfry więcej.
 
 **Ograniczenia.** Imię albo nazwisko, którego reguły nie umieją odmienić, na przykład rzadkie imię
-albo „Krawca” od „Krawiec”, i nazwa firmy w innym przypadku, „Firmą Kot” obok „Firma Kot”, mają token na
-każdą formę, co kosztuje chybione wyszukiwanie, ale niczego nie ujawnia. Samotne słowo pisane małą
-literą nigdy nie jest sprawdzane w magazynie. A jeden token wszędzie to cel i zarazem cena: kto czyta
-wiele zamaskowanych fragmentów, widzi, które dotyczą tej samej osoby. Co to oznacza, opisuje
+albo „Jana Krawca” od „Jan Krawiec”, i nazwa firmy w innym przypadku, „Firmą Kot” obok „Firma
+Kot”, mają token na każdą formę, co kosztuje chybione wyszukiwanie, ale niczego nie ujawnia.
+Samotne słowo pisane małą literą nigdy nie jest sprawdzane w magazynie. A jeden token wszędzie to
+cel i zarazem cena: kto czyta wiele zamaskowanych fragmentów, widzi, które dotyczą tej samej osoby.
+Co to oznacza, opisuje
 [model zagrożeń](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#stable-pseudonyms-for-search-indexes).
 
 ## Z Haystackiem
@@ -498,14 +504,14 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.1`,
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.2`,
 z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |
 |---|---|
 | Hermes Agent | `base_url` modelu albo nazwanego dostawcy w `config.yaml` |
 | n8n | Base URL w poświadczeniach OpenAI |
-| Open WebUI | adres połączenia z API OpenAI |
+| Open WebUI | adres połączenia z API OpenAI; zespół, który już go używa, uruchomi oba naraz z [deploy/open-webui](deploy/open-webui/), a ten, który dopiero wybiera czat, ma [PolGate](#kto-korzysta-z-polanon) |
 | LibreChat | `baseURL` własnego endpointu w `librechat.yaml` |
 | aplikacja na SDK Anthropic, Claude Code | `base_url` albo `ANTHROPIC_BASE_URL` jako `http://127.0.0.1:8787` |
 
@@ -554,6 +560,30 @@ Co robi z jednym wywołaniem:
   wywołanie jest maskowane i przywracane osobno. Z `POLANON_KEY` ustawionym na 64 znaki
   szesnastkowe dana osoba ma jeden token w każdym wywołaniu i w każdym przypadku gramatycznym.
 
+Domyślnie bramka maskuje jedno wywołanie naraz, we własnym procesie: model spaCy nie jest
+bezpiecznie współdzielony między wątkami, a Python i tak wykonuje naraz jeden wątek procesu.
+Z domyślnymi strażnikami zamaskowanie 100 KB trwa około 3 s, więc drugie narzędzie czeka na
+pierwsze. `--workers N` maskuje N wywołań naraz, każde w osobnym procesie z własną kopią modelu,
+na tylu rdzeniach, a własny proces bramki dalej obsługuje połączenia, strumienie i przywracanie;
+na komputerze z 16 wątkami cztery wywołania naraz trwały tyle co jedno. Więcej workerów niż
+rdzeni nic nie daje.
+
+Każdy worker trzyma własny model spaCy: z `pl_core_news_md` to około 330 MB na każdego workera,
+a własny proces bramki nie wczytuje wtedy modelu i zostaje przy około 55 MB. Jeden proces zajmuje
+około 340 MB, `--workers 2` około 710 MB, a `--workers 4` około 1,4 GB. W Dockerze opcja idzie po nazwie obrazu, a limit pamięci,
+na przykład `docker run --memory`, musi zostawić miejsce dla każdego workera. Workery wczytują
+model, zanim bramka zacznie przyjmować wywołania, i kończą pracę razem z nią. Wywołanie trafia
+do workera i wraca zamaskowane, razem z mapowaniem, przez potok na tym samym komputerze, a worker
+zapomina wartości, gdy tylko je zamaskuje. Każdy worker czyta `POLANON_KEY` ze środowiska, które
+dziedziczy, więc stabilne tokeny są takie same, niezależnie od tego, który worker zamaskował
+wywołanie. Worker, który przestanie działać, na przykład zabity z braku pamięci, psuje tylko
+wywołanie, które właśnie maskował, a to ono mogło zająć tę pamięć: jest odrzucane z kodem 503
+i nic nie zostaje wysłane, a SDK OpenAI i Anthropic ponawiają taki błąd. Jego miejsce od razu
+zajmuje nowy worker, a wywołania czekające na workera albo wysłane do takiego, który przestał
+działać, zanim je zaczął, maskują pozostałe workery albo nowy. Ctrl+C, Ctrl+Break i SIGTERM,
+który systemd wysyła każdemu procesowi usługi, docierają też do workerów: workery je ignorują,
+a bramka kończy maskowane wywołania, zanim je zatrzyma.
+
 Klucze zostają u tego, kto uruchamia bramkę, i są brane wyłącznie ze zmiennych środowiskowych.
 Domyślnie bramka przekazuje dalej klucz narzędzia; `POLANON_UPSTREAM_KEY` wysyła zamiast niego
 inny, jako token bearer albo, do Anthropic, jako `x-api-key`. Bramka słucha na `127.0.0.1`.
@@ -570,32 +600,37 @@ opisuje, przed czym bramka chroni, a przed czym nie.
 ## Co wykrywa
 
 Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód osobisty, IBAN, karty
-płatnicze), numery KRS obok swojej etykiety, adresy e-mail i numery telefonów, adresy i kody
-pocztowe, linki do profilu osoby (LinkedIn, GitHub, GitHub Pages, GitLab, media społecznościowe) aż
-po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów po etykiecie
+płatnicze), numery KRS obok swojej etykiety, adresy e-mail i numery telefonów, adresy, kody
+pocztowe i miejscowość po kodzie, linki do profilu osoby (LinkedIn, GitHub, GitHub Pages, GitLab,
+media społecznościowe) aż po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów po etykiecie
 („nr rej.”), numery VIN, numery paszportów, numery praw jazdy po etykiecie, daty urodzenia, klucze API, tokeny i hasła, polskie
 imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp. z o.o.”, „S.A.”,
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
-maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”,
-„jkowalski” w polu JSON po „github.com/jkowalski”. Z dodatkiem `ner` model spaCy dokłada miejsca
-i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala małemu lokalnemu modelowi
-przejrzeć *zamaskowany* tekst pod kątem tego, co z kontekstu wciąż pozwala kogoś zidentyfikować.
-Pozostałe daty też są rozpoznawane, ale zostają czytelne, chyba że poprosisz o ich maskowanie.
+maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”, także
+w innym przypadku, „Lisowi” po „Katarzyna Lis”, „Dudzie” po „Anna Duda” i „Koziołowi” albo „Kozła”
+po „Adam Kozieł”, oraz „jkowalski” w polu JSON po „github.com/jkowalski”. Przypadek, w którym
+zmienia się temat, „Kozła” albo „Dudzie”, jest maskowany jako całe słowo tam, gdzie wielka litera
+wskazuje imię lub nazwisko: wewnątrz zdania i nie w nazwie miejsca, więc „Zimą jest zimno” i
+„w Zielonej Górze” zostają po „Jan Zima” i „Michał Góra”. Z dodatkiem `ner` model spaCy dokłada
+miejsca poza adresem i polem formularza oraz nazwy, których nie wykrywa nic innego. Opcjonalny
+drugi etap pozwala małemu lokalnemu modelowi przejrzeć *zamaskowany* tekst pod kątem tego, co
+z kontekstu wciąż pozwala kogoś zidentyfikować. Pozostałe daty też są rozpoznawane, ale zostają
+czytelne, chyba że poprosisz o ich maskowanie.
 
 Tekst skopiowany z PDF-ów, Worda albo macOS jest czytany tak, jak przeczytałby go człowiek: litery
 zapisane jako litera bazowa plus znak diakrytyczny, spacje niełamiące i półpauzy wewnątrz liczb oraz
 niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Mapowanie przechowuje każdą wartość
 w postaci, w jakiej została zapisana za pierwszym razem.
 
-Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 86% wartości,
-a reguły z `pl_core_news_md` 98%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście
+Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 93% wartości,
+a reguły z `pl_core_news_md` 99%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście
 krótkich dokumentów to test regresji, a nie benchmark badawczy:
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) opisują,
 co zostaje przeoczone i dlaczego, i podają wynik Presidio na nich z tym samym modelem: 67%
 zamaskowanych w całości, 77% przy najłagodniejszym sposobie liczenia. Osiem
 wymyślonych wywołań agenta AI, z jego angielskim promptem, narzędziami i ich JSON-em, kodem,
 logami, umową najmu i pocztą w trzech językach, mierzy, ile kosztuje ruch agenta:
-z `pl_core_news_md` do modelu trafiają 2 z 243 oznaczonych wystąpień, a 5 z 309 użyć tokenów nic
+z `pl_core_news_md` do modelu trafiają 2 z 250 oznaczonych wystąpień, a 5 z 316 użyć tokenów nic
 nie ukrywa, tylko zasłania słowo, którego model nie może przeczytać. Odpowiedzi modelu wracają ze
 wszystkimi tokenami przywróconymi, jako tekst, jako odpowiedź i jako strumień, a 39 z ich 40 linii
 brzmi dokładnie tak, jak napisałby je człowiek.
@@ -641,10 +676,13 @@ literami też dostaje własny token, z powodu opisanego niżej.
 rozpoznałby jej samodzielnie: w oryginalnym zapisie, wielkimi literami, rozdzielona podziałem
 wiersza, ze znakiem o zerowej szerokości w środku, z literami cyrylicy albo greki, które wyglądają
 jak łacińskie, z inaczej rozdzielonymi grupami oraz w całości,
-razem z tym, co detektor znalazł w jej wnętrzu. Dwa wyjątki sprawiają, że zwykłe słowa pozostają
+razem z tym, co detektor znalazł w jej wnętrzu. Trzy wyjątki sprawiają, że zwykłe słowa pozostają
 czytelne. Jednowyrazowa nazwa pisana wielką literą nie jest dopasowywana, gdy występuje zapisana
 samymi małymi literami, bo Zima, Kot i Wilk to nazwiska, a „zima” to pora roku; identyfikatory
-takie jak VIN czy adres e-mail są dopasowywane bez względu na wielkość liter. Liczba krótsza niż
+takie jak VIN czy adres e-mail są dopasowywane bez względu na wielkość liter. Wartość krótsza niż
+cztery litery nie jest dopasowywana wewnątrz dłuższego słowa, więc „Jan” nie zabiera „Janusza”;
+trzyliterowe nazwisko jest dopasowywane z doklejoną końcówką przypadku, „Lisowi” albo „Lisem” od
+Lis, a „Lista” zostaje. Liczba krótsza niż
 sześć cyfr, na przykład PIN, nie jest dopasowywana wewnątrz dłuższej liczby, daty, godziny ani
 kwoty: „15.04.2025”, „2024-2025”, „2025,50” i „20250” zostają czytelne, gdy PIN to 2025,
 a „w 2025 roku” i „PIN/PUK 2025/36912874” już nie.
@@ -661,7 +699,9 @@ odwraca. Przechowuj mapowanie tak samo jak oryginalny dokument.
 wcześniej każdą wartość, którą mapowanie już zawiera, na przykład w historii wysyłanej ponownie po
 tym, jak nowa wartość dostała swój token. To samo wywołanie sprawdza treść przed wysłaniem:
 `mask_known_values(payload, mapping) == payload` oznacza, że żadna wartość z mapowania nie została
-w miejscu, w którym biblioteka by ją zamaskowała.
+w miejscu, w którym biblioteka by ją zamaskowała. Dla całego ciała żądania
+`leaked_tokens(body, mapping)` podaje tokeny, których wartości nadal by wyszły, nigdy same
+wartości, więc wynik można zapisać w logu; bramka sprawdza tak każde wywołanie.
 
 **Własne słowa.** Wewnętrzne nazwy, których żadna reguła nie może znać, takie jak kryptonim projektu
 albo nazwa klienta, trafiają na denylistę i są maskowane wszędzie, gdzie się pojawią, bez względu na
@@ -670,6 +710,10 @@ wielkość liter, także rozdzielone podziałem wiersza:
 ```python
 guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=False)
 ```
+
+Firma wpisana z formą prawną, „Siłownia Testowa Sp. z o.o.”, zostanie znaleziona także bez niej,
+jeśli zostają co najmniej dwa słowa, zapisane jak na liście albo wielkimi literami, a wpisany numer
+z co najmniej dziewięciu cyfr, na przykład NIP, bez względu na to, jak pogrupowano jego cyfry.
 
 **Sprawdzanie odpowiedzi.** Po przywróceniu `anonymizer.sweep(restored, mapping)` zgłasza tokeny
 wymyślone przez model i dane osobowe, które dodała jego odpowiedź: `report.is_clean`, a jeśli
@@ -707,7 +751,7 @@ zdanie albo „jadę do gdyni”, które wychodzą bez zmian. `mode="paranoid"` 
 guards = default_guards(mode="paranoid")
 ```
 
-Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 3 z 243 oznaczonych wystąpień,
+Na wywołaniach agenta AI z `benchmarks/` tryb „normal” przepuszcza 2 z 250 oznaczonych wystąpień,
 a 2% użyć tokenów nic nie ukrywa; „paranoid” przepuszcza 1, imię zapisane cyrylicą, którego nie
 znajduje żaden strażnik, ale nic nie ukrywa ponad połowa użyć. Reguły są w obu trybach te same, więc bez modelu
 tryb niczego nie zmienia.

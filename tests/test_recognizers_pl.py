@@ -1184,6 +1184,59 @@ def test_a_street_and_its_number_in_form_fields_are_masked(text, values):
 
 
 @pytest.mark.parametrize(
+    ("text", "town"),
+    [
+        ("UL. LIPOWA 5, 26-600 RADOM", "RADOM"),
+        ("ul. Lipowa 5, 26-600 Radom", "Radom"),
+        ("Biuro: ul. Długa 5, 30-001 Kraków.", "Kraków"),
+        ("65-001 Zielona Góra", "Zielona Góra"),
+        ("26-420 Nowe Miasto nad Pilicą", "Nowe Miasto nad Pilicą"),
+        ("47-200 KĘDZIERZYN-KOŹLE", "KĘDZIERZYN-KOŹLE"),
+        ("05-300 Mińsk Maz., ul. Okrzei 1", "Mińsk Maz"),
+        ("26-600 RADOM NIP 7961234567", "RADOM"),
+        ("30-001 Kraków Polska", "Kraków"),
+    ],
+)
+def test_a_town_after_a_postcode_is_masked_in_any_case(text, town):
+    """Places came from the language model alone, which reads a town in capitals only when it
+    knows it, and the town of an address printed in capitals went out in clear."""
+    assert _found(text, "LOCATION") == [town]
+
+
+@pytest.mark.parametrize(
+    ("text", "town"),
+    [
+        ("MIEJSCE URODZENIA: RADOM", "RADOM"),
+        ("Miejsce urodzenia: Radom, woj. mazowieckie", "Radom"),
+        ("Miasto: Kraków", "Kraków"),
+        ("Miejscowość: Stare Babice k. Warszawy", "Stare Babice k. Warszawy"),
+        ("City: Bristol", "Bristol"),
+    ],
+)
+def test_a_town_in_a_form_field_is_masked_in_any_case(text, town):
+    assert _found(text, "LOCATION") == [town]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Cena: 10-200 PLN",
+        "Pakiet 50-100 MB",
+        "Miasto: do ustalenia",
+        "Tel. 12-345-67-89 Kraków",
+        "Podaj kod pocztowy 50-223 Twojego miejsca zamieszkania.",
+    ],
+)
+def test_a_number_range_an_empty_field_or_a_pronoun_is_no_town(text):
+    assert _found(text, "LOCATION") == []
+
+
+def test_the_label_of_the_next_field_after_a_postcode_is_no_town():
+    """After a postcode, the label of the next field was masked as a town."""
+    assert _found("Kod pocztowy: 20-204 Miasto: Łódź", "LOCATION") == ["Łódź"]
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "Ulica handlowa nr 1 w rankingu.",

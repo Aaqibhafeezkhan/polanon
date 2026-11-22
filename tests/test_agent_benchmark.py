@@ -102,11 +102,11 @@ def test_no_value_a_rule_finds_leaks_without_a_model(model_free):
 
 def test_the_rules_alone_mask_nothing_for_nothing(model_free):
     """The rules find a value by its shape or its label, so in an agent's code, logs and English
-    they find nothing that is not one. What they leave are the places, the companies without a
-    legal form and the foreign names a model is for."""
+    they find nothing that is not one. What they leave are the places outside an address, the
+    companies without a legal form and the foreign names a model is for."""
     assert {name: dict(s.for_nothing) for name, s in model_free.items() if s.for_nothing} == {}
     leaked = sum(score.leaked for score in model_free.values())
-    assert leaked <= 35
+    assert leaked <= 26
 
 
 @needs_model

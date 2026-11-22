@@ -7,6 +7,149 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-22
+
+A patch release that gathers four changes. Nothing that worked stops working the same way, and
+the stable tokens are computed as before, so an index needs no rebuilding. A surname is masked in
+the cases it was not first masked in, one of three letters with a case ending too, and a search
+index masks a lone surname in another case the first time a document is indexed, and finds its
+person by it in a question. A town after a Polish postcode or in a form field is masked in
+capitals and without a model. With the rules alone the sample documents are masked 93% whole
+instead of 86%, and the agent's calls leak 26 values of 250 instead of 40, nothing masked for
+nothing; with `pl_core_news_md`, 99% and 2 of 250. The gateway masks several calls at once with
+`--workers N` and starts behind Open WebUI with one Compose file. Its last check before a call
+leaves is in the core as `polanon.leaked_tokens`, next to `restore_data(as_held=True)` and a
+denylist that forgives a legal form and a number's grouping: the gaps the apps built on polanon
+worked around.
+
+### Added
+
+- **Open WebUI behind the gateway in one command**, for a team that already works in Open WebUI;
+  a company choosing a chat is pointed to PolGate. `deploy/open-webui/` holds a Compose file
+  that starts the gateway's image and Open WebUI together: the gateway keeps the provider's key and
+  its port stays unpublished, Open WebUI gets the gateway's address and key, its Ollama connection
+  is off, and port 3000 is on this machine alone. CI starts the stack with a stand-in provider and
+  checks that a call leaves masked and comes back restored.
+- **`polanon.leaked_tokens(payload, mapping)`**, the gateway's last check before a call leaves,
+  in the core for any application: it returns the tokens whose values would still go out in a
+  text or a request body, by the rules the masking follows, and never the values. It was in
+  `polanon.gateway.payloads`, which still has it, so an application that builds its own payloads
+  no longer copies the masking's thresholds by hand.
+- **`MaskedTurn.restore_data(value, as_held=True)`** and `restore(text, as_held=True)`, for tool
+  arguments a tool looks up in the records they were masked from: every value comes back as it
+  was masked and a case the model added is dropped, so `<OSOBA_1:dopełniacz>` is "Jan Kowalski",
+  as the records hold it, not "Jana Kowalskiego". The default still declines.
+- **`polanon-gateway --workers N` masks N calls at once, on as many cores.** The gateway masked
+  one call at a time in one thread, since the spaCy model is not shared safely between threads,
+  so one process used one core, and with the default guards a second tool waited about 3 s for
+  every 100 KB the first sent. With `--workers N` each call is masked in the next free of N
+  processes of the gateway's own, each with its own anonymizer and model, and the gateway's
+  process keeps serving, streaming and restoring; four calls at once took as long as one on a
+  machine with 16 threads. A process gets the request through a pipe and sends back the masked
+  request with the call's mapping, and forgets the values once it is masked. Each one builds its
+  anonymizer from the gateway's options and reads `POLANON_KEY` from the environment it inherits,
+  so the key is never pickled and stable tokens are the same in every process. The workers load
+  the model before the gateway accepts calls, and a gateway whose workers cannot start does not
+  start either. A worker that stops fails only the call it was masking, with a 503, and a new
+  one takes its place, while the calls waiting for a worker go to the others or to the new one;
+  the workers ignore Ctrl+C, Ctrl+Break and SIGTERM, which the gateway answers by finishing its
+  calls first, and each ends with the gateway, also one killed outright. Every
+  worker holds a model of its own, about 330 MB with `pl_core_news_md`, while the gateway's own
+  process then loads none. The default stays one call at a time in the gateway's process, as
+  before. `Gateway` takes `build`, which makes each worker's anonymizer, and `GatewayConfig`
+  takes `workers`. uvicorn's own `--workers`, a whole gateway in each process, was measured too
+  and left aside: its processes share one socket and take calls as they come, so a busy one
+  still took a second call while another sat idle, and on Windows one of them failed to start
+  on the shared socket.
+
+### Fixed
+
+- **A denylisted company is found without its legal form, and a number however it is grouped.**
+  An e-mail says "Siłownia Testowa" where the list says "Siłownia Testowa Sp. z o.o.", and the
+  short name went out; it is masked now, written as on the list or in capitals, when two words or
+  more are left and they are not a person's name. One word alone, such as "Partner" or "Budex", is
+  in too many sentences that do not name the company, a person named by a partnership, "Jan
+  Kowalski Sp. j.", stays one person, and "moje biuro rachunkowe" is not "Biuro Rachunkowe Sp. z
+  o.o.". A listed number of nine digits or more, such as a NIP, is found with or without spaces,
+  hyphens, dots or slashes between its digits; a shorter one is matched as written, since grouped
+  otherwise it is a date or an amount. `MaskedTurn(known=...)` gets both, since it masks known
+  values with the denylist.
+- **The sweep no longer reports a known person the restore declined.** "Janie Kowalski", restored
+  from `<OSOBA_1:wołacz>` where the mapping held "Janowi Kowalskiemu", changes the stem, and every
+  such answer was reported as naming a person nobody sent.
+- **A surname alone in another case is masked the first time a document is indexed.** "Jan
+  Wróbel" gave the store the surname, but "Wróblowi" and "Wróbla" further on went to the index in
+  the clear until the document was indexed again. The document is now masked once more with what it
+  is about to store, and only when that finds a value outside everything the first masking masked,
+  also behind a soft hyphen. A document where it does takes about a fifth longer, one where it does
+  not as long as before.
+- **A surname of three letters is masked in its other cases.** After "Katarzyna Lis" and "Tomasz
+  Kot" were masked in a turn, "Przekaż Lisowi notatkę." and "Przekaż Kotowi i Nowakowi." sent
+  "Lisowi" and "Kotowi" in the clear, while "Nowakowi" was masked: a known value shorter than
+  four letters is never masked inside a longer word, so that "Jan" leaves "Janusz" alone, and a
+  case ending glued on made one. A person's one-word name of three letters is now masked with
+  one person's case ending after it, "Lisa", "Lisowi", "Lisem", "Lisie", "Bąkiem", in a turn, in
+  `mask_known_values` and in the gateway's last check, `leaked_tokens`. Only such an ending
+  counts: "Lista", "Kotara" and "Lisowski" stay, and so does a case in lowercase, "lisowi", which
+  is the animal's. The family's plural is left as it was, since "Kurów" and "w Kurowie" name a
+  town as often as the Kurs. A name first masked in another case, "Grzegorzem Lisem", gave its
+  surname in that case only, so "Lis" and "Lisowi" went out in the next message; the nominative,
+  where the rules read it for sure, now gives the surname too, and "Kowalski" after "Jana
+  Kowalskiego" is masked as well.
+- **A surname's cases that its stem gives are masked where a capital tells a name.** After "Adam
+  Kozieł", "Paweł Wróbel" or "Anna Duda" was masked, the surname alone was masked too, but not
+  "Koziołowi", "Kozła", "Wróbla" or "Dudzie", which do not begin with it. A surname now gives
+  such cases: with a vowel that drops ("Wróbla", "Kozła", "Krawca", "Bednarka"), "ie" written
+  "io" ("Koziołowi"), "ó" written "o" ("Mroza"), a locative that softens the last consonant
+  ("o Kocie"), and the cases of a surname in -a, for a man and a woman alike ("Dudy", "Dudzie",
+  "Sową"). After a name in a case the rules cannot read, "Adama Kozieła", a first name in no
+  nominative tells the surname's case, so "Kozieł" and "Koziołowi" are such cases too, of
+  "Kozieł" or "Kozioł". These are declined, not read, and many are ordinary words as well, so
+  each is masked as a whole word and only where a capital tells a name: inside a sentence, and
+  not next to another capitalised word other than a first name or a form of address. "Przekaż
+  Dudzie notatkę" and "Umowa Kozieła" are masked; "Zimą jest zimno", "Wody nie ma", "w Zielonej
+  Górze", "Góry Sowie", "Sowieci" and "Sokołów Podlaski" stay, and so does a case opening a
+  sentence, "Kozła nie było", as on 0.4.1. Lowercase "kozioł", "wróbla" and "o sowie" stay. A
+  surname that declines as an adjective keeps its own forms, "Bielska" and "Bielskiej", whatever
+  case the first name stands in, and one in -owa, "Nowakowa", gets no noun's cases. "Kamila
+  Kozieła", whose first name may be a woman's in the nominative, gives no guess at the surname.
+  A cost remains: a surname that declines as an adjective in another way gets a noun's cases all
+  the same, so after "Anna Biała" a capitalised "Biały" inside a sentence is masked too.
+- **In a search index, a surname's case the rules cannot read is masked and finds its person.**
+  A capitalised word alone is looked up in the store by the nominatives it may come from, where
+  its capital tells a name, so "Koziołowi", "Kozieła" or "Kozła" in a question is masked once
+  "Adam Kozieł" was indexed; it went out in the clear without the spaCy model and as a company
+  with it. It takes the stored surname's token, in a question and in a document, so a search for
+  the person finds the passages that name him alone in any case. No rule can say whether "Kozła"
+  is Kozieł's or Kozioł's, both being surnames, so a new pseudonym scheme could not join them
+  without joining two people; the store can, holding one of them. Where it holds both, or the
+  word's own spelling, or where the text or the conversation names another person the word is a
+  case of, such as "Jan Kozioł", the word keeps the token its own spelling gives. Under one
+  token a passage keeps one spelling, as for "Wróbel" and "Wróbla" before, so a passage that
+  names both "Kozieł" and "Koziołowi" restores the second as the first. The store keeps the
+  surname alone, not its cases, and no stable token is computed differently, so an index needs
+  no rebuilding.
+
+  The agent benchmark has these cases now, "Lisowi", "Lisa", "Dudkowi", "Koziołowi" and
+  "Sowie" next to "Lista" and a goat, "kozioł". With the spaCy model its numbers do not change,
+  2 leaks of 250 and 5 tokens for nothing; with the rules alone the 5 new surnames no longer leak
+  and nothing is masked for nothing. The parts of a value and the cases of a surname are worked
+  out once per call and forgotten with its other values, and a case is found by looking each
+  word of a text up, so a turn of 400 people is masked as fast as before.
+- **The town after a Polish postcode, and in a form field, is masked in capitals too.** Places
+  came from the spaCy model alone, which reads a town written in capitals only when it knows it,
+  so "UL. LIPOWA 5, 26-600 RADOM" and "MIEJSCE URODZENIA: RADOM" left the town in clear, as
+  every address and town printed in capitals by a form or an OCR pass could. A rule now masks the
+  town after a postcode on the same line and after "Miasto:", "Miejscowość:", "Miejsce urodzenia:",
+  "City:" and the like, in any case and without a model, up to a label such as "NIP" or "tel."
+  after it; a range such as "10-200 PLN" is no town. Without a model the sample documents are
+  masked 93% whole instead of 86% and the agent's calls leak 26 values instead of 35, nothing
+  masked for nothing in either; with `pl_core_news_md` the samples go from 98% to 99%, and on
+  OpenPII's test part cities from 78% to 84% and all values from 3,733 to 3,764 masked whole,
+  with the same 306 spans outside them. KPWr's real text, which writes no postcodes, is unchanged.
+  The ML filter is now also checked to drop no name the model finds in hard cases: a long surname
+  in the instrumental, small towns, surnames that are words, names from Ukraine and Turkey.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was

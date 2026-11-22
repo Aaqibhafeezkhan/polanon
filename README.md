@@ -91,8 +91,8 @@ Plusgiro and sort codes, international phone numbers, street addresses and postc
 | Polish identifiers with a checksum | PESEL, NIP, REGON, ID card, IBAN, payment cards | PESEL; IBAN and payment cards in general | PESEL, NIP, REGON, IBAN, payment cards; ID card and passport by pattern only | None; IBAN and payment cards in general |
 | Polish names in every grammatical case | For listed first names and the surnames that agree with them, without a language model; spaCy adds the rest | With a Polish spaCy model and its `persName` label mapped | Not detected | Not detected; its README suggests adding an NER model |
 | What the core needs | Nothing beyond the standard library | spaCy, numpy, pydantic and a few more; a language model only for names and places | pii-core and typer | Nothing beyond the standard library |
-| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% of 5,255 values masked whole with `pl_core_news_md`, 306 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
-| On polanon's own [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md), tuned on | 98% fully masked with `pl_core_news_md`, 86% with rules alone | 67% with the same model | Not measured | Not measured |
+| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 72% of 5,255 values masked whole with `pl_core_news_md`, 306 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
+| On polanon's own [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md), tuned on | 99% fully masked with `pl_core_news_md`, 93% with rules alone | 67% with the same model | Not measured | Not measured |
 | License | MIT | MIT | Apache-2.0 | MIT |
 
 Compared from each project's own documentation and source on 3 November 2026; measured on 17
@@ -341,8 +341,12 @@ with its own mapping keeps the case it was written in.
 no rule reads. `index_chunks` stores the surname of every person whose first name the rules know,
 next to the full name, and `mask_query` and `index_chunks` look up every run of up to four words in
 the store and mask the ones it holds a token for. A question then gets the surname's token, and a
-surname masked in one document stays masked in the next. Pass `lookup=False` for a store too slow
-for that.
+surname masked in one document stays masked in the next. A surname in a case the rules cannot
+read, "Koziołowi" or "Kozła" after "Adam Kozieł", is looked up by the nominatives it may come from,
+masked as well, and given the surname's token: the store tells "Kozieł" from "Kozioł", which no
+rule can. Where it holds both, or where the text or the conversation names another person the
+word is a case of, such as "Jan Kozioł", the word keeps the token its own spelling gives. Pass
+`lookup=False` for a store too slow for that.
 
 **The key.** At least 32 random bytes, one key per company and a `scope=` per index that must not be
 linked to another. Keep it in a secret manager, out of the index, the code and the logs;
@@ -356,9 +360,10 @@ store's entries alone does not unlink them, since the key turns a guess back int
 20,000 at 10,000 values, and 1 in 200 at 100,000. Wherever two such values meet, in the store or in
 one text, the one that came second gets four digits more.
 
-**Limits.** A name the rules cannot decline, such as a rare first name or "Krawca" from "Krawiec",
-and a company name in another case, "Firmą Kot" beside "Firma Kot", keep a token per form, which
-costs a missed search but leaks nothing. A word alone in lowercase is never looked up in the store.
+**Limits.** A name the rules cannot decline, such as a rare first name or "Jana Krawca" from "Jan
+Krawiec", and a company name in another case, "Firmą Kot" beside "Firma Kot", keep a token per
+form, which costs a missed search but leaks nothing. A word alone in lowercase is never looked up
+in the store.
 And one token everywhere is the point and the price: whoever reads many masked passages can tell
 which of them are about the same person. The
 [threat model](https://github.com/boromat/polanon/blob/main/docs/THREAT_MODEL.md#stable-pseudonyms-for-search-indexes)
@@ -484,13 +489,13 @@ Inside a container the gateway listens on every interface, so it starts only wit
 keeps the port on this machine. Every option of `polanon-gateway` goes after the image's
 name. A model on the same machine, such as Ollama, is `--upstream
 http://host.docker.internal:11434/v1`, on Linux with `--add-host=host.docker.internal:host-gateway`.
-The image is tagged with the version, such as `0.4.1`, the minor version, `0.4`, and `latest`.
+The image is tagged with the version, such as `0.4.2`, the minor version, `0.4`, and `latest`.
 
 | Tool | Where the base URL goes |
 |---|---|
 | Hermes Agent | `base_url` of the model or of a named provider in `config.yaml` |
 | n8n | the Base URL of the OpenAI credential |
-| Open WebUI | the URL of an OpenAI API connection |
+| Open WebUI | the URL of an OpenAI API connection; a team already on it can start both with [deploy/open-webui](deploy/open-webui/), and one choosing a chat now has [PolGate](#used-by) |
 | LibreChat | the `baseURL` of a custom endpoint in `librechat.yaml` |
 | an app on Anthropic's SDK, Claude Code | `base_url`, or `ANTHROPIC_BASE_URL`, as `http://127.0.0.1:8787` |
 
@@ -539,6 +544,29 @@ What it does with a call:
   masked and restored on its own. With `POLANON_KEY` set to 64 hexadecimal characters, a person
   keeps one token in every call and in every grammatical case.
 
+By default the gateway masks one call at a time, in its own process: the spaCy model is not
+shared safely between threads, and Python runs one thread of a process at a time anyway. With
+the default guards 100 KB takes about 3 s to mask, so a second tool waits for the first.
+`--workers N` masks N calls at once, each in a process of its own with its own copy of the model,
+on as many cores, while the gateway's own process keeps serving, streaming and restoring; on a
+machine with 16 threads four calls at once took as long as one. More workers than cores gain
+nothing.
+
+Each worker holds its own spaCy model: with `pl_core_news_md` about 330 MB for every worker,
+while the gateway's own process then loads no model and stays near 55 MB. One process takes
+about 340 MB, `--workers 2` about 710 MB and `--workers 4` about 1.4 GB. In Docker the option goes after the image's name, and a
+memory limit such as `docker run --memory` has to leave room for every worker. The workers load
+the model before the gateway accepts calls, and stop with it. A call goes to a worker and comes
+back masked, with its mapping, through a pipe on the same machine, and the worker forgets the
+values once the call is masked. Each worker reads `POLANON_KEY` from the environment it inherits,
+so stable tokens are the same whichever worker masked a call. A worker that stops, killed for
+lack of memory say, fails only the call it was masking, which may be what took the memory: it is
+refused with a 503 and nothing is sent, the error OpenAI's and Anthropic's SDKs send again. A new
+worker takes its place at once, and the calls waiting for a worker, or sent to one that stopped
+before it began them, go to the others or to the new one. Ctrl+C, Ctrl+Break and the SIGTERM
+systemd sends every process of a service reach the workers too: they ignore them, and the
+gateway finishes the calls it is masking before it stops them.
+
 Keys stay with whoever runs the gateway, and come from the environment only. By default the
 tool's own key is passed on; `POLANON_UPSTREAM_KEY` sends another one instead, as a bearer
 token or, to Anthropic, as `x-api-key`. The gateway listens on `127.0.0.1`. To reach it from
@@ -554,30 +582,35 @@ what the gateway protects and what it does not.
 ## What it detects
 
 Checksum-validated Polish identifiers (PESEL, NIP, REGON, ID card, IBAN, payment cards), KRS numbers
-next to their label, e-mail addresses and phone numbers, street addresses and postcodes, links to
-a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
+next to their label, e-mail addresses and phone numbers, street addresses, postcodes and the town
+after one, links to a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
 and IPv6, MAC addresses, vehicle registrations after their label ("nr rej."), VINs, passport
 numbers, driving licence numbers after their label, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
 company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). Once a person or a
 profile link is masked, the surname or the handle alone is masked wherever it appears in the same
-text: "Kowalski" after "Jan Kowalski", "jkowalski" in a JSON field after "github.com/jkowalski".
-With the `ner` extra, a spaCy model adds places and the names nothing else marks. An optional
-second stage lets a small local model review the *masked* text for what still identifies someone
+text: "Kowalski" after "Jan Kowalski", in another case too, "Lisowi" after "Katarzyna Lis",
+"Dudzie" after "Anna Duda" and "Koziołowi" or "Kozła" after "Adam Kozieł", and "jkowalski" in a
+JSON field after "github.com/jkowalski". A case whose stem changes, "Kozła" or "Dudzie", is
+masked as a whole word where its capital tells a name: inside a sentence and not in a place's
+name, so "Zimą jest zimno" and "w Zielonej Górze" stay after "Jan Zima" and "Michał Góra".
+With the `ner` extra, a spaCy model adds the places outside an address or a form field and the
+names nothing else marks. An optional second stage lets a small local model review the *masked*
+text for what still identifies someone
 by context. Other dates are recognised too, but left readable unless you ask for them.
 
 Text copied from PDFs, Word or macOS is read as a person would read it: letters written as a base
 letter plus an accent, no-break spaces and en dashes inside numbers, and invisible zero-width
 characters do not hide a value. The mapping keeps each value as it was first written.
 
-On the annotated sample documents in the repository, the rules alone fully mask 86% of the
-values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Thirteen short
+On the annotated sample documents in the repository, the rules alone fully mask 93% of the
+values and the rules with `pl_core_news_md` mask 99%, with nothing left half-masked. Thirteen short
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
 missed and why, and for Presidio on them with the same model: 67% fully masked, 77% at its
 most lenient. Eight invented calls of an AI agent, with its English prompt,
 its tools and their JSON, code, logs, a lease and mail in three languages, measure what an
-agent's traffic costs: with `pl_core_news_md`, 2 of the 243 marked occurrences reach the model,
-and 5 of 309 uses of a token hide nothing, a word the model could not read. The model's answers
+agent's traffic costs: with `pl_core_news_md`, 2 of the 250 marked occurrences reach the model,
+and 5 of 316 uses of a token hide nothing, a word the model could not read. The model's answers
 to them come back with every token restored, as text, as a response and as a stream, and 39 of
 their 40 lines read exactly as a person would write them.
 
@@ -619,9 +652,12 @@ own too, for the reason below.
 **Every occurrence of a masked value is masked**, also where no detector would recognise it on its
 own: as written, in capitals, across a line break, with a zero-width character in it, with
 Cyrillic or Greek letters that look Latin in it, with its groups spaced differently, and around
-whatever a detector found inside it. Two exceptions keep ordinary words readable. A capitalised
+whatever a detector found inside it. Three exceptions keep ordinary words readable. A capitalised
 one-word name is not matched in all lowercase, because Zima, Kot and Wilk are surnames and "zima"
-is winter; identifiers such as a VIN or an e-mail address are matched in any case. A number shorter
+is winter; identifiers such as a VIN or an e-mail address are matched in any case. A value shorter
+than four letters is not matched inside a longer word, so "Jan" leaves "Janusz" alone; a surname
+of three letters is matched with a case ending glued on, "Lisowi" or "Lisem" for Lis, and "Lista"
+stays. A number shorter
 than six digits, such as a PIN, is not matched inside a longer number, a date, a time or an
 amount: "15.04.2025", "2024-2025", "2025,50" and "20250" stay readable when the PIN is 2025, while
 "w 2025 roku" and "PIN/PUK 2025/36912874" do not.
@@ -637,7 +673,9 @@ it. Store the mapping the way you would store the original document.
 **Replaying a conversation?** `mask_known_values(text, mapping)` masks every value a mapping already
 holds in text that was masked earlier, such as history sent again after a new value got its token.
 The same call checks a payload before it leaves: `mask_known_values(payload, mapping) == payload`
-means no value the mapping holds is left where the library would mask it.
+means no value the mapping holds is left where the library would mask it. For a whole request
+body, `leaked_tokens(body, mapping)` names the tokens whose values would still go out, never the
+values, so the result may be logged; the gateway runs it on every call.
 
 **Words of your own.** In-house names no rule can know, such as a project codename or a client,
 go on a denylist and are masked wherever they appear, in any case and across line breaks:
@@ -645,6 +683,10 @@ go on a denylist and are masked wherever they appear, in any case and across lin
 ```python
 guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=False)
 ```
+
+A company listed with its legal form, "Siłownia Testowa Sp. z o.o.", is found without it too when
+two words or more are left, written as on the list or in capitals, and a listed number of nine
+digits or more, such as a NIP, however its digits are grouped.
 
 **Checking the answer.** After restoring, `anonymizer.sweep(restored, mapping)` reports tokens the
 model invented and personal data its answer added: `report.is_clean`, or `report.unknown_tokens`
@@ -680,7 +722,7 @@ which go out as written. `mode="paranoid"` masks all of it:
 guards = default_guards(mode="paranoid")
 ```
 
-On the calls of an AI agent in `benchmarks/`, "normal" lets 3 of 243 marked occurrences through,
+On the calls of an AI agent in `benchmarks/`, "normal" lets 2 of 250 marked occurrences through,
 and 2% of the token uses hide nothing; "paranoid" lets 1 through, a name in Cyrillic no guard
 finds, and more than half of the token uses hide nothing. The rules are the same in both, so without the model
 the mode changes nothing.

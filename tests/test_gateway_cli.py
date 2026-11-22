@@ -1,5 +1,6 @@
 """The polanon-gateway command: its safe defaults, and that it never prints a key."""
 
+import pickle
 import sys
 
 import pytest
@@ -114,7 +115,7 @@ def test_content_that_cannot_be_masked_may_be_passed_and_the_banner_says_so(caps
 
 
 def test_without_the_model_the_banner_says_places_are_not_masked(monkeypatch, capsys):
-    monkeypatch.setattr("polanon.gateway.__main__.ner_available", lambda model: False)
+    monkeypatch.setattr("polanon.gateway._build.ner_available", lambda model: False)
     run(["--upstream", "https://provider.test/v1"])
     assert "places are not masked" in capsys.readouterr().err
 
@@ -190,3 +191,59 @@ def test_the_mapping_goes_back_to_clients_only_when_the_operator_says_so(capsys)
     assert status == 0
     assert served.app._config.pii_map is True
     assert "clients may ask for each call's mapping" in capsys.readouterr().err
+
+
+def test_one_call_is_masked_at_a_time_in_the_gateway_s_own_process_by_default(capsys):
+    status, served = run(UPSTREAM)
+    assert status == 0
+    assert served.app._config.workers == 1
+    assert served.app._pool is None
+    assert "processes" not in capsys.readouterr().err
+
+
+def test_workers_mask_calls_side_by_side_and_never_carry_the_key(capsys, monkeypatch):
+    """Each process builds its anonymizer from the options and reads POLANON_KEY itself, from
+    the environment it inherits, so what is pickled to reach it holds the options and no key."""
+    monkeypatch.setenv("POLANON_KEY", KEY)
+    status, served = run(
+        [*UPSTREAM, "--workers", "3", "--allow", "Ola Nowak"], {"POLANON_KEY": KEY}
+    )
+    assert status == 0
+    assert served.app._config.workers == 3
+    assert served.app._pool.workers == 3
+    assert "masking in 3 processes with rules alone, stable tokens" in capsys.readouterr().err
+    build = pickle.dumps(served.app._pool._build)
+    assert b"Ola Nowak" in build
+    assert KEY.encode() not in build
+    assert bytes.fromhex(KEY) not in build
+
+
+@pytest.mark.parametrize("inherited", [None, "cd" * 32])
+def test_workers_that_would_read_another_key_than_the_gateway_s_are_refused(
+    inherited, capsys, monkeypatch
+):
+    """The workers inherit this process's environment, not the one the keys were read from: they
+    would mask without the key the banner names, or with another, and their tokens would differ
+    from one process to the next."""
+    if inherited is None:
+        monkeypatch.delenv("POLANON_KEY", raising=False)
+    else:
+        monkeypatch.setenv("POLANON_KEY", inherited)
+    status, served = run([*UPSTREAM, "--workers", "2"], {"POLANON_KEY": KEY})
+    assert status == BAD_SETTING
+    assert served.calls == []
+    refusal = capsys.readouterr().err
+    assert "reads POLANON_KEY from this process's environment" in refusal
+    assert KEY not in refusal
+    assert "cd" * 32 not in refusal
+    monkeypatch.delenv("POLANON_KEY", raising=False)
+    status, served = run([*UPSTREAM, "--workers", "2"])
+    assert status == 0
+
+
+@pytest.mark.parametrize("count", ["0", "-1"])
+def test_fewer_than_one_worker_is_refused(count, capsys):
+    status, served = run([*UPSTREAM, "--workers", count])
+    assert status == BAD_SETTING
+    assert served.calls == []
+    assert "workers is 1 or more" in capsys.readouterr().err

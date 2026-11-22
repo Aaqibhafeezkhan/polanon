@@ -8,7 +8,10 @@ from polanon.guards.names_pl import (
     NAME_FORMS,
     decline_feminine,
     decline_masculine,
+    declined_surname_nominatives,
     is_common_adjective,
+    noun_surname_nominatives,
+    person_name_forms,
     person_name_parts,
     surname_reading,
 )
@@ -582,6 +585,110 @@ def test_a_name_with_no_known_first_name_gives_its_parts_only_when_trusted():
     assert person_name_parts("Politechnika Krakowska") == ["Politechnika"]
     assert person_name_parts("Politechnika Krakowska", needs_first_name=True) == []
     assert person_name_parts("Jan Kowalski", needs_first_name=True) == ["Kowalski"]
+
+
+def test_a_surname_whose_stem_changes_gives_the_cases_that_do_not_begin_with_it():
+    """ "Kozieł" is "Kozła" and "Koziołowi" in other cases, "Kot" is "Kocie": none of them begins
+    with the surname, so none was masked after the full name."""
+    assert {"Kozła", "Kozłowi", "Kozioła", "Koziołowi", "Koziele"} <= set(
+        person_name_forms("Adam Kozieł")
+    )
+    assert person_name_forms("Tomasz Kot") == ["Kocie"]
+    assert person_name_forms("Paweł Wróbel") == ["Wróbla", "Wróblem", "Wróblowi", "Wróblu"]
+    assert "KOZŁA" in person_name_forms("ADAM KOZIEŁ")
+    assert person_name_forms("Jan Nowak") == []
+    assert person_name_parts("Adam Kozieł") == ["Kozieł"]
+
+
+def test_a_family_s_plural_is_no_form_of_a_surname():
+    """ "Sokołów" and "Kurowie" name towns as often as they name the Sokółs and the Kurs."""
+    assert not {"Sokołów", "Sokołowie"} & set(person_name_forms("Jan Sokół"))
+
+
+@pytest.mark.parametrize(
+    ("name", "forms"),
+    [
+        ("Anna Duda", ["Dudo", "Dudy", "Dudzie", "Dudą", "Dudę"]),
+        ("Jan Sowa", ["Sowie", "Sowo", "Sowy", "Sową", "Sowę"]),
+        ("Ewa Mucha", ["Musze", "Mucho", "Muchy", "Muchą", "Muchę"]),
+        ("Anna Nowak-Kępa", ["Kępie", "Kępo", "Kępy", "Kępą", "Kępę"]),
+    ],
+)
+def test_a_surname_in_a_gives_its_cases(name, forms):
+    """ "Dudy" and "Dudzie" do not begin with "Duda", so none was masked after the full name."""
+    assert set(forms) <= set(person_name_forms(name))
+
+
+@pytest.mark.parametrize("name", ["Anna Nowakowa", "Natalia Bielska", "Ewa Lisowa"])
+def test_a_surname_that_declines_as_an_adjective_gets_no_noun_cases(name):
+    surname = name.split()[1]
+    assert person_name_forms(name) == [], surname
+
+
+@pytest.mark.parametrize(
+    ("name", "nominatives"),
+    [
+        ("Adama Kozieła", ["Kozieł", "Kozioł"]),
+        ("Adamowi Krawcowi", ["Krawc", "Krawec", "Krawiec"]),
+        ("Anny Koziary", ["Koziara"]),
+        ("Kozieła Adama", ["Kozieł", "Kozioł"]),
+    ],
+)
+def test_a_name_in_another_case_gives_the_nominatives_its_surname_may_have(name, nominatives):
+    assert declined_surname_nominatives(name) == nominatives
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Adam Kozieł",  # the nominative already
+        "Kamila Kozieła",  # Kamila may be a woman's name in the nominative
+        "Anny Kozieł",  # a woman's surname does not decline
+        "Adama Jana",  # no surname
+        "Pan Adam Kozieł",  # three words
+    ],
+)
+def test_a_name_that_may_stand_in_the_nominative_gives_no_guess(name):
+    assert declined_surname_nominatives(name) == []
+
+
+def test_the_cases_of_a_name_in_another_case_come_from_its_nominative_only():
+    """ "Bednarka" after "Adama" is a genitive; declined as a nominative in -a it gave "Bednarki"
+    and "Bednarce"."""
+    assert person_name_parts("Adama Bednarka") == ["Bednarka"]
+    assert person_name_forms("Adama Bednarka") == []
+
+
+@pytest.mark.parametrize(
+    "name", ["Upoważniam Annę Marię Kowalską", "Anny Kowalska", "Mirka Nowak-Wiśniewska"]
+)
+def test_an_adjectival_surname_gives_its_cases_whatever_case_the_first_name_stands_in(name):
+    """After a first name in no nominative, "Annę", "Anny", "Mirka", the cases of "Kowalska"
+    were left out with those of noun surnames, and "Kowalskiej" went out in the clear."""
+    words = name.split()[-1].split("-")
+    stem = words[-1][:-1]
+    assert {stem + "iej", stem + "ą"} <= set(person_name_parts(" ".join(name.split()[-3:])))
+
+
+@pytest.mark.parametrize(
+    ("word", "nominative"),
+    [
+        ("Koziołowi", "Kozieł"),
+        ("Kozła", "Kozieł"),
+        ("Kozieła", "Kozieł"),
+        ("Koziele", "Kozieł"),
+        ("Krawca", "Krawiec"),
+        ("Kocie", "Kot"),
+        ("KOZŁA", "KOZIEŁ"),
+    ],
+)
+def test_a_case_of_a_noun_surname_gives_the_nominatives_it_may_come_from(word, nominative):
+    assert nominative in noun_surname_nominatives(word)
+
+
+def test_a_word_in_lowercase_or_with_no_case_ending_gives_no_nominative():
+    assert noun_surname_nominatives("koziołowi") == []
+    assert noun_surname_nominatives("Kozioł") == []
 
 
 @pytest.mark.parametrize(
