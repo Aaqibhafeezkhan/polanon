@@ -277,6 +277,12 @@ such as a date needs `default=str`.
 **Values you already know.** `known=` takes what you know is sensitive, such as your clients' names
 from the database. They are masked wherever they appear, also when they are on the allowlist.
 
+**History kept with the real values.** A turn reads a token in its input as its own masked text,
+as in a model's answer sent back with the next call. An application that keeps the conversation
+with real values and starts a turn per request passes `plain_input=True`: token-shaped text in its
+input, left from an earlier request or typed by a user, is then written `[FIRMA_1]` and never
+restored as whoever this turn gave `<FIRMA_1>`.
+
 **Refusing instead of leaking.** Whatever fails while masking raises `MaskingUnavailableError`, and
 nothing half masked comes back. `default_guards()` raises `NerModelUnavailableError`, which is one,
 when spaCy or the model is missing, and `ner_available()` tells a settings page whether they are

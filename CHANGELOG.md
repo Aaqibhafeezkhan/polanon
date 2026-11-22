@@ -7,8 +7,19 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
-Gaps PolGate found in the core's last check once it moved onto 0.4.2, each reproduced before it
-was fixed.
+Gaps the applications found once they moved onto 0.4.2: PolGate in the core's last check, PolSales
+and PolCRM in `MaskedTurn`. Each was reproduced before it was fixed.
+
+### Added
+
+- **`MaskedTurn(plain_input=True)`**, also `anonymizer.turn(plain_input=True)`, for an application
+  that keeps a conversation with its real values, the model's answers restored, and starts a turn
+  per request. A turn reads token-shaped text in its input as its own masked text wherever the
+  mapping holds its token, as in a model's answer sent back with the next call, so a `<FIRMA_1>`
+  left from an earlier request, in a note or typed by a user, that came after this turn gave
+  `<FIRMA_1>` to a company was restored as that company. With `plain_input=True` such text is
+  written in square brackets, `[FIRMA_1]` or `[OSOBA_1:celownik]`, and reaches the model and comes
+  back so. PolSales and PolCRM each wrote this by hand. The default is unchanged.
 
 ### Fixed
 

@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
-from polanon._matching import type_of
+from polanon._matching import CASED_TOKEN_RE, type_of
 from polanon.guards.denylist import DenylistGuard
 from polanon.output_sweep import SweepReport
 from polanon.stream_restore import StreamRestorer, restored, tokens_written
@@ -134,6 +134,7 @@ class MaskedTurn:
         known: Iterable[str] = (),
         mapping: Mapping[str, str] | None = None,
         unknown_blocks: UnknownBlocks = "raise",
+        plain_input: bool = False,
     ) -> None:
         """Start a turn.
 
@@ -148,6 +149,16 @@ class MaskedTurn:
             unknown_blocks: what :meth:`mask_messages` does with a block it cannot mask:
                 ``"raise"`` refuses, ``"drop"`` leaves the block out, ``"keep"`` sends it as it
                 is, unmasked: an image, a document and whatever text they carry.
+            plain_input: every text the turn masks is plain, as somebody wrote it or a record
+                holds it, and none is text a turn masked: an application that keeps a
+                conversation with its real values, the model's answers restored, and starts a turn
+                per request. Token-shaped text in it, from an earlier request, a note or what the
+                user typed, is then written in square brackets, ``[OSOBA_1]`` or
+                ``[OSOBA_1:celownik]``, and reaches the model and comes back so. By default it is
+                the turn's own masked text wherever the mapping holds its token, as in a model's
+                answer sent back with the next call: a ``<FIRMA_1>`` left from an earlier request
+                and coming after this turn gave ``<FIRMA_1>`` to a company is restored as that
+                company. Leave it off when the model's own messages are sent back masked.
 
         Raises:
             TypeError: when `known` is a single string, which would be read letter by letter.
@@ -169,6 +180,7 @@ class MaskedTurn:
         self._anonymizer = _with_known_values(anonymizer, terms) if terms else anonymizer
         self._mapping: dict[str, str] = dict(mapping or {})
         self._unknown_blocks = unknown_blocks
+        self._plain_input = plain_input
 
     @property
     def mapping(self) -> dict[str, str]:
@@ -186,6 +198,8 @@ class MaskedTurn:
             raise TypeError(f"mask takes a str, not {type(text).__name__}: use mask_data")
         if not text:
             return text
+        if self._plain_input:
+            text = _defused(text)
         try:
             result = self._anonymizer.anonymize_sync(text, self._mapping)
         except MaskingUnavailableError:
@@ -493,6 +507,11 @@ def _with_known_values(anonymizer: Anonymizer, terms: list[str]) -> Anonymizer:
         allowlist=anonymizer.allowlist,
         pseudonyms=anonymizer.pseudonyms,
     )
+
+
+def _defused(text: str) -> str:
+    """Write every token-shaped text in square brackets, ``[OSOBA_1]``: no turn reads it as one."""
+    return CASED_TOKEN_RE.sub(lambda match: f"[{match[0][1:-1]}]", text)
 
 
 def _failure(exc: Exception, what: str = "the text") -> str:

@@ -446,6 +446,7 @@ class Anonymizer:
         known: Iterable[str] = (),
         mapping: dict[str, str] | None = None,
         unknown_blocks: UnknownBlocks = "raise",
+        plain_input: bool = False,
     ) -> MaskedTurn:
         """Start masking one call to a model: its history, question and tool results.
 
@@ -454,6 +455,14 @@ class Anonymizer:
         Args:
             known: values already known to be sensitive, masked wherever they appear.
             mapping: token -> original value from earlier turns of the same conversation.
-            unknown_blocks: ``"raise"`` or ``"drop"`` a message block that cannot be masked.
+            unknown_blocks: ``"raise"``, ``"drop"`` or ``"keep"`` a block that cannot be masked.
+            plain_input: no text the turn masks was masked before, so token-shaped text in it
+                is written in square brackets, ``[OSOBA_1]``, and never read as a token.
         """
-        return MaskedTurn(self, known=known, mapping=mapping, unknown_blocks=unknown_blocks)
+        return MaskedTurn(
+            self,
+            known=known,
+            mapping=mapping,
+            unknown_blocks=unknown_blocks,
+            plain_input=plain_input,
+        )
