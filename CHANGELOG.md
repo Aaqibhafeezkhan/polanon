@@ -7,6 +7,38 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-22
+
+A patch release with the gaps the applications found once they moved onto 0.4.2: PolGate in the
+core's last check, PolSales and PolCRM in `MaskedTurn`. Each was reproduced before it was fixed.
+Nothing that worked stops working the same way, the stable tokens are computed as before, and the
+benchmarks give the numbers of 0.4.2.
+
+### Added
+
+- **`MaskedTurn(plain_input=True)`**, also `anonymizer.turn(plain_input=True)`, for an application
+  that keeps a conversation with its real values, the model's answers restored, and starts a turn
+  per request. A turn reads token-shaped text in its input as its own masked text wherever the
+  mapping holds its token, as in a model's answer sent back with the next call, so a `<FIRMA_1>`
+  left from an earlier request, in a note or typed by a user, that came after this turn gave
+  `<FIRMA_1>` to a company was restored as that company. With `plain_input=True` such text is
+  written in square brackets, `[FIRMA_1]` or `[OSOBA_1:celownik]`, and reaches the model and comes
+  back so. PolSales and PolCRM each wrote this by hand. The default is unchanged.
+
+### Fixed
+
+- **A word after a token's colon that names no case is masked and checked.** "<OSOBA_1:Kowalski>"
+  typed after "Kowalski" was masked went out with the surname: the masking and the last check took
+  every word after a colon for a case, which a model writes there, and left the whole token alone.
+  Now only a case, "<OSOBA_1:celownik>" in any letter case and with or without Polish letters,
+  makes the token one; any other word is read as text, and the token's frame is left alone, so
+  the masking sends `<OSOBA_1:<OSOBA_2>>` and the restore gives the text back.
+- **The last check reads a value inside a placeholder that stands for itself.** A password typed
+  as "<ADMIN_2024>" went out past `leaked_tokens`, which left the placeholders that stand for
+  themselves out of the mapping and so read "<ADMIN_2024>" as a token of another conversation.
+  The masking itself masked it, so this mattered where the masking had missed one, which is what
+  the last check is for.
+
 ## [0.4.2] - 2026-11-22
 
 A patch release that gathers four changes. Nothing that worked stops working the same way, and

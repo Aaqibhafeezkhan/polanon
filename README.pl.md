@@ -288,6 +288,12 @@ zmian, więc dane osobowe trzymaj w wartościach tekstowych, a obiekt taki jak d
 **Wartości, które już znasz.** `known=` przyjmuje to, o czym wiesz, że jest wrażliwe, na przykład
 nazwy klientów z bazy. Są maskowane wszędzie, gdzie się pojawią, także gdy są na allowliście.
 
+**Historia z prawdziwymi wartościami.** Tura czyta token na wejściu jako swój zamaskowany tekst,
+tak jak w odpowiedzi modelu odesłanej z następnym wywołaniem. Aplikacja, która trzyma rozmowę
+z prawdziwymi wartościami i zaczyna turę na każde żądanie, podaje `plain_input=True`: tekst
+w kształcie tokenu, który został z wcześniejszego żądania albo wpisał go użytkownik, jest wtedy
+zapisany jako `[FIRMA_1]` i nigdy nie wraca jako ten, komu ta tura dała `<FIRMA_1>`.
+
 **Odmowa zamiast wycieku.** Każdy błąd maskowania kończy się `MaskingUnavailableError` i nic
 zamaskowanego tylko w części nie wraca. `default_guards()` zgłasza `NerModelUnavailableError`, który
 też nim jest, gdy brakuje spaCy albo modelu, a `ner_available()` pozwala stronie ustawień sprawdzić,
@@ -504,7 +510,7 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.2`,
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.3`,
 z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |

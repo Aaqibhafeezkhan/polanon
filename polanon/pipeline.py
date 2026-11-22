@@ -12,13 +12,14 @@ and every occurrence of a known value is masked — not only the one a guard hap
 from __future__ import annotations
 
 import asyncio
+import re
 from bisect import bisect_right
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from polanon._canonical import canonical
 from polanon._detection import detect
-from polanon._inflection import CASE_NAMES, inflected
+from polanon._inflection import CASE_NAMES, case_of, inflected
 from polanon._known_parts import known_forms, known_parts, logins_of, person_parts
 from polanon._matching import (
     CASED_TOKEN_RE,
@@ -189,7 +190,8 @@ def mask_known_values(text: str, mapping: dict[str, str]) -> str:
     whole word under the value's own token, because replayed text is never restored. Tokens
     already in the text are left alone, except where token-shaped text is no token: a placeholder
     somebody typed, which the mapping records as standing for itself, or one that is itself a value
-    the mapping hides, such as a password written as "<ADMIN_2024>".
+    the mapping hides, such as a password written as "<ADMIN_2024>". A word after a token's colon
+    that names no case, "<OSOBA_1:Kowalski>", is text as well.
 
     Args:
         text: previously masked text.
@@ -206,9 +208,10 @@ def mask_known_values(text: str, mapping: dict[str, str]) -> str:
     haystack = Haystack.of(text, detection_view(text))
     hidden = {value.strip() for value, _ in values}
     occupied = [
-        (match.start(), match.end())
+        part
         for match in CASED_TOKEN_RE.finditer(text)
         if mapping.get(base_token(match)) != base_token(match) and match[0] not in hidden
+        for part in _sheltered(match)
     ]
     parts: list[str] = []
     cursor = 0
@@ -221,7 +224,21 @@ def mask_known_values(text: str, mapping: dict[str, str]) -> str:
 
 
 def _token_ranges(text: str) -> list[tuple[int, int]]:
-    return [(m.start(), m.end()) for m in CASED_TOKEN_RE.finditer(text)]
+    return [part for match in CASED_TOKEN_RE.finditer(text) for part in _sheltered(match)]
+
+
+def _sheltered(match: re.Match[str]) -> list[tuple[int, int]]:
+    """Return the parts of a token in a text that are token, not text: all of it, or its frame.
+
+    After a token's colon a model writes a case, "<OSOBA_1:celownik>", and the whole token is
+    masked text. Text typed or replayed may hold any word there, though, and "<OSOBA_1:Kowalski>"
+    sheltered whole sent the surname in the clear past the masking and the last check alike. A
+    word that names no case is read as text: only "<OSOBA_1:" and ">" are left alone.
+    """
+    case = match["case"]
+    if case is None or case_of(case) is not None:
+        return [match.span()]
+    return [(match.start(), match.start("case")), (match.end("case"), match.end())]
 
 
 def _masked_already(text: str, mapping: dict[str, str]) -> list[tuple[int, int]]:
@@ -232,14 +249,16 @@ def _masked_already(text: str, mapping: dict[str, str]) -> list[tuple[int, int]]
     model that took "OSOBA_8" for a place sent "<<MIEJSCE_1>>", which restores to nobody. A
     placeholder the caller typed stands for itself and shelters nothing, and neither does
     token-shaped text the mapping hides as a value, such as a password written "<ADMIN_2024>".
-    A token with a case, "<OSOBA_8:dopełniacz>", is masked text as its token is.
+    A token with a case, "<OSOBA_8:dopełniacz>", is masked text as its token is; a word after the
+    colon that names no case is text (see :func:`_sheltered`).
     """
     hidden = {value.strip() for token, value in mapping.items() if value != token}
     tokens = ((match, base_token(match)) for match in CASED_TOKEN_RE.finditer(text))
     return [
-        match.span()
+        part
         for match, token in tokens
         if mapping.get(token, token) != token and match[0] not in hidden
+        for part in _sheltered(match)
     ]
 
 

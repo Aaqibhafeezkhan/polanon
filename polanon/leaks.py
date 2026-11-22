@@ -61,10 +61,14 @@ def leaked_tokens(payload: Any, mapping: Mapping[str, str]) -> list[str]:
     values = {token: value for token, value in mapping.items() if value != token}
     if not values:
         return []
+    # A placeholder the caller typed stands for itself and shelters nothing, so a value written
+    # inside it, a password typed as "<ADMIN_2024>", is found; the masking reads it so too.
+    # Left out of the mapping, it read as a token of another conversation and hid the value.
+    standing = {token: value for token, value in mapping.items() if value == token}
     leaked: set[str] = set()
     for text in _texts(payload):
-        if text and mask_known_values(text, values) != text:
-            leaked.update(_tokens_that_mask(text, values))
+        if text and mask_known_values(text, {**standing, **values}) != text:
+            leaked.update(_tokens_that_mask(text, values, standing))
     return sorted(leaked)
 
 
@@ -99,8 +103,12 @@ def _json_container(text: str) -> Any:
     return parsed if isinstance(parsed, dict | list) else None
 
 
-def _tokens_that_mask(text: str, values: Mapping[str, str]) -> list[str]:
+def _tokens_that_mask(
+    text: str, values: Mapping[str, str], standing: Mapping[str, str]
+) -> list[str]:
     """The tokens whose values the masking rules would still find in `text`."""
     return [
-        token for token, value in values.items() if mask_known_values(text, {token: value}) != text
+        token
+        for token, value in values.items()
+        if mask_known_values(text, {**standing, token: value}) != text
     ]

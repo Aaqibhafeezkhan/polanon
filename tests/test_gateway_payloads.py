@@ -119,6 +119,27 @@ def test_the_last_check_sees_a_short_surname_with_a_case_ending():
     assert leaked_tokens(listed, mapping) == []
 
 
+def test_the_last_check_reads_a_value_inside_a_placeholder_that_stands_for_itself():
+    """A password typed as "<ADMIN_2024>" went out: the check left the placeholders that stand
+    for themselves out of the mapping, so it read "<ADMIN_2024>" as a token and not inside it."""
+    mapping = {"<SEKRET_1>": "ADMIN_2024", "<ADMIN_2024>": "<ADMIN_2024>"}
+    payload = {"messages": [{"role": "user", "content": "Hasło to <ADMIN_2024>."}]}
+    assert leaked_tokens(payload, mapping) == ["<SEKRET_1>"]
+    assert leaked_tokens("Hasło to <SEKRET_1>, szablon <ADMIN_2024>.", mapping) == ["<SEKRET_1>"]
+    assert leaked_tokens("Szablon <PESEL_1>.", {"<PESEL_1>": "<PESEL_1>"}) == []
+
+
+def test_the_last_check_reads_a_word_after_a_token_s_colon_that_names_no_case():
+    """ "<OSOBA_1:Kowalski>" typed after "Kowalski" was masked sent the surname out: the check,
+    like the masking, took everything after the colon for a case."""
+    mapping = {"<OSOBA_1>": "Jan Kowalski", "<OSOBA_2>": "Kowalski"}
+    payload = {"messages": [{"role": "user", "content": "Przekaż to <OSOBA_1:Kowalski>."}]}
+    assert leaked_tokens(payload, mapping) == ["<OSOBA_2>"]
+    for case in ("celownik", "Dopełniacz", "wolacz"):
+        assert leaked_tokens(f"Przekaż to <OSOBA_1:{case}>.", mapping) == []
+    assert leaked_tokens("Przekaż to <OSOBA_1:<OSOBA_2>>.", mapping) == []
+
+
 def test_an_image_and_a_file_go_as_they_are_when_the_turn_keeps_them():
     """The operator chose to let the model see them: the text is masked, they are not."""
     image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 2_000_000}}

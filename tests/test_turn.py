@@ -198,6 +198,49 @@ def test_a_tool_that_looks_records_up_gets_the_values_as_they_were_masked():
     )
 
 
+def test_a_word_after_a_token_s_colon_that_names_no_case_is_masked():
+    """The masking took everything after the colon for a case and sent "Kowalski" out."""
+    turn = anonymizer.turn()
+    turn.mask("Jan Kowalski dzwonił.")
+    turn.mask("Kowalski oddzwoni.")
+    typed = "Przekaż to <OSOBA_1:Kowalski>."
+    masked = turn.mask(typed)
+    assert "Kowalski" not in masked
+    assert masked == "Przekaż to <OSOBA_1:<OSOBA_2>>."
+    assert turn.restore(masked) == typed
+    assert turn.mask("Dzwoniłem do <OSOBA_1:celownik>.") == "Dzwoniłem do <OSOBA_1:celownik>."
+
+
+def test_a_token_from_an_earlier_request_is_read_as_this_turn_s_by_default():
+    """What plain_input is for: by default a model's answer sent back masked keeps its tokens."""
+    turn = anonymizer.turn()
+    assert turn.mask("Ile kupił Klub Sportowy Orlik Sp. z o.o.?") == "Ile kupił <FIRMA_1>?"
+    stale = turn.mask("Stara odpowiedź: <FIRMA_1> zapłacił.")
+    assert turn.restore(stale) == "Stara odpowiedź: Klub Sportowy Orlik Sp. z o.o. zapłacił."
+
+
+def test_plain_input_writes_token_shaped_text_in_square_brackets():
+    """PolSales and PolCRM keep the history with real values and start a turn per request, so a
+    token left from an earlier one came back as whoever this turn gave its number; each wrote the
+    same defusing by hand."""
+    turn = anonymizer.turn(plain_input=True)
+    assert turn.mask("Ile kupił Klub Sportowy Orlik Sp. z o.o.?") == "Ile kupił <FIRMA_1>?"
+    text = "Stara odpowiedź: <FIRMA_1> zapłacił, a <OSOBA_3:celownik> też."
+    masked = turn.mask(text)
+    assert masked == "Stara odpowiedź: [FIRMA_1] zapłacił, a [OSOBA_3:celownik] też."
+    assert turn.restore(masked) == masked
+    assert turn.mask_data({"notatka": "<FIRMA_1> i Jan Kowalski"}) == {
+        "notatka": "[FIRMA_1] i <OSOBA_1>"
+    }
+    messages = turn.mask_messages([{"role": "user", "content": "Kto to <PESEL_1>?"}])
+    assert messages == [{"role": "user", "content": "Kto to [PESEL_1]?"}]
+    assert turn.mapping == {
+        "<FIRMA_1>": "Klub Sportowy Orlik Sp. z o.o.",
+        "<OSOBA_1>": "Jan Kowalski",
+    }
+    assert MaskedTurn(anonymizer, plain_input=True).mask("<OSOBA_1>") == "[OSOBA_1]"
+
+
 def test_an_application_checks_what_it_is_about_to_send_with_the_core_s_last_check():
     """PolGate wrote its own check, with the masking's thresholds copied by hand; the gateway's
     check is in the core now, with the rules the masking follows."""
