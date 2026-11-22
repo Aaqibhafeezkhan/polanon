@@ -1,0 +1,40 @@
+# Open WebUI with every call to the model masked by the polanon gateway.
+#
+#     cp .env.example .env     # then put your two keys in .env
+#     docker compose up -d     # Open WebUI is at http://127.0.0.1:3000
+#
+# Open WebUI reaches the provider only through the gateway: the gateway's port is not published,
+# and Open WebUI gets the gateway's address and key in place of the provider's.
+
+name: polanon-open-webui
+
+services:
+  gateway:
+    image: ghcr.io/boromat/polanon-gateway:0.4
+    # Every option of polanon-gateway goes here; see the README beside this file.
+    command: ["--upstream", "${POLANON_UPSTREAM:-https://api.openai.com/v1}"]
+    environment:
+      POLANON_UPSTREAM_KEY: ${POLANON_UPSTREAM_KEY:?set POLANON_UPSTREAM_KEY in .env}
+      POLANON_GATEWAY_KEY: ${POLANON_GATEWAY_KEY:?set POLANON_GATEWAY_KEY in .env}
+    restart: unless-stopped
+
+  open-webui:
+    # `main` is the tag Open WebUI's own instructions use and it moves; put a version here to
+    # stay on one.
+    image: ghcr.io/open-webui/open-webui:main
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      OPENAI_API_BASE_URL: http://gateway:8787/v1
+      OPENAI_API_KEY: ${POLANON_GATEWAY_KEY:?set POLANON_GATEWAY_KEY in .env}
+      # Without this Open WebUI also looks for an Ollama server, which would not be masked.
+      ENABLE_OLLAMA_API: "false"
+    ports:
+      - "127.0.0.1:3000:8080"
+    volumes:
+      - open-webui:/app/backend/data
+    restart: unless-stopped
+
+volumes:
+  open-webui:

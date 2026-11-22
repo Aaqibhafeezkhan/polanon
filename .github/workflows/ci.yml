@@ -232,3 +232,8 @@ jobs:
           test "$status" = 401
           if docker logs gateway 2>&1 | grep -q ci-only-key; then exit 1; fi
           docker rm -f gateway
+
+      # The ready stacks in deploy/, with this image and a stand-in for the provider: each tool is
+      # pointed at the gateway with the gateway's key, and a call sent there leaves masked.
+      - name: The stacks in deploy/
+        run: python3 deploy/tests/check_stack.py open-webui

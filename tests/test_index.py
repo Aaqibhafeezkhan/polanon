@@ -18,6 +18,7 @@ from polanon import (
     stored_mapping,
     tokens_in,
 )
+from polanon import index as index_module
 from polanon.guards.base import Guard
 from polanon.types import Span
 
@@ -390,6 +391,73 @@ def test_a_name_a_language_model_guessed_gives_no_surname_to_the_store():
     anonymizer = Anonymizer([Guess()], pseudonyms=Pseudonyms(KEY))
     anonymizer.index_chunks(["Kampania w Google Ads ruszyła."], store)
     assert len(store) == 1
+
+
+def test_a_surname_alone_in_another_case_is_masked_the_first_time_a_document_is_indexed():
+    """PolGate indexed every document twice: "Wróblowi" and "Wróbla" went to the index in the
+    clear until the store held the surname "Jan Wróbel" gave it, which only the first pass wrote."""
+    store = InMemoryMappingStore()
+    anonymizer = stable(store)
+    chunks = [
+        "Umowę podpisał Jan Wróbel.",
+        "Wróblowi przekazano klucze, a Wróbla poproszono o podpis. Wróbel się zgodził.",
+    ]
+    masked = anonymizer.index_chunks(chunks, store)
+    assert "Wróbl" not in masked.texts[1]
+    assert "Wróbel" not in masked.texts[1]
+    assert anonymizer.index_chunks(chunks, store).texts == masked.texts
+
+
+@pytest.mark.parametrize("hidden", ["Wró­blowi", "Wróblowi"])
+def test_a_surname_in_another_case_behind_a_soft_hyphen_is_masked_the_first_time(hidden):
+    """The guards read past a soft hyphen or a combining accent, and so does the check."""
+    store = InMemoryMappingStore()
+    masked = stable(store).index_chunks(
+        ["Umowę podpisał Jan Wróbel.", f"{hidden} przekazano klucze."], store
+    )
+    assert masked.texts[1].endswith(" przekazano klucze.")
+    assert "blowi" not in masked.texts[1]
+
+
+def test_a_document_with_nothing_left_in_the_clear_is_masked_once(monkeypatch):
+    """The second masking runs only where the lookup finds a value the first one left out."""
+    calls = []
+    original = index_module._masked_chunks
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(index_module, "_masked_chunks", counted)
+    store = InMemoryMappingStore()
+    stable(store).index_chunks(["Umowę podpisał Jan Wróbel, PESEL 50810112354."], store)
+    assert len(calls) == 1
+
+
+def test_a_document_of_many_people_is_checked_in_time_that_grows_with_its_length():
+    """The check for a lone surname searched the whole document once per name it knew: 2,000
+    passages of 2,000 people took 30 s where indexing them had taken 6 s. Four times the passages,
+    and four times the people, must take about four times as long, as in the test above."""
+    import time
+
+    first = ["Jan", "Piotr", "Tomasz", "Marek", "Paweł", "Adam", "Michał", "Krzysztof"]
+    parts = ["Bar", "Cel", "Dom", "Fil", "Gor", "Hal", "Jar", "Kal", "Lip", "Mar", "Nor", "Pol"]
+    people = [
+        f"{first[n % 8]} {parts[n // 12 % 12]}{parts[n % 12].lower()}{'ski' if n % 2 else 'cki'}"
+        for n in range(800)
+    ]
+
+    def fastest(count: int) -> float:
+        times = []
+        for _ in range(2):
+            store = InMemoryMappingStore()
+            passages = [f"Protokół {n}: podpisał {people[n]}." for n in range(count)]
+            began = time.perf_counter()
+            stable(store).index_chunks(passages, store)
+            times.append(time.perf_counter() - began)
+        return min(times)
+
+    assert fastest(800) < 8 * fastest(200)
 
 
 def test_a_surname_alone_in_another_document_is_masked_through_the_store():

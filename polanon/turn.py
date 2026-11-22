@@ -248,29 +248,45 @@ class MaskedTurn:
     def _size(self) -> int:
         return len(self._mapping)
 
-    def restore(self, text: str) -> str:
+    def restore(self, text: str, *, as_held: bool = False) -> str:
         """Put the original values back in place of the turn's tokens; unknown tokens stay.
 
         A person's token with a case after a colon, as the Polish note asks for, comes back
         declined: ``<OSOBA_1:wołacz>`` is "Janie Kowalski" where the text said "Jana Kowalskiego".
         A name the rules cannot decline for sure comes back as written, and so does any other
         value; the case is dropped.
-        """
-        return restored(text, self._mapping)
 
-    def restore_data(self, value: Any) -> Any:
+        Args:
+            text: an answer, or any text with the turn's tokens.
+            as_held: give every value as it was masked, the case dropped, as
+                :meth:`restore_data` describes.
+        """
+        return restored(text, self._mapping, as_held=as_held)
+
+    def restore_data(self, value: Any, *, as_held: bool = False) -> Any:
         """Restore every string inside a JSON-like value, such as the arguments of a tool call.
 
         Keys and values that are not strings are left as they are, and so is the value itself.
+
+        Args:
+            value: the value to restore; it is not modified.
+            as_held: give every value as it was masked, and drop a case the model added. A tool
+                that looks a name up in the records it was masked from needs it written as those
+                records hold it: ``<OSOBA_1:dopełniacz>`` is then "Jan Kowalski" when the records
+                said "Jan Kowalski", not "Jana Kowalskiego". A value first written in a message,
+                not in the records, is held in that message's case: after "Umów mnie z Janem
+                Kowalskim" it is "Janem Kowalskim". For such a value leave `as_held` off: the
+                Polish note asks for ``<OSOBA_1:mianownik>`` in tool arguments, which the
+                default restores as "Jan Kowalski".
         """
         if isinstance(value, str):
-            return self.restore(value)
+            return self.restore(value, as_held=as_held)
         if isinstance(value, Mapping):
-            return {key: self.restore_data(item) for key, item in value.items()}
+            return {key: self.restore_data(item, as_held=as_held) for key, item in value.items()}
         if isinstance(value, list):
-            return [self.restore_data(item) for item in value]
+            return [self.restore_data(item, as_held=as_held) for item in value]
         if isinstance(value, tuple):
-            return tuple(self.restore_data(item) for item in value)
+            return tuple(self.restore_data(item, as_held=as_held) for item in value)
         return value
 
     def stream_restorer(self) -> StreamRestorer:

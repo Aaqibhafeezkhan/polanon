@@ -24,7 +24,7 @@ from polanon import _canonical
 from polanon._canonical import base_form
 from polanon._known_parts import known_parts
 from polanon._matching import Ranges, type_of
-from polanon._view import detection_view
+from polanon._view import View, detection_view
 from polanon.guards.base import Guard
 from polanon.policy import TOKEN_PATTERN
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
@@ -159,6 +159,13 @@ def mask_chunks(
     """
     texts = _chunks(chunks)
     _no_judge(anonymizer, "mask_chunks")
+    return _masked_chunks(anonymizer, texts, mapping)[0]
+
+
+def _masked_chunks(
+    anonymizer: Anonymizer, texts: Sequence[str], mapping: Mapping[str, str] | None
+) -> tuple[MaskedChunks, AnonymizationResult]:
+    """Mask the passages as one text; return them cut apart, and the result for the whole."""
     result = _mask(anonymizer, _joined(texts), dict(mapping or {}))
     masked, mappings = [], []
     replaced = _replaced(result)
@@ -168,7 +175,7 @@ def mask_chunks(
         masked.append(piece)
         mappings.append(written)
         start += len(text) + len(_PASSAGE_BREAK)
-    return MaskedChunks(texts=masked, mappings=mappings, mapping=dict(result.mapping))
+    return MaskedChunks(texts=masked, mappings=mappings, mapping=dict(result.mapping)), result
 
 
 def index_chunks(
@@ -183,12 +190,29 @@ def index_chunks(
     texts = _chunks(chunks)
     for _ in range(_ATTEMPTS):
         joined = [_joined(texts)]
-        masker = _with_store_hits(anonymizer, pseudonyms, joined, store) if lookup else anonymizer
+        wanted = _wanted(pseudonyms, joined) if lookup else {}
+        held = _get(store, list(wanted)) if lookup else {}
         # Tokens the passages hold already, as when masked text is indexed again, are known
         # values: left whole, and restored as the store has them.
-        masked = mask_chunks(masker, texts, stored_mapping(store, *texts))
+        masked, result = _masked_chunks(
+            _with_hits(anonymizer, _hits(pseudonyms, wanted, held)),
+            texts,
+            stored_mapping(store, *texts),
+        )
         entries = _entries(pseudonyms, masked.mapping)
         entries = _surnames(pseudonyms, masked.mapping) | entries
+        # A surname the document named by the full name is found alone in its other forms,
+        # "Wróblowi" or "Wróbla", only by the lookup, which knew it only once it was stored. What
+        # the document is about to store is looked up among the runs of words already read, and
+        # where one lies outside everything masked, the document is masked once more with it.
+        pending = {token: entry for token, entry in entries.items() if token in wanted}
+        pending = {token: entry for token, entry in pending.items() if token not in held}
+        found = _hits(pseudonyms, wanted, pending)
+        if _left_in_the_clear(found, result, detection_view(joined[0])):
+            masker = _with_hits(anonymizer, _hits(pseudonyms, wanted, {**held, **pending}))
+            masked = _masked_chunks(masker, texts, stored_mapping(store, *texts))[0]
+            entries = _entries(pseudonyms, masked.mapping)
+            entries = _surnames(pseudonyms, masked.mapping) | entries
         # Asked first, so a pass that meets a collision writes nothing: written and then masked
         # again, a value moved to a longer token left its personal data under one nothing uses.
         if _record_collisions(pseudonyms, entries, _get(store, list(entries))):
@@ -437,24 +461,13 @@ def _with_store_hits(
     any detection, so the question gets the token the documents have. A capitalised word alone
     counts only when it is no bare first name, as a lowercase one never does.
     """
+    return _with_hits(anonymizer, _store_hits(pseudonyms, texts, store))
+
+
+def _with_hits(anonymizer: Anonymizer, hits: Mapping[str, list[Span]]) -> Anonymizer:
+    """The anonymizer with the store's hits as one more guard, or as it is without any."""
     from polanon import Anonymizer as Facade  # the facade imports this module
 
-    wanted: dict[str, list[tuple[str, int, int, str]]] = {}
-    for text in texts:
-        view = detection_view(text)
-        seen = text if view is None else view.text
-        for start, end in _candidates(seen):
-            for entity_type in _LOOKED_UP:
-                token = pseudonyms.token(seen[start:end], entity_type)
-                wanted.setdefault(token, []).append((seen, start, end, entity_type))
-    held = _get(store, list(wanted))
-    hits: dict[str, list[Span]] = {}
-    for token, entry in held.items():
-        for seen, start, end, entity_type in wanted.get(token, ()):
-            if pseudonyms.fingerprint(seen[start:end], entity_type) == entry.fingerprint:
-                hits.setdefault(seen, []).append(
-                    Span(start, end, entity_type, 0.9, _StoreHits.name)
-                )
     if not hits:
         return anonymizer
     return Facade(
@@ -463,6 +476,73 @@ def _with_store_hits(
         allowlist=anonymizer.allowlist,
         pseudonyms=anonymizer.pseudonyms,
     )
+
+
+def _left_in_the_clear(
+    hits: Mapping[str, list[Span]], result: AnonymizationResult, view: View | None
+) -> bool:
+    """Whether a hit lies anywhere outside the ranges `result` masked.
+
+    The hits are spans of the text as the guards read it, so a soft hyphen or a combining accent
+    inside a surname does not hide it; each is taken back to the original and looked up among the
+    masked ranges by halving, so a document of thousands of names costs no more than reading them.
+    """
+    masked = sorted((span.start, span.end) for span in result.spans)
+    starts = [start for start, _ in masked]
+    for spans in hits.values():
+        for span in spans:
+            hit = span if view is None else view.to_original(span)
+            at = bisect_right(starts, hit.start) - 1
+            if at < 0 or masked[at][1] < hit.end:
+                return True
+    return False
+
+
+#: Token -> every run of words of a text that would get it: (the text as read, start, end, type).
+_Wanted = dict[str, list[tuple[str, int, int, str]]]
+
+
+def _store_hits(
+    pseudonyms: Pseudonyms, texts: Sequence[str], store: MappingStore
+) -> dict[str, list[Span]]:
+    """Return, for each of `texts` as the guards read it, the spans of values the store holds."""
+    wanted = _wanted(pseudonyms, texts)
+    return _hits(pseudonyms, wanted, _get(store, list(wanted)))
+
+
+def _wanted(pseudonyms: Pseudonyms, texts: Sequence[str]) -> _Wanted:
+    """Return the token of every run of words in `texts` that could be a name, of each type.
+
+    The expensive part of a lookup, a keyed hash per run and type, so it is done once per text.
+    """
+    wanted: _Wanted = {}
+    for text in texts:
+        view = detection_view(text)
+        seen = text if view is None else view.text
+        for start, end in _candidates(seen):
+            for entity_type in _LOOKED_UP:
+                token = pseudonyms.token(seen[start:end], entity_type)
+                wanted.setdefault(token, []).append((seen, start, end, entity_type))
+    return wanted
+
+
+def _hits(
+    pseudonyms: Pseudonyms, wanted: _Wanted, held: Mapping[str, StoredValue]
+) -> dict[str, list[Span]]:
+    """Return the runs of `wanted` whose token `held` has for the same value, as spans per text."""
+    hits: dict[str, list[Span]] = {}
+    # A name is written many times in a document; its fingerprint is a keyed hash, taken once.
+    fingerprints: dict[tuple[str, str], str] = {}
+    for token, entry in held.items():
+        for seen, start, end, entity_type in wanted.get(token, ()):
+            key = (seen[start:end], entity_type)
+            if key not in fingerprints:
+                fingerprints[key] = pseudonyms.fingerprint(*key)
+            if fingerprints[key] == entry.fingerprint:
+                hits.setdefault(seen, []).append(
+                    Span(start, end, entity_type, 0.9, _StoreHits.name)
+                )
+    return hits
 
 
 def _candidates(text: str) -> list[tuple[int, int]]:

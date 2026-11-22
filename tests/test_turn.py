@@ -182,6 +182,38 @@ def test_a_person_comes_back_in_the_case_the_model_asks_for():
     assert turn.unknown_tokens("Kto to <OSOBA_9:wołacz> i <OSOBA_1:wołacz>?") == ["<OSOBA_9>"]
 
 
+def test_a_tool_that_looks_records_up_gets_the_values_as_they_were_masked():
+    """PolCRM and PolSales each wrote this: a tool searches the records the tokens were masked
+    from, and "Jana Kowalskiego" finds nobody where the records say "Jan Kowalski"."""
+    turn = anonymizer.turn()
+    turn.mask_data({"client": "Jan Kowalski", "phone": "600 100 200"})
+    arguments = {"who": ["<OSOBA_1:dopełniacz>", "<OSOBA_1>"], "phone": ("<TELEFON_1:mianownik>",)}
+    assert turn.restore_data(arguments, as_held=True) == {
+        "who": ["Jan Kowalski", "Jan Kowalski"],
+        "phone": ("600 100 200",),
+    }
+    assert turn.restore_data(arguments)["who"] == ["Jana Kowalskiego", "Jan Kowalski"]
+    assert turn.restore("<OSOBA_1:wołacz> i <OSOBA_9:wołacz>", as_held=True) == (
+        "Jan Kowalski i <OSOBA_9:wołacz>"
+    )
+
+
+def test_an_application_checks_what_it_is_about_to_send_with_the_core_s_last_check():
+    """PolGate wrote its own check, with the masking's thresholds copied by hand; the gateway's
+    check is in the core now, with the rules the masking follows."""
+    from polanon import leaked_tokens
+    from polanon.gateway.payloads import leaked_tokens as gateway_check
+
+    assert gateway_check is leaked_tokens
+    turn = anonymizer.turn()
+    messages = turn.mask_messages([{"role": "user", "content": "Pani Ewa Kot, tel. 600 100 200."}])
+    assert leaked_tokens(messages, turn.mapping) == []
+    replayed = [*messages, {"role": "user", "content": "Jeszcze raz: Ewa Kot, 600 100 200."}]
+    assert leaked_tokens(replayed, turn.mapping) == ["<OSOBA_1>", "<TELEFON_1>"]
+    # A short surname inside a longer word, and an id from code, are not what the masking masks.
+    assert leaked_tokens({"id": "Kot", "content": "Kotwica i kotlet."}, {"<OSOBA_2>": "Kot"}) == []
+
+
 def test_a_restorer_taken_early_knows_the_tokens_of_later_tool_results():
     turn = anonymizer.turn()
     turn.mask("Jan Kowalski")

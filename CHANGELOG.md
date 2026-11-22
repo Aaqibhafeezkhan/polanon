@@ -7,6 +7,46 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Added
+
+- **Open WebUI behind the gateway in one command**, for a team that already works in Open WebUI;
+  a company choosing a chat is pointed to PolGate. `deploy/open-webui/` holds a Compose file
+  that starts the gateway's image and Open WebUI together: the gateway keeps the provider's key and
+  its port stays unpublished, Open WebUI gets the gateway's address and key, its Ollama connection
+  is off, and port 3000 is on this machine alone. CI starts the stack with a stand-in provider and
+  checks that a call leaves masked and comes back restored.
+- **`polanon.leaked_tokens(payload, mapping)`**, the gateway's last check before a call leaves,
+  in the core for any application: it returns the tokens whose values would still go out in a
+  text or a request body, by the rules the masking follows, and never the values. It was in
+  `polanon.gateway.payloads`, which still has it, so an application that builds its own payloads
+  no longer copies the masking's thresholds by hand.
+- **`MaskedTurn.restore_data(value, as_held=True)`** and `restore(text, as_held=True)`, for tool
+  arguments a tool looks up in the records they were masked from: every value comes back as it
+  was masked and a case the model added is dropped, so `<OSOBA_1:dopełniacz>` is "Jan Kowalski",
+  as the records hold it, not "Jana Kowalskiego". The default still declines.
+
+### Fixed
+
+- **A denylisted company is found without its legal form, and a number however it is grouped.**
+  An e-mail says "Siłownia Testowa" where the list says "Siłownia Testowa Sp. z o.o.", and the
+  short name went out; it is masked now, written as on the list or in capitals, when two words or
+  more are left and they are not a person's name. One word alone, such as "Partner" or "Budex", is
+  in too many sentences that do not name the company, a person named by a partnership, "Jan
+  Kowalski Sp. j.", stays one person, and "moje biuro rachunkowe" is not "Biuro Rachunkowe Sp. z
+  o.o.". A listed number of nine digits or more, such as a NIP, is found with or without spaces,
+  hyphens, dots or slashes between its digits; a shorter one is matched as written, since grouped
+  otherwise it is a date or an amount. `MaskedTurn(known=...)` gets both, since it masks known
+  values with the denylist.
+- **The sweep no longer reports a known person the restore declined.** "Janie Kowalski", restored
+  from `<OSOBA_1:wołacz>` where the mapping held "Janowi Kowalskiemu", changes the stem, and every
+  such answer was reported as naming a person nobody sent.
+- **A surname alone in another case is masked the first time a document is indexed.** "Jan
+  Wróbel" gave the store the surname, but "Wróblowi" and "Wróbla" further on went to the index in
+  the clear until the document was indexed again. The document is now masked once more with what it
+  is about to store, and only when that finds a value outside everything the first masking masked,
+  also behind a soft hyphen. A document where it does takes about a fifth longer, one where it does
+  not as long as before.
+
 ## [0.4.1] - 2026-11-19
 
 A patch release: the fixes from an independent review of 0.4.0, each reproduced before it was

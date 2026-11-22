@@ -33,7 +33,13 @@ class _Values(Protocol):
     def get(self, token: str, /) -> str | None: ...
 
 
-def restored(text: str, mapping: _Values, *, escape: Callable[[str], str] | None = None) -> str:
+def restored(
+    text: str,
+    mapping: _Values,
+    *,
+    escape: Callable[[str], str] | None = None,
+    as_held: bool = False,
+) -> str:
     """Put the original values back in place of the tokens `mapping` knows; others stay.
 
     A token with a case, ``<OSOBA_1:wołacz>``, gives a person's name declined into it: "Janie
@@ -44,6 +50,9 @@ def restored(text: str, mapping: _Values, *, escape: Callable[[str], str] | None
         text: an answer, or any text with tokens.
         mapping: token -> original value; anything with ``get``.
         escape: applied to every value put back, such as escaping it for a JSON string.
+        as_held: give every value as the mapping holds it and drop the case, for a value that
+            code compares rather than a person reads, such as a name a tool looks up in the
+            records it was masked from.
     """
 
     def value(match: re.Match[str]) -> str:
@@ -51,7 +60,7 @@ def restored(text: str, mapping: _Values, *, escape: Callable[[str], str] | None
         original = mapping.get(token)
         if original is None or original == token:
             return match[0]  # unknown, or a placeholder typed as it is: it stays as written
-        if match["case"] is not None:
+        if match["case"] is not None and not as_held:
             entity_type = LABEL_TO_ENTITY.get(match["label"], match["label"])
             original = inflected(original, entity_type, match["case"]) or original
         return original if escape is None else escape(original)

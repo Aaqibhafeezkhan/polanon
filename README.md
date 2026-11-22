@@ -490,7 +490,7 @@ The image is tagged with the version, such as `0.4.1`, the minor version, `0.4`,
 |---|---|
 | Hermes Agent | `base_url` of the model or of a named provider in `config.yaml` |
 | n8n | the Base URL of the OpenAI credential |
-| Open WebUI | the URL of an OpenAI API connection |
+| Open WebUI | the URL of an OpenAI API connection; a team already on it can start both with [deploy/open-webui](deploy/open-webui/), and one choosing a chat now has [PolGate](#used-by) |
 | LibreChat | the `baseURL` of a custom endpoint in `librechat.yaml` |
 | an app on Anthropic's SDK, Claude Code | `base_url`, or `ANTHROPIC_BASE_URL`, as `http://127.0.0.1:8787` |
 
@@ -637,7 +637,9 @@ it. Store the mapping the way you would store the original document.
 **Replaying a conversation?** `mask_known_values(text, mapping)` masks every value a mapping already
 holds in text that was masked earlier, such as history sent again after a new value got its token.
 The same call checks a payload before it leaves: `mask_known_values(payload, mapping) == payload`
-means no value the mapping holds is left where the library would mask it.
+means no value the mapping holds is left where the library would mask it. For a whole request
+body, `leaked_tokens(body, mapping)` names the tokens whose values would still go out, never the
+values, so the result may be logged; the gateway runs it on every call.
 
 **Words of your own.** In-house names no rule can know, such as a project codename or a client,
 go on a denylist and are masked wherever they appear, in any case and across line breaks:
@@ -645,6 +647,10 @@ go on a denylist and are masked wherever they appear, in any case and across lin
 ```python
 guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=False)
 ```
+
+A company listed with its legal form, "Siłownia Testowa Sp. z o.o.", is found without it too when
+two words or more are left, written as on the list or in capitals, and a listed number of nine
+digits or more, such as a NIP, however its digits are grouped.
 
 **Checking the answer.** After restoring, `anonymizer.sweep(restored, mapping)` reports tokens the
 model invented and personal data its answer added: `report.is_clean`, or `report.unknown_tokens`

@@ -505,7 +505,7 @@ z wersją pomniejszą, `0.4`, i `latest`.
 |---|---|
 | Hermes Agent | `base_url` modelu albo nazwanego dostawcy w `config.yaml` |
 | n8n | Base URL w poświadczeniach OpenAI |
-| Open WebUI | adres połączenia z API OpenAI |
+| Open WebUI | adres połączenia z API OpenAI; zespół, który już go używa, uruchomi oba naraz z [deploy/open-webui](deploy/open-webui/), a ten, który dopiero wybiera czat, ma [PolGate](#kto-korzysta-z-polanon) |
 | LibreChat | `baseURL` własnego endpointu w `librechat.yaml` |
 | aplikacja na SDK Anthropic, Claude Code | `base_url` albo `ANTHROPIC_BASE_URL` jako `http://127.0.0.1:8787` |
 
@@ -661,7 +661,9 @@ odwraca. Przechowuj mapowanie tak samo jak oryginalny dokument.
 wcześniej każdą wartość, którą mapowanie już zawiera, na przykład w historii wysyłanej ponownie po
 tym, jak nowa wartość dostała swój token. To samo wywołanie sprawdza treść przed wysłaniem:
 `mask_known_values(payload, mapping) == payload` oznacza, że żadna wartość z mapowania nie została
-w miejscu, w którym biblioteka by ją zamaskowała.
+w miejscu, w którym biblioteka by ją zamaskowała. Dla całego ciała żądania
+`leaked_tokens(body, mapping)` podaje tokeny, których wartości nadal by wyszły, nigdy same
+wartości, więc wynik można zapisać w logu; bramka sprawdza tak każde wywołanie.
 
 **Własne słowa.** Wewnętrzne nazwy, których żadna reguła nie może znać, takie jak kryptonim projektu
 albo nazwa klienta, trafiają na denylistę i są maskowane wszędzie, gdzie się pojawią, bez względu na
@@ -670,6 +672,10 @@ wielkość liter, także rozdzielone podziałem wiersza:
 ```python
 guards = default_guards(denylist=["Projekt Wichura", "Zakład Nowak"], with_ner=False)
 ```
+
+Firma wpisana z formą prawną, „Siłownia Testowa Sp. z o.o.”, zostanie znaleziona także bez niej,
+jeśli zostają co najmniej dwa słowa, zapisane jak na liście albo wielkimi literami, a wpisany numer
+z co najmniej dziewięciu cyfr, na przykład NIP, bez względu na to, jak pogrupowano jego cyfry.
 
 **Sprawdzanie odpowiedzi.** Po przywróceniu `anonymizer.sweep(restored, mapping)` zgłasza tokeny
 wymyślone przez model i dane osobowe, które dodała jego odpowiedź: `report.is_clean`, a jeśli
