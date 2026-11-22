@@ -60,7 +60,9 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   the price is this.
 - **Names and places are found partly by rule, partly statistically.** A surname on its own in
   lowercase ("napisz do kowalskiego") or in a text where the full name never appears, a rare or
-  foreign first name and every place name depend on the spaCy model, which leans on capital letters and misses what people type in lowercase. A miss
+  foreign first name and every place but the town after a Polish postcode or in a form field
+  depend on the spaCy model, which leans on capital letters: it misses what people type in
+  lowercase, and a town in capitals it does not know. A miss
   is a detection gap, not a bypass, but the value still reaches the provider. The stage-2 judge
   exists to narrow this gap, not to close it.
 - **A one-word name later written in lowercase.** A capitalised one-word name is not matched in all

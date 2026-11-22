@@ -89,13 +89,20 @@ def test_every_person_is_masked_without_a_model(model_free):
     assert totals["PERSON"].masked == totals["PERSON"].gold
 
 
-def test_the_guards_without_a_model_cover_four_fifths_of_the_corpus(model_free):
+def test_the_guards_without_a_model_cover_nine_tenths_of_the_corpus(model_free):
     totals, extra, documents = model_free
     gold = sum(score.gold for score in totals.values())
     masked = sum(score.masked for score in totals.values())
     assert documents >= 10
-    assert masked / gold >= 0.8
+    assert masked / gold >= 0.9
     assert extra == 0
+
+
+def test_the_town_after_a_polish_postcode_is_masked_without_a_model(model_free):
+    """Places came from the model alone, and without one the discharge summary lost "Białystok"
+    and "Choroszcz", the towns of its addresses. Those left are places in prose and abroad."""
+    totals, _, _ = model_free
+    assert totals["LOCATION"].masked >= 13
 
 
 @needs_model
@@ -118,6 +125,7 @@ def test_adding_the_polish_model_covers_almost_everything():
 def test_places_and_companies_are_what_the_model_adds():
     totals, _, _ = run(guards_for(with_ner=True, spacy_model="pl_core_news_md"))
     assert totals["ORG"].masked == totals["ORG"].gold
-    # A Polish model misses one "Kraków", and "Bristol" and one "Zürich" on the foreign invoices.
-    assert totals["LOCATION"].masked >= totals["LOCATION"].gold - 3
+    # A Polish model misses "Bristol" and one "Zürich" on the foreign invoices, next to a British
+    # and a Swiss postcode, which the rule for the town after a Polish one does not read.
+    assert totals["LOCATION"].masked >= totals["LOCATION"].gold - 2
     assert totals["PERSON"].masked == totals["PERSON"].gold

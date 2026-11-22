@@ -193,3 +193,33 @@ def test_the_shipped_filter_drops_a_month_and_keeps_a_name():
     assert "February" not in found
     without = NerGuard(ml_filter=False)
     assert "February" in {text[s.start : s.end] for s in without.detect(text, {"PERSON"})}
+
+
+HARD_NAMES = [
+    "Pani Joanna Wiśniewska zadzwoni jutro w sprawie umowy.",
+    "Spotkanie z Grzegorzem Brzęczyszczykiewiczem odbędzie się w Łodzi.",
+    "Od roku mieszkam w Szczebrzeszynie, a pracuję w Zamościu.",
+    "Zamówienie złożyła Hurtownia Pod Lipą z Kalisza.",
+    "Wczoraj Ewelina i Bartosz byli w Zakopanem.",
+    "Przyszli pan Kowal i pani Wrona, a potem pan Lis.",
+    "Rozmawiałem wczoraj z Ołeksandrem Kowalenką o wynajmie.",
+    "Hasan Yılmaz przyjechał do Poznania z Ankary.",  # noqa: RUF001 - the Turkish dotless i
+]
+
+
+@pytest.mark.parametrize("text", HARD_NAMES)
+def test_the_shipped_filter_drops_no_name_the_model_finds_in_hard_cases(text):
+    """Names the filter could learn to drop, fitted as it is on OpenPII and KPWr: a long surname
+    in the instrumental, small towns, a company without a legal form, surnames that are words,
+    names from Ukraine and Turkey. A name it drops is a name that leaks."""
+    pytest.importorskip("spacy")
+    try:
+        guard = NerGuard()
+        guard._get_pipeline()
+    except RuntimeError:
+        pytest.skip("pl_core_news_md is not installed")
+    types = {"PERSON", "LOCATION", "ORG"}
+    kept = {(s.start, s.end) for s in detect(text, None, types, [guard])}
+    found = {(s.start, s.end) for s in detect(text, None, types, [NerGuard(ml_filter=False)])}
+    assert found
+    assert [text[start:end] for start, end in sorted(found - kept)] == []

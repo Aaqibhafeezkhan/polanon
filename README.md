@@ -91,8 +91,8 @@ Plusgiro and sort codes, international phone numbers, street addresses and postc
 | Polish identifiers with a checksum | PESEL, NIP, REGON, ID card, IBAN, payment cards | PESEL; IBAN and payment cards in general | PESEL, NIP, REGON, IBAN, payment cards; ID card and passport by pattern only | None; IBAN and payment cards in general |
 | Polish names in every grammatical case | For listed first names and the surnames that agree with them, without a language model; spaCy adds the rest | With a Polish spaCy model and its `persName` label mapped | Not detected | Not detected; its README suggests adding an NER model |
 | What the core needs | Nothing beyond the standard library | spaCy, numpy, pydantic and a few more; a language model only for names and places | pii-core and typer | Nothing beyond the standard library |
-| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% of 5,255 values masked whole with `pl_core_news_md`, 306 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
-| On polanon's own [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md), tuned on | 98% fully masked with `pl_core_news_md`, 86% with rules alone | 67% with the same model | Not measured | Not measured |
+| On Polish data neither was tuned on ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 72% of 5,255 values masked whole with `pl_core_news_md`, 306 false alarms; 90% of people in real text | 66%, 2,641 false alarms; 90% of people (presidio-analyzer 2.2.366, same model) | Not measured | Not measured |
+| On polanon's own [sample documents](https://github.com/boromat/polanon/blob/main/benchmarks/README.md), tuned on | 99% fully masked with `pl_core_news_md`, 93% with rules alone | 67% with the same model | Not measured | Not measured |
 | License | MIT | MIT | Apache-2.0 | MIT |
 
 Compared from each project's own documentation and source on 3 November 2026; measured on 17
@@ -582,8 +582,8 @@ what the gateway protects and what it does not.
 ## What it detects
 
 Checksum-validated Polish identifiers (PESEL, NIP, REGON, ID card, IBAN, payment cards), KRS numbers
-next to their label, e-mail addresses and phone numbers, street addresses and postcodes, links to
-a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
+next to their label, e-mail addresses and phone numbers, street addresses, postcodes and the town
+after one, links to a person's profile (LinkedIn, GitHub, GitHub Pages, GitLab, social media) up to the handle, IPv4
 and IPv6, MAC addresses, vehicle registrations after their label ("nr rej."), VINs, passport
 numbers, driving licence numbers after their label, birth dates, API keys, tokens and passwords, Polish first names with their surnames, and
 company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). Once a person or a
@@ -593,16 +593,17 @@ text: "Kowalski" after "Jan Kowalski", in another case too, "Lisowi" after "Kata
 JSON field after "github.com/jkowalski". A case whose stem changes, "Kozła" or "Dudzie", is
 masked as a whole word where its capital tells a name: inside a sentence and not in a place's
 name, so "Zimą jest zimno" and "w Zielonej Górze" stay after "Jan Zima" and "Michał Góra".
-With the `ner` extra, a spaCy model adds places and the names nothing else marks. An optional
-second stage lets a small local model review the *masked* text for what still identifies someone
+With the `ner` extra, a spaCy model adds the places outside an address or a form field and the
+names nothing else marks. An optional second stage lets a small local model review the *masked*
+text for what still identifies someone
 by context. Other dates are recognised too, but left readable unless you ask for them.
 
 Text copied from PDFs, Word or macOS is read as a person would read it: letters written as a base
 letter plus an accent, no-break spaces and en dashes inside numbers, and invisible zero-width
 characters do not hide a value. The mapping keeps each value as it was first written.
 
-On the annotated sample documents in the repository, the rules alone fully mask 86% of the
-values and the rules with `pl_core_news_md` mask 98%, with nothing left half-masked. Thirteen short
+On the annotated sample documents in the repository, the rules alone fully mask 93% of the
+values and the rules with `pl_core_news_md` mask 99%, with nothing left half-masked. Thirteen short
 documents are a regression check, not a research benchmark: see the
 [benchmark notes](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) for what is
 missed and why, and for Presidio on them with the same model: 67% fully masked, 77% at its

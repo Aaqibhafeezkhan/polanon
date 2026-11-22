@@ -95,8 +95,8 @@ pocztowe.
 | Polskie identyfikatory z sumą kontrolną | PESEL, NIP, REGON, dowód osobisty, IBAN, karty płatnicze | PESEL; IBAN i karty płatnicze w wersji ogólnej | PESEL, NIP, REGON, IBAN, karty płatnicze; dowód osobisty i paszport tylko według wzorca | Brak; IBAN i karty płatnicze w wersji ogólnej |
 | Polskie imiona i nazwiska w każdym przypadku gramatycznym | Dla imion z listy i zgodnych z nimi nazwisk, bez modelu językowego; resztę dokłada spaCy | Z polskim modelem spaCy i zmapowaną etykietą `persName` | Nie są wykrywane | Nie są wykrywane; jego README sugeruje dodanie modelu NER |
 | Czego potrzebuje rdzeń | Niczego poza biblioteką standardową | spaCy, numpy, pydantic i kilku innych pakietów; modelu językowego tylko do imion i nazwisk oraz miejsc | pii-core i typer | Niczego poza biblioteką standardową |
-| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 71% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 306 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
-| Na własnych [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon, na których była strojona | 98% zamaskowanych w całości z `pl_core_news_md`, 86% przy samych regułach | 67% z tym samym modelem | Nie mierzono | Nie mierzono |
+| Na polskich danych, na których żadne nie było strojone ([OpenPII, KPWr](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#on-data-polanon-was-never-tuned-on)) | 72% z 5255 wartości zamaskowanych w całości z `pl_core_news_md`, 306 fałszywych alarmów; 90% osób w prawdziwych tekstach | 66%, 2641 fałszywych alarmów; 90% osób (presidio-analyzer 2.2.366, ten sam model) | Nie mierzono | Nie mierzono |
+| Na własnych [przykładowych dokumentach](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) biblioteki polanon, na których była strojona | 99% zamaskowanych w całości z `pl_core_news_md`, 93% przy samych regułach | 67% z tym samym modelem | Nie mierzono | Nie mierzono |
 | Licencja | MIT | MIT | Apache-2.0 | MIT |
 
 Porównanie na podstawie własnej dokumentacji i kodu źródłowego każdego z projektów, stan na
@@ -600,9 +600,9 @@ opisuje, przed czym bramka chroni, a przed czym nie.
 ## Co wykrywa
 
 Polskie identyfikatory walidowane sumą kontrolną (PESEL, NIP, REGON, dowód osobisty, IBAN, karty
-płatnicze), numery KRS obok swojej etykiety, adresy e-mail i numery telefonów, adresy i kody
-pocztowe, linki do profilu osoby (LinkedIn, GitHub, GitHub Pages, GitLab, media społecznościowe) aż
-po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów po etykiecie
+płatnicze), numery KRS obok swojej etykiety, adresy e-mail i numery telefonów, adresy, kody
+pocztowe i miejscowość po kodzie, linki do profilu osoby (LinkedIn, GitHub, GitHub Pages, GitLab,
+media społecznościowe) aż po nazwę użytkownika, IPv4 i IPv6, adresy MAC, numery rejestracyjne pojazdów po etykiecie
 („nr rej.”), numery VIN, numery paszportów, numery praw jazdy po etykiecie, daty urodzenia, klucze API, tokeny i hasła, polskie
 imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp. z o.o.”, „S.A.”,
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
@@ -612,18 +612,18 @@ po „Adam Kozieł”, oraz „jkowalski” w polu JSON po „github.com/jkowals
 zmienia się temat, „Kozła” albo „Dudzie”, jest maskowany jako całe słowo tam, gdzie wielka litera
 wskazuje imię lub nazwisko: wewnątrz zdania i nie w nazwie miejsca, więc „Zimą jest zimno” i
 „w Zielonej Górze” zostają po „Jan Zima” i „Michał Góra”. Z dodatkiem `ner` model spaCy dokłada
-miejsca i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala
-małemu lokalnemu modelowi przejrzeć *zamaskowany* tekst pod kątem tego, co z kontekstu wciąż
-pozwala kogoś zidentyfikować. Pozostałe daty też są rozpoznawane, ale zostają czytelne, chyba że
-poprosisz o ich maskowanie.
+miejsca poza adresem i polem formularza oraz nazwy, których nie wykrywa nic innego. Opcjonalny
+drugi etap pozwala małemu lokalnemu modelowi przejrzeć *zamaskowany* tekst pod kątem tego, co
+z kontekstu wciąż pozwala kogoś zidentyfikować. Pozostałe daty też są rozpoznawane, ale zostają
+czytelne, chyba że poprosisz o ich maskowanie.
 
 Tekst skopiowany z PDF-ów, Worda albo macOS jest czytany tak, jak przeczytałby go człowiek: litery
 zapisane jako litera bazowa plus znak diakrytyczny, spacje niełamiące i półpauzy wewnątrz liczb oraz
 niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Mapowanie przechowuje każdą wartość
 w postaci, w jakiej została zapisana za pierwszym razem.
 
-Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 86% wartości,
-a reguły z `pl_core_news_md` 98%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście
+Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 93% wartości,
+a reguły z `pl_core_news_md` 99%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście
 krótkich dokumentów to test regresji, a nie benchmark badawczy:
 [notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md) opisują,
 co zostaje przeoczone i dlaczego, i podają wynik Presidio na nich z tym samym modelem: 67%
