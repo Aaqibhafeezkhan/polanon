@@ -10,5 +10,7 @@ on its own.
 Nothing here is a hosted service. Install it with ``pip install "polanon[gateway]"`` and start it
 with ``polanon-gateway --upstream https://api.openai.com/v1``; the machine it runs on, its keys
 and its logs are the operator's. :mod:`polanon.gateway.payloads` holds the masking of the payloads
-and needs nothing beyond the standard library; :mod:`polanon.gateway.app` serves them over HTTP.
+and needs nothing beyond the standard library; :mod:`polanon.gateway.app` serves them over HTTP,
+and :mod:`polanon.gateway.workers` masks several calls at once, in processes of their own, for
+``--workers N``.
 """

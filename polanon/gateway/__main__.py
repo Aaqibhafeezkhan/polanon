@@ -5,8 +5,8 @@
 
 The tool that talks to the model then points its base URL at ``http://127.0.0.1:8787/v1``. The
 gateway listens on this machine only unless told otherwise, and then only with a key every client
-must send. Keys come from the environment, never from the command line, where other users of the
-machine could read them:
+must send. ``--workers N`` masks N calls at once, in processes of their own. Keys come from the
+environment, never from the command line, where other users of the machine could read them:
 
     POLANON_UPSTREAM_KEY   the provider's key, sent in place of the client's own
     POLANON_GATEWAY_KEY    the key clients must send; required to listen beyond this machine
@@ -16,24 +16,16 @@ machine could read them:
 from __future__ import annotations
 
 import argparse
+import functools
 import ipaddress
 import logging
 import os
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from pathlib import Path
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Literal
 
-from polanon import (
-    WELL_KNOWN_NAMES,
-    Allowlist,
-    Anonymizer,
-    Pseudonyms,
-    default_guards,
-    ner_available,
-)
-from polanon.allowlist import NAME_TYPES, PROTECTED_SOURCES
-from polanon.policy import Mode
+from polanon.gateway._build import anonymizer as _anonymizer
+from polanon.gateway._build import worker_anonymizer
 
 #: Exit status for a setting the gateway refuses to start with.
 BAD_SETTING = 2
@@ -53,7 +45,8 @@ def main(
 
     Args:
         argv: the arguments; None reads them from the command line.
-        environ: where the keys are read from; None reads the process's environment.
+        environ: where the keys are read from; None reads the process's environment. With
+            ``--workers`` its POLANON_KEY must be the process's own, which the workers inherit.
         serve: runs the application; None serves it with uvicorn.
 
     Returns:
@@ -74,22 +67,32 @@ def main(
             file=sys.stderr,
         )
         return BAD_SETTING
+    if args.workers > 1 and _key(env) != _key(os.environ):
+        # Each worker reads the key from the environment it inherits, which is this process's:
+        # with another key, or none, its tokens would not be the ones the banner promises.
+        print(
+            "with --workers each masking process reads POLANON_KEY from this process's "
+            "environment, which does not hold the key given: set it there",
+            file=sys.stderr,
+        )
+        return BAD_SETTING
     try:
         anonymizer, detection = _anonymizer(args, env)
+        config = GatewayConfig(
+            upstream=args.upstream,
+            upstream_key=env.get("POLANON_UPSTREAM_KEY") or None,
+            gateway_key=gateway_key,
+            instructions=None if args.instructions == "none" else args.instructions,
+            unsupported=_unsupported(args),
+            max_body=args.max_body_mb * 1024 * 1024,
+            timeout=args.timeout,
+            pii_map=args.pii_map,
+            workers=args.workers,
+        )
+        app = Gateway(anonymizer, config, build=functools.partial(worker_anonymizer, args))
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return BAD_SETTING
-    config = GatewayConfig(
-        upstream=args.upstream,
-        upstream_key=env.get("POLANON_UPSTREAM_KEY") or None,
-        gateway_key=gateway_key,
-        instructions=None if args.instructions == "none" else args.instructions,
-        unsupported=_unsupported(args),
-        max_body=args.max_body_mb * 1024 * 1024,
-        timeout=args.timeout,
-        pii_map=args.pii_map,
-    )
-    app = Gateway(anonymizer, config)
     print(_banner(args, config, detection), file=sys.stderr)
     (serve or _uvicorn)(app, args.host, args.port)
     return 0
@@ -172,86 +175,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout", type=float, default=600.0, help="seconds to wait for the provider"
     )
-    return parser
-
-
-def _anonymizer(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[Anonymizer, str]:
-    """The anonymizer every call is masked with, and a few words on how it detects.
-
-    Raises:
-        ValueError: for a POLANON_KEY that is not 64 hexadecimal characters; the key itself is never
-            part of the message.
-    """
-    with_ner = not args.rules_only and ner_available(args.spacy_model)
-    detection = f"rules and {args.spacy_model}" if with_ner else "rules alone"
-    if not args.rules_only and not with_ner:
-        detection += " (spaCy or the model is not installed: places are not masked)"
-    mode: Mode = "paranoid" if args.paranoid else "normal"
-    if args.paranoid:
-        detection += (
-            " in paranoid mode" if with_ner else " (--paranoid needs the spaCy model: no change)"
-        )
-    pseudonyms = None
-    if env.get("POLANON_KEY"):
-        try:
-            pseudonyms = Pseudonyms(bytes.fromhex(env["POLANON_KEY"]))
-        except ValueError:
-            raise ValueError(
-                "POLANON_KEY must be at least 64 hexadecimal characters, such as the output of "
-                'python -c "import secrets; print(secrets.token_hex(32))"'
-            ) from None
-        detection += ", stable tokens"
-    operator = [*args.allow, *_names_in(args.allow_file)]
-    well_known = () if args.no_well_known_names else WELL_KNOWN_NAMES
-    allowlist = _OperatorNames(well_known, operator) if operator or well_known else None
-    if operator:
-        detection += f", {len(operator)} of the operator's names left readable"
-    anonymizer = Anonymizer(
-        default_guards(with_ner=with_ner, spacy_model=args.spacy_model, mode=mode),
-        allowlist=allowlist,
-        pseudonyms=pseudonyms,
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        metavar="N",
+        help="mask N calls at once, each in a process of its own with its own copy of the spaCy "
+        "model, about 330 MB each; one at a time in this process by default",
     )
-    return anonymizer, detection
-
-
-def _names_in(path: str | None) -> list[str]:
-    """The names of a file, one per line, without blank lines and comments.
-
-    Raises:
-        ValueError: when the file cannot be read; the message names the file, not its content.
-    """
-    if path is None:
-        return []
-    try:
-        lines = Path(path).read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError) as exc:
-        raise ValueError(f"cannot read the names in {path}: {type(exc).__name__}") from None
-    return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
-
-
-class _OperatorNames(Allowlist):
-    """The well-known names, and the operator's own, which stay readable even as a person.
-
-    The list of well-known names never releases a person the name guard found, since a brand on
-    it must not uncover somebody of the same name. The operator's names are named on purpose, the
-    assistant's own or the one of the person it speaks for, and are left readable whatever found
-    them; what somebody asked to mask, a denylist entry, stays masked.
-    """
-
-    def __init__(self, well_known: Iterable[str], operator: Iterable[str]) -> None:
-        operator = list(operator)
-        super().__init__([*well_known, *operator])
-        self._operator = Allowlist(operator)
-
-    def exempts(self, entity_type: str, fragment: str, source: str = "") -> bool:
-        """Leave an operator's name readable, and anything else as the well-known list does."""
-        if (
-            entity_type in NAME_TYPES
-            and source not in PROTECTED_SOURCES
-            and self._operator.allows(fragment)
-        ):
-            return True
-        return super().exempts(entity_type, fragment, source)
+    return parser
 
 
 def _loopback(host: str) -> bool:
@@ -261,6 +193,10 @@ def _loopback(host: str) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def _key(env: Mapping[str, str]) -> str | None:
+    return env.get("POLANON_KEY") or None
 
 
 def _unsupported(args: argparse.Namespace) -> Literal["refuse", "drop", "pass"]:
@@ -279,9 +215,10 @@ def _banner(args: argparse.Namespace, config: Any, detection: str) -> str:
         keys = "the client's key is passed on"
     unmasked = "; images and files go to the provider unmasked" if args.pass_unsupported else ""
     mapping = "; clients may ask for each call's mapping" if config.pii_map else ""
+    workers = f" in {config.workers} processes" if config.workers > 1 else ""
     return (
         f"polanon gateway on http://{args.host}:{args.port}/v1 -> {args.upstream}; "
-        f"masking with {detection}; {keys}{unmasked}{mapping}"
+        f"masking{workers} with {detection}; {keys}{unmasked}{mapping}"
     )
 
 

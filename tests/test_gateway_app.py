@@ -292,15 +292,15 @@ async def test_a_provider_out_of_reach_gives_a_bad_gateway():
 
 async def test_a_payload_that_would_still_carry_a_value_is_not_sent(monkeypatch):
     """The last check stands apart from the masking: a field the masking missed is caught."""
-    from polanon.gateway import app
+    from polanon.gateway import workers
 
-    real = app.mask_chat_request
+    real = workers.mask_chat_request
 
     def careless(turn, body, **kwargs):
         masked = real(turn, body, **kwargs)
         return {**masked, "notes": body["messages"][-1]["content"]}
 
-    monkeypatch.setattr(app, "mask_chat_request", careless)
+    monkeypatch.setattr(workers, "mask_chat_request", careless)
     provider = Provider()
     async with client(provider) as gw:
         response = await gw.post("/v1/chat/completions", json=chat("Jan Kowalski."))
