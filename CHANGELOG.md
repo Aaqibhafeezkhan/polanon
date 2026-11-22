@@ -7,6 +7,21 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-22
+
+A patch release that gathers four changes. Nothing that worked stops working the same way, and
+the stable tokens are computed as before, so an index needs no rebuilding. A surname is masked in
+the cases it was not first masked in, one of three letters with a case ending too, and a search
+index masks a lone surname in another case the first time a document is indexed, and finds its
+person by it in a question. A town after a Polish postcode or in a form field is masked in
+capitals and without a model. With the rules alone the sample documents are masked 93% whole
+instead of 86%, and the agent's calls leak 26 values of 250 instead of 40, nothing masked for
+nothing; with `pl_core_news_md`, 99% and 2 of 250. The gateway masks several calls at once with
+`--workers N` and starts behind Open WebUI with one Compose file. Its last check before a call
+leaves is in the core as `polanon.leaked_tokens`, next to `restore_data(as_held=True)` and a
+denylist that forgives a legal form and a number's grouping: the gaps the apps built on polanon
+worked around.
+
 ### Added
 
 - **Open WebUI behind the gateway in one command**, for a team that already works in Open WebUI;
