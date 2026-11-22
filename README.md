@@ -555,9 +555,12 @@ the model before the gateway accepts calls, and stop with it. A call goes to a w
 back masked, with its mapping, through a pipe on the same machine, and the worker forgets the
 values once the call is masked. Each worker reads `POLANON_KEY` from the environment it inherits,
 so stable tokens are the same whichever worker masked a call. A worker that stops, killed for
-lack of memory say, fails the calls being masked at that moment: they are refused with a 503
-and nothing is sent, the error OpenAI's and Anthropic's SDKs send again, and the next call
-starts new workers.
+lack of memory say, fails only the call it was masking, which may be what took the memory: it is
+refused with a 503 and nothing is sent, the error OpenAI's and Anthropic's SDKs send again. A new
+worker takes its place at once, and the calls waiting for a worker, or sent to one that stopped
+before it began them, go to the others or to the new one. Ctrl+C, Ctrl+Break and the SIGTERM
+systemd sends every process of a service reach the workers too: they ignore them, and the
+gateway finishes the calls it is masking before it stops them.
 
 Keys stay with whoever runs the gateway, and come from the environment only. By default the
 tool's own key is passed on; `POLANON_UPSTREAM_KEY` sends another one instead, as a bearer

@@ -20,8 +20,10 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   anonymizer from the gateway's options and reads `POLANON_KEY` from the environment it inherits,
   so the key is never pickled and stable tokens are the same in every process. The workers load
   the model before the gateway accepts calls, and a gateway whose workers cannot start does not
-  start either; a worker that stops fails the calls being masked at that moment with a 503, and
-  the next call starts new ones; each ends with the gateway, also one killed outright. Every
+  start either. A worker that stops fails only the call it was masking, with a 503, and a new
+  one takes its place, while the calls waiting for a worker go to the others or to the new one;
+  the workers ignore Ctrl+C, Ctrl+Break and SIGTERM, which the gateway answers by finishing its
+  calls first, and each ends with the gateway, also one killed outright. Every
   worker holds a model of its own, about 330 MB with `pl_core_news_md`, while the gateway's own
   process then loads none. The default stays one call at a time in the gateway's process, as
   before. `Gateway` takes `build`, which makes each worker's anonymizer, and `GatewayConfig`

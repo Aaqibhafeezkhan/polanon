@@ -570,9 +570,13 @@ model, zanim bramka zacznie przyjmować wywołania, i kończą pracę razem z ni
 do workera i wraca zamaskowane, razem z mapowaniem, przez potok na tym samym komputerze, a worker
 zapomina wartości, gdy tylko je zamaskuje. Każdy worker czyta `POLANON_KEY` ze środowiska, które
 dziedziczy, więc stabilne tokeny są takie same, niezależnie od tego, który worker zamaskował
-wywołanie. Worker, który przestanie działać, na przykład zabity z braku pamięci, psuje wywołania
-maskowane w tej chwili: są odrzucane z kodem 503 i nic nie zostaje wysłane, a SDK OpenAI
-i Anthropic ponawiają taki błąd; następne wywołanie uruchamia nowe workery.
+wywołanie. Worker, który przestanie działać, na przykład zabity z braku pamięci, psuje tylko
+wywołanie, które właśnie maskował, a to ono mogło zająć tę pamięć: jest odrzucane z kodem 503
+i nic nie zostaje wysłane, a SDK OpenAI i Anthropic ponawiają taki błąd. Jego miejsce od razu
+zajmuje nowy worker, a wywołania czekające na workera albo wysłane do takiego, który przestał
+działać, zanim je zaczął, maskują pozostałe workery albo nowy. Ctrl+C, Ctrl+Break i SIGTERM,
+który systemd wysyła każdemu procesowi usługi, docierają też do workerów: workery je ignorują,
+a bramka kończy maskowane wywołania, zanim je zatrzyma.
 
 Klucze zostają u tego, kto uruchamia bramkę, i są brane wyłącznie ze zmiennych środowiskowych.
 Domyślnie bramka przekazuje dalej klucz narzędzia; `POLANON_UPSTREAM_KEY` wysyła zamiast niego

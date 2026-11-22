@@ -13,6 +13,10 @@ itself, from the same settings as the gateway's own, and reads ``POLANON_KEY`` f
 environment it inherits: :class:`~polanon.Pseudonyms` are never pickled, so the key never travels,
 and the same key gives the same stable tokens in every process.
 
+Each process is a pool of one of its own, and the calls that wait for a process wait in the
+gateway: so a process that stops takes with it at most the call it was masking, never another
+process's call or one still waiting.
+
 The module needs nothing beyond the standard library, so a process imports neither httpx nor
 uvicorn.
 """
@@ -20,13 +24,14 @@ uvicorn.
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import itertools
 import logging
 import multiprocessing
 import os
 import signal
 import sys
 import threading
+from collections import deque
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -51,14 +56,20 @@ Kind = Literal["chat", "responses", "embeddings", "messages"]
 #: What to do with content that cannot be masked, as :class:`~polanon.gateway.app.GatewayConfig`
 #: says.
 Unsupported = Literal["refuse", "drop", "pass"]
+Masked = tuple[dict[str, Any], dict[str, str]]
 
 #: An invented text each process masks before its first call, so the call does not wait for the
 #: language model to load.
 _WARM_UP = "Jan Kowalski mieszka w Gdańsku."
-#: How long a process that is ready waits for the others, in seconds, before it says so alone.
-_READY_WAIT = 120.0
-#: The most processes a pool may have on Windows, which waits on at most 63 handles at once.
-_MOST_ON_WINDOWS = 61
+#: How many processes a call may be sent to: one that stopped before it began the call, and the
+#: one that took its place.
+_TRIES = 2
+#: What asks every process of a console or of a service to stop: Ctrl+C, Ctrl+Break on Windows,
+#: and the SIGTERM systemd sends each process of a service. The gateway answers it, finishes the
+#: calls it is masking and then stops its workers itself, so a worker ignores it.
+_STOPS: list[signal.Signals] = [signal.SIGINT, signal.SIGTERM]
+if sys.platform == "win32":
+    _STOPS.append(signal.SIGBREAK)
 
 _BLOCKS: dict[str, Literal["raise", "drop", "keep"]] = {"drop": "drop", "pass": "keep"}
 
@@ -103,9 +114,10 @@ class MaskingPool:
     """N processes that mask calls side by side, each with an anonymizer of its own.
 
     Nothing starts when the pool is made: :meth:`wait_ready` starts every process and waits
-    until each has loaded its model, and the first call starts them if nothing did. A process
-    that stops, killed for lack of memory say, fails the calls it and the others were masking,
-    which are refused as masking that failed, and the next call starts a new set of processes.
+    until each has loaded its model, and the first call starts them if nothing did. A call goes
+    to a process that is free, or waits in the gateway until one is. A process that stops, killed
+    for lack of memory say, fails the call it was masking, which is refused as masking that
+    failed, and a new process takes its place; a call it had not begun goes to the new one.
     """
 
     def __init__(self, build: Build, workers: int) -> None:
@@ -116,17 +128,18 @@ class MaskingPool:
             workers: how many processes mask at once, 2 or more.
 
         Raises:
-            ValueError: for fewer than two workers, one masks in the gateway's own process, and
-                for more than Windows lets a pool of processes have.
+            ValueError: for fewer than two workers: one masks in the gateway's own process.
         """
         if isinstance(workers, bool) or not isinstance(workers, int) or workers < 2:
             raise ValueError(f"a masking pool has 2 or more workers, not {workers!r}")
-        if sys.platform == "win32" and workers > _MOST_ON_WINDOWS:
-            raise ValueError(f"on Windows a masking pool has at most {_MOST_ON_WINDOWS} workers")
         self._build = build
         self._workers = workers
-        self._executor: ProcessPoolExecutor | None = None
-        self._ready: list[Future[int]] = []
+        self._slots: list[_Worker] | None = None
+        self._closed = False
+        self._lock = threading.Lock()
+        self._free: deque[int] = deque(range(workers))
+        self._waiting: deque[Future[int]] = deque()
+        self._numbers = itertools.count(1)
 
     @property
     def workers(self) -> int:
@@ -137,11 +150,11 @@ class MaskingPool:
         """Start every process, wait until each has built its anonymizer, and return their ids.
 
         Raises:
-            TimeoutError: when they are not ready in `timeout` seconds.
+            TimeoutError: when one is not ready in `timeout` seconds.
             BrokenProcessPool: when a process could not start or build its anonymizer.
+            MaskingUnavailableError: once the pool is closed.
         """
-        self._running()
-        return {future.result(timeout) for future in self._ready}
+        return {worker.ready.result(timeout) for worker in self._running()}
 
     async def mask(
         self,
@@ -150,69 +163,132 @@ class MaskingPool:
         *,
         instructions: str | None,
         unsupported: Unsupported,
-    ) -> tuple[dict[str, Any], dict[str, str]]:
+    ) -> Masked:
         """Mask one request in the next free process: the masked request and the call's mapping.
 
         Raises:
             GatewayRequestError: for a request the gateway refuses to forward.
             MaskingUnavailableError: when masking fails, when the request holds content that
-                cannot be masked, and when a process stopped before the call was masked.
+                cannot be masked, when the process stopped while it masked the call, and once
+                the pool is closed.
         """
-        executor = self._running()
+        number = next(self._numbers)
+        slot = await self._take()
         try:
-            future = executor.submit(_mask, kind, body, instructions, unsupported)
-            return await asyncio.wrap_future(future)
-        except BrokenProcessPool as exc:
-            self._replace(executor)
-            raise MaskingUnavailableError(
-                "a masking process stopped before the call was masked"
-            ) from exc
+            return await self._mask_in(slot, number, kind, body, instructions, unsupported)
+        finally:
+            self._give(slot)
 
     def close(self) -> None:
-        """Stop every process, and drop the calls that wait for one."""
-        executor, self._executor = self._executor, None
-        if executor is not None:
-            executor.shutdown(wait=True, cancel_futures=True)
+        """Stop every process once it has masked its call, and refuse the calls still waiting."""
+        with self._lock:
+            self._closed = True
+            slots, self._slots = self._slots or [], None
+        for worker in slots:
+            worker.executor.shutdown(wait=True, cancel_futures=True)
 
-    def _running(self) -> ProcessPoolExecutor:
-        if self._executor is None:
-            context = multiprocessing.get_context("spawn")
-            self._executor = ProcessPoolExecutor(
-                self._workers,
-                mp_context=context,
-                initializer=_start,
-                initargs=(self._build, context.Barrier(self._workers)),
-            )
-            # One task a process: each waits at the barrier until all are ready, so a process
-            # cannot take two of them, and every one of the workers is started now.
-            self._ready = [self._executor.submit(_ready) for _ in range(self._workers)]
-        return self._executor
+    async def _mask_in(
+        self,
+        slot: int,
+        number: int,
+        kind: Kind,
+        body: Mapping[str, Any],
+        instructions: str | None,
+        unsupported: Unsupported,
+    ) -> Masked:
+        """Mask the call numbered `number` in the process of `slot`, or in the one after it."""
+        call = (number, kind, body, instructions, unsupported)
+        stopped: BrokenProcessPool | None = None
+        for _ in range(_TRIES):
+            worker = self._running()[slot]
+            try:
+                return await asyncio.wrap_future(worker.executor.submit(_mask, *call))
+            except BrokenProcessPool as exc:
+                self._replace(slot, worker)
+                if worker.began.value == number:
+                    # The call itself may have stopped it, by the memory it took: sent again, it
+                    # would stop the next process too.
+                    raise MaskingUnavailableError(
+                        "the masking process stopped while it masked the call"
+                    ) from exc
+                stopped = exc
+        raise MaskingUnavailableError(
+            "a masking process stopped before the call was masked"
+        ) from stopped
 
-    def _replace(self, broken: ProcessPoolExecutor) -> None:
-        """Let the next call start new processes; the calls of the broken ones are refused."""
-        if self._executor is broken:
-            logger.error("a masking process stopped: starting a new set of %d", self._workers)
-            self._executor = None
-            broken.shutdown(wait=False, cancel_futures=True)
+    def _running(self) -> list[_Worker]:
+        with self._lock:
+            if self._closed:
+                raise MaskingUnavailableError("the masking processes have stopped")
+            if self._slots is None:
+                self._slots = [_Worker(self._build) for _ in range(self._workers)]
+            return self._slots
+
+    def _replace(self, slot: int, stopped: _Worker) -> None:
+        """Start a new process in the place of one that stopped."""
+        with self._lock:
+            if not self._closed and self._slots is not None and self._slots[slot] is stopped:
+                logger.error("a masking process stopped: starting another in its place")
+                self._slots[slot] = _Worker(self._build)
+        stopped.executor.shutdown(wait=False, cancel_futures=True)
+
+    async def _take(self) -> int:
+        """A process that is free, once there is one; calls get them in the order they came."""
+        with self._lock:
+            if self._free:
+                return self._free.popleft()
+            waiter: Future[int] = Future()
+            self._waiting.append(waiter)
+        try:
+            return await asyncio.wrap_future(waiter)
+        except asyncio.CancelledError:
+            if waiter.done() and not waiter.cancelled():
+                self._give(waiter.result())
+            raise
+
+    def _give(self, slot: int) -> None:
+        """Hand a process that is free to the call that has waited longest, if one waits."""
+        with self._lock:
+            while self._waiting:
+                waiter = self._waiting.popleft()
+                if waiter.set_running_or_notify_cancel():
+                    waiter.set_result(slot)
+                    return
+            self._free.append(slot)
 
 
-#: The anonymizer of this process and the barrier of its pool, once :func:`_start` has run.
+class _Worker:
+    """One masking process, in a pool of its own, and the number of the last call it began."""
+
+    def __init__(self, build: Build) -> None:
+        context = multiprocessing.get_context("spawn")
+        self.began = context.RawValue("q", 0)
+        self.executor = ProcessPoolExecutor(
+            1, mp_context=context, initializer=_start, initargs=(build, self.began)
+        )
+        # Starts the process now, so it loads its model before a call needs it.
+        self.ready: Future[int] = self.executor.submit(_ready)
+
+
+#: The anonymizer of this process and where it notes the call it masks, once :func:`_start` ran.
 _state: tuple[Anonymizer, Any] | None = None
 
 
-def _start(build: Build, barrier: Any) -> None:
+def _start(build: Build, began: Any) -> None:
     """Make a worker ready: its anonymizer, its model loaded, and an end with the gateway.
 
-    Ctrl+C reaches every process of a console, and the gateway stops its workers itself, after
-    the calls they mask; a gateway killed outright cannot, so each worker ends when it does.
+    Ctrl+C and Ctrl+Break reach every process of a console, and systemd stops a service by
+    sending SIGTERM to each of its processes; the gateway stops its workers itself, after the
+    calls they mask. A gateway killed outright cannot, so each worker ends when it does.
     """
     global _state
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    for stop in _STOPS:
+        signal.signal(stop, signal.SIG_IGN)
     _exit_with_parent()
     anonymizer = build()
     anonymizer.anonymize_sync(_WARM_UP, {})
     forget_prepared_searches()
-    _state = (anonymizer, barrier)
+    _state = (anonymizer, began)
 
 
 def _exit_with_parent() -> None:
@@ -229,20 +305,23 @@ def _exit_with_parent() -> None:
 
 
 def _ready() -> int:
-    """Wait until every worker of the pool is ready, and return this one's process id."""
-    if _state is not None:
-        with contextlib.suppress(threading.BrokenBarrierError):
-            _state[1].wait(_READY_WAIT)
+    """This worker's process id: its pool runs nothing before the worker has its anonymizer."""
     return os.getpid()
 
 
 def _mask(
-    kind: Kind, body: Mapping[str, Any], instructions: str | None, unsupported: Unsupported
-) -> tuple[dict[str, Any], dict[str, str]]:
+    number: int,
+    kind: Kind,
+    body: Mapping[str, Any],
+    instructions: str | None,
+    unsupported: Unsupported,
+) -> Masked:
     """Mask one request in a worker, and forget the call's values once it is masked."""
     if _state is None:
         raise MaskingUnavailableError("the masking process has no anonymizer")
-    turn = new_turn(_state[0], unsupported)
+    anonymizer, began = _state
+    began.value = number
+    turn = new_turn(anonymizer, unsupported)
     try:
         masked = masked_request(
             turn, kind, body, instructions=instructions, unsupported=unsupported
