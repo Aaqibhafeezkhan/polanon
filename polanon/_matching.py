@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property, lru_cache
 
@@ -33,10 +33,11 @@ _ToOriginal = Callable[[int, int], tuple[int, int]]
 #: or a stray two-letter detection to every word that contains it, would mask half a document.
 MIN_EMBEDDED_LENGTH = 4
 
-#: The case endings Polish glues straight onto a short surname, longest first: "Lisa", "Lisowi",
-#: "Lisem", "Lisie", "Bąku", "Bąkiem", and "Lisowie", "Lisów", "Lisom", "Lisami", "Lisach" for the
-#: family. A surname of three letters takes one of them and nothing else: "Lista" is no "Lis".
-_SHORT_NAME_ENDINGS = ("owie", "owi", "ach", "ami", "iem", "em", "om", "ie", "ów", "a", "u")
+#: The case endings Polish glues straight onto a short surname for one person, longest first:
+#: "Lisa", "Lisowi", "Lisem", "Lisie", "Bąku", "Bąkiem". A surname of three letters takes one of
+#: them and nothing else: "Lista" is no "Lis". The family's plural is left out, since "Kurów" and
+#: "Kurowie" are a town's name as often as the Kurs.
+_SHORT_NAME_ENDINGS = ("owi", "iem", "em", "ie", "a", "u")
 #: A name shorter than this takes no ending here: "Li" or "Wu" with an "a" make other words.
 _SHORTEST_DECLINED = 3
 
@@ -627,6 +628,57 @@ def known_value_ranges(
         for start in where.ungrouped[index]:
             ranges.append(haystack.to_original(*haystack.regrouped(start, start + length)))
     return ranges
+
+
+#: A word, as a surname's form is one.
+_WORD = re.compile(r"[^\W\d_]+")
+
+
+def form_matches(
+    haystack: Haystack,
+    forms: Mapping[str, str],
+    taken: Iterable[tuple[int, int]],
+    reads_as_a_name: Callable[[str, int, int], bool],
+) -> list[tuple[int, int, str]]:
+    """Find the capitalised words that are a known surname's forms, as ``(start, end, payload)``.
+
+    A form, "Kozła" of "Kozieł", is a whole word, never part of a longer one, and found only
+    where `reads_as_a_name` says its capital tells a name. Looking each word of the text up
+    costs the same however many forms the conversation knows; searching for every form the way
+    a known value is searched for made a turn of 400 people twice as slow.
+
+    Args:
+        haystack: the text, prepared.
+        forms: each form, as :func:`skeleton` reads it, with its payload.
+        taken: ranges of the original text already masked or detected; a form there is left.
+        reads_as_a_name: whether the word at a range of the guards' reading reads as a name.
+    """
+    if not forms:
+        return []
+    blocked = Ranges(_union(taken))
+    found: list[tuple[int, int, str]] = []
+    for word in _WORD.finditer(haystack.text):
+        start, end = word.span()
+        payload = forms.get(haystack.folded[start:end])
+        if payload is None or not word[0][0].isupper():
+            continue
+        if not reads_as_a_name(haystack.text, start, end):
+            continue
+        original = haystack.to_original(start, end)
+        if not blocked.overlaps(*original):
+            found.append((*original, payload))
+    return found
+
+
+def _union(ranges: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Join ranges that overlap or touch, so that :class:`Ranges` can hold them."""
+    joined: list[tuple[int, int]] = []
+    for start, end in sorted(ranges):
+        if joined and start <= joined[-1][1]:
+            joined[-1] = (joined[-1][0], max(joined[-1][1], end))
+        else:
+            joined.append((start, end))
+    return joined
 
 
 @dataclass(frozen=True)

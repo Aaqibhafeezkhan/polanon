@@ -344,7 +344,8 @@ the store and mask the ones it holds a token for. A question then gets the surna
 surname masked in one document stays masked in the next. A surname in a case the rules cannot
 read, "Koziołowi" or "Kozła" after "Adam Kozieł", is looked up by the nominatives it may come from,
 masked as well, and given the surname's token: the store tells "Kozieł" from "Kozioł", which no
-rule can. Where it holds both, the word keeps the token its own spelling gives. Pass
+rule can. Where it holds both, or where the text or the conversation names another person the
+word is a case of, such as "Jan Kozioł", the word keeps the token its own spelling gives. Pass
 `lookup=False` for a store too slow for that.
 
 **The key.** At least 32 random bytes, one key per company and a `scope=` per index that must not be
@@ -566,7 +567,9 @@ company names anchored on a legal form ("Sp. z o.o.", "S.A.", "Ltd", "GmbH"). On
 profile link is masked, the surname or the handle alone is masked wherever it appears in the same
 text: "Kowalski" after "Jan Kowalski", in another case too, "Lisowi" after "Katarzyna Lis",
 "Dudzie" after "Anna Duda" and "Koziołowi" or "Kozła" after "Adam Kozieł", and "jkowalski" in a
-JSON field after "github.com/jkowalski".
+JSON field after "github.com/jkowalski". A case whose stem changes, "Kozła" or "Dudzie", is
+masked as a whole word where its capital tells a name: inside a sentence and not in a place's
+name, so "Zimą jest zimno" and "w Zielonej Górze" stay after "Jan Zima" and "Michał Góra".
 With the `ner` extra, a spaCy model adds places and the names nothing else marks. An optional
 second stage lets a small local model review the *masked* text for what still identifies someone
 by context. Other dates are recognised too, but left readable unless you ask for them.

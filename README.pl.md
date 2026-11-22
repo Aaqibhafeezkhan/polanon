@@ -358,8 +358,9 @@ token nazwiska, a nazwisko zamaskowane w jednym dokumencie pozostaje zamaskowane
 Nazwisko w przypadku, którego reguły nie odczytują, „Koziołowi” albo „Kozła” po „Adam Kozieł”, jest
 sprawdzane w magazynie przez mianowniki, od których może pochodzić, też zostaje zamaskowane i
 dostaje token nazwiska: magazyn odróżnia „Kozieł” od „Kozioł”, czego nie potrafi żadna reguła. Gdy
-ma oba, słowo zachowuje token, który daje jego własny zapis. Przy magazynie, który jest na to za
-wolny, przekaż `lookup=False`.
+ma oba albo gdy tekst lub rozmowa wymienia inną osobę, której przypadkiem może być to słowo, jak
+„Jan Kozioł”, słowo zachowuje token, który daje jego własny zapis. Przy magazynie, który jest na to
+za wolny, przekaż `lookup=False`.
 
 **Klucz.** Co najmniej 32 losowe bajty, jeden klucz na firmę i osobny `scope=` dla indeksu, którego
 nie wolno powiązać z innym. Trzymaj go w menedżerze sekretów, poza indeksem, kodem i logami;
@@ -583,8 +584,11 @@ imiona razem z nazwiskami oraz nazwy firm rozpoznawane po formie prawnej („Sp.
 „Ltd”, „GmbH”). Gdy zamaskowana zostanie osoba albo link do profilu, wszędzie w tym samym tekście
 maskowane jest też samo nazwisko albo sama nazwa użytkownika: „Kowalski” po „Jan Kowalski”, także
 w innym przypadku, „Lisowi” po „Katarzyna Lis”, „Dudzie” po „Anna Duda” i „Koziołowi” albo „Kozła”
-po „Adam Kozieł”, oraz „jkowalski” w polu JSON po „github.com/jkowalski”. Z dodatkiem `ner` model
-spaCy dokłada miejsca i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala
+po „Adam Kozieł”, oraz „jkowalski” w polu JSON po „github.com/jkowalski”. Przypadek, w którym
+zmienia się temat, „Kozła” albo „Dudzie”, jest maskowany jako całe słowo tam, gdzie wielka litera
+wskazuje imię lub nazwisko: wewnątrz zdania i nie w nazwie miejsca, więc „Zimą jest zimno” i
+„w Zielonej Górze” zostają po „Jan Zima” i „Michał Góra”. Z dodatkiem `ner` model spaCy dokłada
+miejsca i nazwy, których nie wykrywa nic innego. Opcjonalny drugi etap pozwala
 małemu lokalnemu modelowi przejrzeć *zamaskowany* tekst pod kątem tego, co z kontekstu wciąż
 pozwala kogoś zidentyfikować. Pozostałe daty też są rozpoznawane, ale zostają czytelne, chyba że
 poprosisz o ich maskowanie.

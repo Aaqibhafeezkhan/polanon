@@ -518,9 +518,10 @@ _E_OR_O = re.compile(r"(?<=[^aąeęioóuy]i)[eo](?=[tdsznłr]$)")
 _O_ACUTE = re.compile(r"ó(?=[^aąeęioóuyw]$)")
 #: An "o" in that place, which the nominative may write "ó".
 _PLAIN_O = re.compile(r"o(?=[^aąeęioóuy]$)")
-#: What a noun surname takes after its stem: the genitive, the dative and, for the family, the
-#: plural. The instrumental and the locative depend on the stem's last consonant.
-_NOUN_SURNAME_ENDINGS = ("a", "owi", "owie", "ów", "om", "ami", "ach")
+#: What a noun surname takes after its stem for one person: the genitive and the dative. The
+#: instrumental and the locative depend on the stem's last consonant. The family's plural is left
+#: out: "Sokołów" and "Kurowie" are towns as often as they are the Sokółs and the Kurs.
+_NOUN_SURNAME_ENDINGS = ("a", "owi")
 
 
 def _other_vowel(match: re.Match[str]) -> str:
@@ -611,27 +612,107 @@ def _a_surname_oblique_forms(surname: str) -> list[str]:
 
 
 def surname_forms(surname: str) -> list[str]:
-    """Return the cases of a surname that do not begin with it, whatever kind of surname it is."""
-    return [
-        *_feminine_oblique_forms(surname),
-        *_masculine_oblique_forms(surname),
-        *_a_surname_oblique_forms(surname),
-    ]
+    """Return the cases of a noun surname that do not begin with it: "Wróbla", "Kozła", "Dudzie".
+
+    They are declined, not read, so they are masked only where a capital tells a name; see
+    :func:`capital_tells_a_name`. The cases of an adjectival surname, "Bielskiej", are certain and
+    come with the surname from :func:`person_name_parts`.
+    """
+    return [*_masculine_oblique_forms(surname), *_a_surname_oblique_forms(surname)]
+
+
+#: How far back the start of a sentence is looked for: past the spaces and quotes a sentence
+#: may open with, to the word or the full stop before them.
+_LOOK_BACK = 64
+#: What may stand right before a word at the start of a sentence: the end of the one before.
+_SENTENCE_END = ".!?…"
+#: What may open a sentence before its first word: quotes, brackets, a dash, a bullet.
+_OPENING = "\"'„“”«»\u2018\u2019([{-\u2013—•*"
+_SPACES = " \t\u00a0"
+
+
+def capital_tells_a_name(text: str, start: int, end: int) -> bool:
+    """Return whether the capital of the word at `start`..`end` of `text` tells a name.
+
+    It does not at the start of a sentence or a line, where every word has one: "Zimą jest zimno",
+    "Wody nie ma". Nor next to another capitalised word other than a first name or a form of
+    address, where the two are a name of another kind: "Zielonej Górze", "Sokołów Podlaski". A
+    word that opens the sentence before it has its capital for that reason, as in "Przekaż Dudzie
+    notatkę" or "Umowa Kozieła", unless it names a kind of place, as in "Góry Sowie". "dla
+    Adama Kozła" and "dr. Sowie" read as a person too.
+    """
+    if _opens_a_sentence(text, start):
+        return False
+    before = _WORD_BEFORE.search(text, max(0, start - _LOOK_BACK), start)
+    if before is not None and _another_name(before[1]) and _names_a_place_with(text, before):
+        return False
+    after = _WORD_AFTER.match(text, end)
+    return after is None or not _another_name(after[1])
+
+
+#: The words a place's name of two words opens with, folded, in their cases: "Góry Sowie",
+#: "Jezioro Bobrowe", "Puszcza Kampinoska".
+_PLACE_WORDS = frozenset(
+    fold(form)
+    for word in _words(
+        """
+        góra dolina kotlina nizina przełęcz puszcza pustynia wyspa wyżyna zatoka ziemia kraina
+        """
+    )
+    for form in decline_feminine(word)
+) | frozenset(
+    _words(
+        """
+        gory gor gorach gorami gorom jezioro jeziora jezioru jeziorem jeziorze morze morza morzu
+        morzem pojezierze pojezierza pojezierzu wzgorza wzgorz wzgorzach wyspy wysp las lasy lasu
+        lesie bory borow park parku plac placu aleja alei ulica ulicy osiedle osiedla
+        """
+    )
+)
+
+
+def _names_a_place_with(text: str, before: re.Match[str]) -> bool:
+    """Whether a capitalised word before a form makes a name with it rather than open a sentence."""
+    return fold(before[1]) in _PLACE_WORDS or not _opens_a_sentence(text, before.start(1))
+
+
+def _opens_a_sentence(text: str, start: int) -> bool:
+    """Return whether the word at `start` opens a sentence or a line, after quotes or a dash."""
+    opened = text[max(0, start - _LOOK_BACK) : start].rstrip(_OPENING + _SPACES)
+    if not opened or opened.endswith(("\n", "\r")):
+        return True
+    if opened[-1] not in _SENTENCE_END:
+        return False
+    title = _WORD_ENDING.search(opened, 0, len(opened) - 1)
+    return title is None or fold(title[0]) not in _ABBREVIATED_TITLES
+
+
+def _another_name(word: str) -> bool:
+    """Whether a capitalised neighbour makes a name of another kind: no first name, no address."""
+    if not word[:1].isupper():
+        return False
+    key = fold(word)
+    return key not in NAME_FORMS and key not in HONORIFICS and key not in FOREIGN_TITLES
+
+
+#: Titles written with a full stop before a name, which ends no sentence: "dr. Sowie".
+_ABBREVIATED_TITLES = _ABBREVIATIONS | {"p"}
+_NAME_WORD = r"[^\W\d_]+(?:-[^\W\d_]+)*"
+#: The word that ends a text, the word and spaces right before a position, the spaces and word
+#: right after one.
+_WORD_ENDING = re.compile(rf"{_NAME_WORD}$")
+_WORD_BEFORE = re.compile(rf"({_NAME_WORD})[ \t\u00a0]+$")
+_WORD_AFTER = re.compile(rf"[ \t\u00a0]+({_NAME_WORD})")
 
 
 _LOCATIVE = frozenset({"loc", "voc"})
 #: The case endings a noun surname may stand in, the last consonant of its stem that the locative
-#: softens, and the cases of one person each ending gives: "Kocie" is "Kot", "Mazurze" is
-#: "Mazur", "Koziele" is "Kozieł". The plural is the family's.
+#: softens, and the cases each ending gives: "Kocie" is "Kot", "Mazurze" is "Mazur", "Koziele" is
+#: "Kozieł". One person's cases only, as :data:`_NOUN_SURNAME_ENDINGS` gives them.
 _CASE_TAILS: tuple[tuple[str, str, frozenset[str]], ...] = (
-    ("owie", "", frozenset()),
     ("owi", "", frozenset({"dat"})),
-    ("ach", "", frozenset()),
-    ("ami", "", frozenset()),
     ("iem", "", frozenset({"ins"})),
     ("em", "", frozenset({"ins"})),
-    ("om", "", frozenset()),
-    ("ów", "", frozenset()),
     ("a", "", frozenset({"gen", "acc"})),
     ("u", "", _LOCATIVE),
     ("ie", "", _LOCATIVE),
@@ -770,30 +851,48 @@ def forget_forms() -> None:
     _a_nominatives.cache_clear()
 
 
-def person_name_parts(
-    name: str, *, needs_first_name: bool = False, cases: bool = True
-) -> list[str]:
+def person_name_parts(name: str, *, needs_first_name: bool = False) -> list[str]:
     """Return the words of a person's name that point to the person on their own: the surname.
 
     "Jan Kowalski" gives "Kowalski", "Anna Nowak-Kępa" gives "Nowak-Kępa", "Nowak" and "Kępa".
     "Natalia Bielska" gives "Bielska" with "Bielskiej" and "Bielską", the cases that do not begin
-    with it, and "Paweł Wróbel" gives "Wróbel" with "Wróbla", "Wróblowi" and the other cases
-    whose stem drops or changes a vowel, as "Kozieł" gives "Kozła" and "Koziołowi"; "Anna Duda"
-    gives "Duda" with "Dudy", "Dudzie", "Dudę", "Dudą" and "Dudo". A first name
-    this guard knows is left out, and so are titles, initials and common adjectives: "Jan" or
-    "Krakowska" alone point to nobody. A first name the guard does not know is kept, since
-    nothing tells it from the surname.
+    with it. A first name this guard knows is left out, and so are titles, initials and common
+    adjectives: "Jan" or "Krakowska" alone point to nobody. A first name the guard does not know is
+    kept, since nothing tells it from the surname.
 
     Args:
         name: a detected name of two to four words.
         needs_first_name: give parts only when the name has a first name this guard knows, for a
             name whose detection cannot be trusted on its own.
-        cases: give the cases that do not begin with the surname too; without them, the surname
-            alone, as a store of tokens keeps it.
     """
+    found = _surnames(name, needs_first_name)
+    if found is None:
+        return []
+    parts: list[str] = []
+    for surname in found[0]:
+        parts += [surname, *_feminine_oblique_forms(surname)]
+    return parts
+
+
+def person_name_forms(name: str, *, needs_first_name: bool = False) -> list[str]:
+    """Return the cases of a name's surname that its stem gives and that do not begin with it.
+
+    "Paweł Wróbel" gives "Wróbla" and "Wróblowi", whose stem drops a vowel, "Adam Kozieł" gives
+    "Kozła" and "Koziołowi", "Anna Duda" gives "Dudy", "Dudzie", "Dudę", "Dudą" and "Dudo". A
+    name whose first name stands in no nominative, "Adama Bednarka", gives none: its surname is
+    in another case too, and "Bednarki" is no case of "Bednarek". See :func:`surname_forms`.
+    """
+    found = _surnames(name, needs_first_name)
+    if found is None or found[1]:
+        return []
+    return [form for surname in found[0] for form in surname_forms(surname)]
+
+
+def _surnames(name: str, needs_first_name: bool) -> tuple[list[str], bool] | None:
+    """Return the surnames of a name, and whether a first name stands in no nominative."""
     words = name.split()
     if not 2 <= len(words) <= 4:
-        return []
+        return None
     surnames: list[str] = []
     has_first_name = False
     #: A first name in no nominative, "Adama", puts the surname next to it in another case too,
@@ -819,13 +918,8 @@ def person_name_parts(
         if "-" in bare:
             surnames += [p for p in bare.split("-") if len(p) >= 3 and fold(p) not in NAME_FORMS]
     if needs_first_name and not has_first_name:
-        return []
-    parts: list[str] = []
-    for surname in surnames:
-        parts.append(surname)
-        if cases and not in_another_case:
-            parts.extend(surname_forms(surname))
-    return parts
+        return None
+    return surnames, in_another_case
 
 
 def _login_names_a_person(login: re.Match[str]) -> bool:

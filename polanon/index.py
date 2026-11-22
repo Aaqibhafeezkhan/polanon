@@ -22,11 +22,11 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from polanon import _canonical
 from polanon._canonical import base_form
-from polanon._known_parts import known_parts
+from polanon._known_parts import known_forms, known_parts
 from polanon._matching import Ranges, type_of
 from polanon._view import detection_view
 from polanon.guards.base import Guard
-from polanon.guards.names_pl import noun_surname_nominatives
+from polanon.guards.names_pl import capital_tells_a_name, noun_surname_nominatives
 from polanon.policy import TOKEN_PATTERN
 from polanon.pseudonyms import PseudonymCollisionError, Pseudonyms
 from polanon.stream_restore import tokens_written
@@ -440,7 +440,7 @@ def _surnames(pseudonyms: Pseudonyms, mapping: Mapping[str, str]) -> dict[str, S
     for token, value in mapping.items():
         if type_of(token) != "PERSON" or value == token:
             continue
-        for part in known_parts(value, "PERSON", trusted=False, cases=False):
+        for part in known_parts(value, "PERSON", trusted=False):
             entries.setdefault(
                 pseudonyms.token(part, "PERSON"),
                 StoredValue(base_form(part, "PERSON"), pseudonyms.fingerprint(part, "PERSON")),
@@ -501,15 +501,52 @@ class _Found:
     surnames: Mapping[str, _Renamed]
 
     def renames(self, mapping: Mapping[str, str], before: Mapping[str, str]) -> dict[str, _Renamed]:
-        """Return the new tokens of a masked mapping that take a stored surname's token instead."""
+        """Return the new tokens of a masked mapping that take a stored surname's token instead.
+
+        A word that is a case of a person the text or the conversation names, other than the one
+        the store holds, stays that person's: after "Jan Kozioł", "Koziołowi" is his, not the
+        stored Adam Kozieł's, and taking Kozieł's token joined the two in every search.
+        """
+        people = [_Person.of(value) for token, value in mapping.items() if _named(token, value)]
         renamed: dict[str, _Renamed] = {}
         for token, value in mapping.items():
-            new = self.surnames.get(value.strip().lower())
-            if new is None or token in before or token == new.token:
+            word = value.strip().lower()
+            new = self.surnames.get(word)
+            if new is None or token in before or token == new.token or type_of(token) != "PERSON":
                 continue
-            if type_of(token) == "PERSON":
+            surname = new.surname.lower()
+            if all(surname in person.words for person in people if person.names(word)):
                 renamed[token] = new
         return renamed
+
+
+def _named(token: str, value: str) -> bool:
+    """Whether a mapping holds a person's name of two words or more for `token`."""
+    return type_of(token) == "PERSON" and value != token and len(value.split()) > 1
+
+
+@dataclass(frozen=True)
+class _Person:
+    """A person a text names: the parts of the name and the forms of its surname, lowercase."""
+
+    parts: frozenset[str]
+    words: frozenset[str]
+
+    @classmethod
+    def of(cls, value: str) -> _Person:
+        parts = {part.lower() for part in known_parts(value, "PERSON", trusted=False)}
+        forms = {form.lower() for form in known_forms(value, "PERSON", trusted=False)}
+        return cls(frozenset(parts), frozenset(parts | forms))
+
+    def names(self, word: str) -> bool:
+        """Whether a lowercase word is one of the person's words or a part with an ending."""
+        return word in self.words or any(
+            len(part) >= _SHORTEST_PART and word.startswith(part) for part in self.parts
+        )
+
+
+#: A part this long or longer names its person with an ending glued on: "Lisowi" is Lis's.
+_SHORTEST_PART = 3
 
 
 def _with_store_hits(
@@ -540,9 +577,12 @@ def _with_store_hits(
             for entity_type in _LOOKED_UP:
                 token = pseudonyms.token(written, entity_type)
                 wanted.setdefault(token, []).append((seen, start, end, entity_type, written))
-            for surname in _surnames_declined(written):
-                token = pseudonyms.token(surname, "PERSON")
-                wanted.setdefault(token, []).append((seen, start, end, "PERSON", surname))
+            nominatives = _surnames_declined(written)
+            # "Kozła widziałem" opens a sentence, "Sokołów Podlaski" is a town.
+            if nominatives and capital_tells_a_name(seen, start, end):
+                for surname in nominatives:
+                    token = pseudonyms.token(surname, "PERSON")
+                    wanted.setdefault(token, []).append((seen, start, end, "PERSON", surname))
     held = _get(store, list(wanted))
     hits: dict[str, set[Span]] = {}
     as_written: set[str] = set()

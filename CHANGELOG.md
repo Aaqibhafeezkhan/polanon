@@ -13,47 +13,55 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
   Kot" were masked in a turn, "Przekaż Lisowi notatkę." and "Przekaż Kotowi i Nowakowi." sent
   "Lisowi" and "Kotowi" in the clear, while "Nowakowi" was masked: a known value shorter than
   four letters is never masked inside a longer word, so that "Jan" leaves "Janusz" alone, and a
-  case ending glued on made one. A person's one-word name of three letters is now masked with a
-  case ending after it, "Lisa", "Lisowi", "Lisem", "Lisie", "Bąkiem" and, for the family,
-  "u Kotów", in a turn, in `mask_known_values` and in the gateway's last check, `leaked_tokens`.
-  Only a case ending counts: "Lista", "Kotara" and "Lisowski" stay, and so does a case in
-  lowercase, "lisowi", which is the animal's. A name first masked in another case, "Grzegorzem
-  Lisem", gave its surname in that case only, so "Lis" and "Lisowi" went out in the next message;
-  the nominative, where the rules read it for sure, now gives the surname too, and "Kowalski"
-  after "Jana Kowalskiego" is masked as well.
-- **A surname whose stem drops or changes a vowel is masked in its other cases.** After "Adam
-  Kozieł", "Paweł Wróbel" or "Jan Bednarek" was masked, the surname alone was masked too, but not
-  "Koziołowi", "Kozła", "Wróbla" or "Bednarkowi", which do not begin with it. Such cases are now
-  known values with the surname: a vowel that drops ("Wróbla", "Kozła", "Krawca", "Bednarka"),
-  "ie" written "io" ("Koziołowi") and "ó" written "o" ("Mroza"), and a locative that softens the
-  last consonant ("o Kocie"). In lowercase, "kozioł", "wróbla" and "o kocie" stay. A name first
-  masked in a case the rules cannot read, "Adama Kozieła", gave "Kozieła" alone; a first name in
-  no nominative tells the surname's case, so "Kozieł" and "Koziołowi" are masked after it, as
-  cases of "Kozieł" or "Kozioł", the two nominatives the word may have. "Kamila Kozieła", whose
-  first name may be a woman's in the nominative, gives no such guess.
-- **A surname in -a is masked in its other cases.** After "Anna Duda" or "Jan Sowa" was masked,
-  "Dudy", "Dudzie", "Sową" or "Sowie" went out, since none of them holds the nominative. A
-  surname in -a now gives the cases of a feminine noun, for a man and a woman alike, and in
-  lowercase "sowa" and "o sowie" stay. One that declines as an adjective has its own forms or
-  none: "Bielska" gives "Bielskiej", "Nowakowa" nothing more. A surname that declines as an
-  adjective in another way gets a noun's cases all the same, so after "Anna Biała" a capitalised
-  "Biały" is masked too.
+  case ending glued on made one. A person's one-word name of three letters is now masked with
+  one person's case ending after it, "Lisa", "Lisowi", "Lisem", "Lisie", "Bąkiem", in a turn, in
+  `mask_known_values` and in the gateway's last check, `leaked_tokens`. Only such an ending
+  counts: "Lista", "Kotara" and "Lisowski" stay, and so does a case in lowercase, "lisowi", which
+  is the animal's. The family's plural is left as it was, since "Kurów" and "w Kurowie" name a
+  town as often as the Kurs. A name first masked in another case, "Grzegorzem Lisem", gave its
+  surname in that case only, so "Lis" and "Lisowi" went out in the next message; the nominative,
+  where the rules read it for sure, now gives the surname too, and "Kowalski" after "Jana
+  Kowalskiego" is masked as well.
+- **A surname's cases that its stem gives are masked where a capital tells a name.** After "Adam
+  Kozieł", "Paweł Wróbel" or "Anna Duda" was masked, the surname alone was masked too, but not
+  "Koziołowi", "Kozła", "Wróbla" or "Dudzie", which do not begin with it. A surname now gives
+  such cases: with a vowel that drops ("Wróbla", "Kozła", "Krawca", "Bednarka"), "ie" written
+  "io" ("Koziołowi"), "ó" written "o" ("Mroza"), a locative that softens the last consonant
+  ("o Kocie"), and the cases of a surname in -a, for a man and a woman alike ("Dudy", "Dudzie",
+  "Sową"). After a name in a case the rules cannot read, "Adama Kozieła", a first name in no
+  nominative tells the surname's case, so "Kozieł" and "Koziołowi" are such cases too, of
+  "Kozieł" or "Kozioł". These are declined, not read, and many are ordinary words as well, so
+  each is masked as a whole word and only where a capital tells a name: inside a sentence, and
+  not next to another capitalised word other than a first name or a form of address. "Przekaż
+  Dudzie notatkę" and "Umowa Kozieła" are masked; "Zimą jest zimno", "Wody nie ma", "w Zielonej
+  Górze", "Góry Sowie", "Sowieci" and "Sokołów Podlaski" stay, and so does a case opening a
+  sentence, "Kozła nie było", as on 0.4.1. Lowercase "kozioł", "wróbla" and "o sowie" stay. A
+  surname that declines as an adjective keeps its own forms, "Bielska" and "Bielskiej", whatever
+  case the first name stands in, and one in -owa, "Nowakowa", gets no noun's cases. "Kamila
+  Kozieła", whose first name may be a woman's in the nominative, gives no guess at the surname.
+  A cost remains: a surname that declines as an adjective in another way gets a noun's cases all
+  the same, so after "Anna Biała" a capitalised "Biały" inside a sentence is masked too.
 - **In a search index, a surname's case the rules cannot read is masked and finds its person.**
-  A capitalised word alone is looked up in the store by the nominatives it may come from, so
-  "Koziołowi", "Kozieła" or "Kozła" in a question is masked once "Adam Kozieł" was indexed; it
-  went out in the clear without the spaCy model and as a company with it. It takes the stored
-  surname's token, in a question and in a document, so a search for the person finds the
-  passages that name him alone in any case. No rule can say whether "Kozła" is Kozieł's or
-  Kozioł's, both being surnames, so a new pseudonym scheme could not join them without joining
-  two people; the store can, holding one of them. Where it holds both, or the word's own
-  spelling, the word keeps the token that spelling gives. The store keeps the surname alone, not
-  its cases, and no stable token is computed differently, so an index needs no rebuilding.
+  A capitalised word alone is looked up in the store by the nominatives it may come from, where
+  its capital tells a name, so "Koziołowi", "Kozieła" or "Kozła" in a question is masked once
+  "Adam Kozieł" was indexed; it went out in the clear without the spaCy model and as a company
+  with it. It takes the stored surname's token, in a question and in a document, so a search for
+  the person finds the passages that name him alone in any case. No rule can say whether "Kozła"
+  is Kozieł's or Kozioł's, both being surnames, so a new pseudonym scheme could not join them
+  without joining two people; the store can, holding one of them. Where it holds both, or the
+  word's own spelling, or where the text or the conversation names another person the word is a
+  case of, such as "Jan Kozioł", the word keeps the token its own spelling gives. Under one
+  token a passage keeps one spelling, as for "Wróbel" and "Wróbla" before, so a passage that
+  names both "Kozieł" and "Koziołowi" restores the second as the first. The store keeps the
+  surname alone, not its cases, and no stable token is computed differently, so an index needs
+  no rebuilding.
 
   The agent benchmark has these cases now, "Lisowi", "Lisa", "Dudkowi", "Koziołowi" and
   "Sowie" next to "Lista" and a goat, "kozioł". With the spaCy model its numbers do not change,
   2 leaks of 250 and 5 tokens for nothing; with the rules alone the 5 new surnames no longer leak
   and nothing is masked for nothing. The parts of a value and the cases of a surname are worked
-  out once per call and forgotten with its other values.
+  out once per call and forgotten with its other values, and a case is found by looking each
+  word of a text up, so a turn of 400 people is masked as fast as before.
 
 ## [0.4.1] - 2026-11-19
 

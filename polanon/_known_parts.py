@@ -2,13 +2,17 @@
 
 A surname is the person: once "Jan Kowalski" is masked, "Kowalski" further down the text is the
 same man, and it went out in the clear, because no rule reads a lone surname as a name. So is the
-surname in another case, also where its stem changes, "Wróbla" after "Paweł Wróbel",
-"Koziołowi" after "Adam Kozieł" and "Dudzie" after "Anna Duda", and in the nominative after the
-name was masked in another case: "Lis" and "Lisowi" after "Grzegorzem Lisem", "Kozieł" after
-"Adama Kozieła". A handle is the account: once "github.com/jkowalski"
-is masked, "jkowalski" in a JSON field, after "@" or in "jkowalski.github.io" is the same account.
-The pipeline treats such a part as a known value of the same type, so it is masked wherever it
-stands, by the rules every known value follows.
+surname in the nominative after the name was masked in another case: "Lis" and "Lisowi" after
+"Grzegorzem Lisem". A handle is the account: once "github.com/jkowalski" is masked, "jkowalski" in
+a JSON field, after "@" or in "jkowalski.github.io" is the same account. The pipeline treats such
+a part as a known value of the same type, so it is masked wherever it stands, by the rules every
+known value follows.
+
+The cases of a surname that do not begin with it and that its stem gives, "Wróbla" after "Paweł
+Wróbel", "Koziołowi" after "Adam Kozieł", "Dudzie" after "Anna Duda", and "Kozieł" after "Adama
+Kozieła", are its forms. They are declined, not read, and many are ordinary words too ("Wody",
+"Zimą", "Górze"), so they are masked as whole words and only where a capital tells a name; see
+:func:`polanon.guards.names_pl.capital_tells_a_name`.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from polanon.guards.names_pl import (
     fold,
     forget_forms,
     login_name_parts,
+    person_name_forms,
     person_name_parts,
     surname_forms,
 )
@@ -37,7 +42,7 @@ MIN_HANDLE_LENGTH = 4
 _WELL_KNOWN_HANDLES = frozenset(fold(name).replace(" ", "") for name in WELL_KNOWN_NAMES)
 
 
-def known_parts(value: str, entity_type: str, *, trusted: bool, cases: bool = True) -> list[str]:
+def known_parts(value: str, entity_type: str, *, trusted: bool) -> list[str]:
     """Return the parts of a masked value to mask wherever they appear, under the value's type.
 
     Args:
@@ -47,10 +52,17 @@ def known_parts(value: str, entity_type: str, *, trusted: bool, cases: bool = Tr
             caller's, rather than a language model's guess. A model that reads "Google Ads" as a
             person would otherwise mask "Ads" in every sentence after it, so a name it found gives
             its surname only next to a first name the name guard knows.
-        cases: give a surname's cases that do not begin with it as well, "Wróbla" for "Wróbel".
-            A store of tokens keeps the surname alone and finds its cases by declining it.
     """
-    return list(_known_parts(value, entity_type, trusted, cases))
+    return list(_parts_and_forms(value, entity_type, trusted)[0])
+
+
+def known_forms(value: str, entity_type: str, *, trusted: bool) -> list[str]:
+    """Return the forms of a person's surname, to mask where they read as a name.
+
+    See :func:`known_parts` for the arguments, and the module for what a form is. A store of
+    tokens keeps none of them: it finds a surname's cases by declining what it holds.
+    """
+    return list(_parts_and_forms(value, entity_type, trusted)[1])
 
 
 #: How many values the parts stay worked out for: every text of a call reads the parts of every
@@ -60,23 +72,27 @@ _PARTED_VALUES = 65_536
 
 
 @lru_cache(maxsize=_PARTED_VALUES)
-def _known_parts(value: str, entity_type: str, trusted: bool, cases: bool) -> tuple[str, ...]:
+def _parts_and_forms(
+    value: str, entity_type: str, trusted: bool
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     if entity_type == "PERSON":
-        parts = person_name_parts(value, needs_first_name=not trusted, cases=cases)
+        needs_first_name = not trusted
+        parts = person_name_parts(value, needs_first_name=needs_first_name)
+        forms = person_name_forms(value, needs_first_name=needs_first_name)
         # A name first masked in another case gives its surname in that case; the nominative,
         # where the rules read it for sure, gives the surname as it stands on its own.
         nominative = base_form(value, entity_type)
-        more: list[str] = []
         if nominative != value.strip():
-            more = person_name_parts(nominative, needs_first_name=not trusted, cases=cases)
-        elif cases and parts:
+            parts += person_name_parts(nominative, needs_first_name=needs_first_name)
+            forms += person_name_forms(nominative, needs_first_name=needs_first_name)
+        elif parts:
             # Where they cannot, a first name in no nominative tells the surname's case, and the
-            # nominatives it may have are masked with their cases: "Kozieł", "Kozioł" and
-            # "Koziołowi" after "Adama Kozieła". Only for masking: a store keeps no guess.
+            # nominatives it may have are forms with their cases: "Kozieł", "Kozioł" and
+            # "Koziołowi" after "Adama Kozieła".
             for surname in declined_surname_nominatives(value):
-                more += [surname, *surname_forms(surname)]
-        parts += [part for part in dict.fromkeys(more) if part not in parts]
-        return tuple(parts or login_name_parts(value))
+                forms += [surname, *surname_forms(surname)]
+        parts = list(dict.fromkeys(parts)) or login_name_parts(value)
+        return tuple(parts), tuple(form for form in dict.fromkeys(forms) if form not in parts)
     if entity_type == "LINK":
         handle = profile_handle(value)
         if (
@@ -85,13 +101,13 @@ def _known_parts(value: str, entity_type: str, trusted: bool, cases: bool) -> tu
             and any(char.isalpha() for char in handle)
             and fold(handle).replace("-", "") not in _WELL_KNOWN_HANDLES
         ):
-            return (handle,)
-    return ()
+            return (handle,), ()
+    return (), ()
 
 
 def forget() -> None:
     """Drop the parts worked out for the latest values, and the values with them."""
-    _known_parts.cache_clear()
+    _parts_and_forms.cache_clear()
     forget_forms()
 
 

@@ -11,6 +11,7 @@ from polanon.guards.names_pl import (
     declined_surname_nominatives,
     is_common_adjective,
     noun_surname_nominatives,
+    person_name_forms,
     person_name_parts,
     surname_reading,
 )
@@ -576,12 +577,12 @@ def test_popular_first_names_missing_from_the_list_are_known(text, expected):
     ],
 )
 def test_the_parts_of_a_name_that_point_to_the_person_are_its_surname(name, parts):
-    assert person_name_parts(name, cases=False) == parts
+    assert person_name_parts(name) == parts
 
 
 def test_a_name_with_no_known_first_name_gives_its_parts_only_when_trusted():
     """A model that reads "Politechnika Krakowska" as a person must not mask "Politechnika"."""
-    assert person_name_parts("Politechnika Krakowska", cases=False) == ["Politechnika"]
+    assert person_name_parts("Politechnika Krakowska") == ["Politechnika"]
     assert person_name_parts("Politechnika Krakowska", needs_first_name=True) == []
     assert person_name_parts("Jan Kowalski", needs_first_name=True) == ["Kowalski"]
 
@@ -589,14 +590,19 @@ def test_a_name_with_no_known_first_name_gives_its_parts_only_when_trusted():
 def test_a_surname_whose_stem_changes_gives_the_cases_that_do_not_begin_with_it():
     """ "Kozieł" is "Kozła" and "Koziołowi" in other cases, "Kot" is "Kocie": none of them begins
     with the surname, so none was masked after the full name."""
-    assert {"Kozieł", "Kozła", "Kozłowi", "Kozioła", "Koziołowi", "Koziele"} <= set(
-        person_name_parts("Adam Kozieł")
+    assert {"Kozła", "Kozłowi", "Kozioła", "Koziołowi", "Koziele"} <= set(
+        person_name_forms("Adam Kozieł")
     )
-    assert person_name_parts("Tomasz Kot") == ["Kot", "Kocie"]
-    assert person_name_parts("Paweł Wróbel")[:3] == ["Wróbel", "Wróbla", "Wróblach"]
-    assert "KOZŁA" in person_name_parts("ADAM KOZIEŁ")
-    assert person_name_parts("Jan Nowak") == ["Nowak"]
-    assert person_name_parts("Adam Kozieł", cases=False) == ["Kozieł"]
+    assert person_name_forms("Tomasz Kot") == ["Kocie"]
+    assert person_name_forms("Paweł Wróbel") == ["Wróbla", "Wróblem", "Wróblowi", "Wróblu"]
+    assert "KOZŁA" in person_name_forms("ADAM KOZIEŁ")
+    assert person_name_forms("Jan Nowak") == []
+    assert person_name_parts("Adam Kozieł") == ["Kozieł"]
+
+
+def test_a_family_s_plural_is_no_form_of_a_surname():
+    """ "Sokołów" and "Kurowie" name towns as often as they name the Sokółs and the Kurs."""
+    assert not {"Sokołów", "Sokołowie"} & set(person_name_forms("Jan Sokół"))
 
 
 @pytest.mark.parametrize(
@@ -610,13 +616,13 @@ def test_a_surname_whose_stem_changes_gives_the_cases_that_do_not_begin_with_it(
 )
 def test_a_surname_in_a_gives_its_cases(name, forms):
     """ "Dudy" and "Dudzie" do not begin with "Duda", so none was masked after the full name."""
-    assert set(forms) <= set(person_name_parts(name))
+    assert set(forms) <= set(person_name_forms(name))
 
 
 @pytest.mark.parametrize("name", ["Anna Nowakowa", "Natalia Bielska", "Ewa Lisowa"])
 def test_a_surname_that_declines_as_an_adjective_gets_no_noun_cases(name):
     surname = name.split()[1]
-    assert not any(part.endswith(("y", "ę", "o")) for part in person_name_parts(name)), surname
+    assert person_name_forms(name) == [], surname
 
 
 @pytest.mark.parametrize(
@@ -650,6 +656,18 @@ def test_the_cases_of_a_name_in_another_case_come_from_its_nominative_only():
     """ "Bednarka" after "Adama" is a genitive; declined as a nominative in -a it gave "Bednarki"
     and "Bednarce"."""
     assert person_name_parts("Adama Bednarka") == ["Bednarka"]
+    assert person_name_forms("Adama Bednarka") == []
+
+
+@pytest.mark.parametrize(
+    "name", ["Upoważniam Annę Marię Kowalską", "Anny Kowalska", "Mirka Nowak-Wiśniewska"]
+)
+def test_an_adjectival_surname_gives_its_cases_whatever_case_the_first_name_stands_in(name):
+    """After a first name in no nominative, "Annę", "Anny", "Mirka", the cases of "Kowalska"
+    were left out with those of noun surnames, and "Kowalskiej" went out in the clear."""
+    words = name.split()[-1].split("-")
+    stem = words[-1][:-1]
+    assert {stem + "iej", stem + "ą"} <= set(person_name_parts(" ".join(name.split()[-3:])))
 
 
 @pytest.mark.parametrize(

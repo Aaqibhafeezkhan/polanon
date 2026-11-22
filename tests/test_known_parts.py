@@ -243,7 +243,7 @@ def test_a_short_surname_in_another_case_is_masked_in_a_later_text():
     later = [
         "Przekaż Lisowi notatkę.",
         "Przekaż Kotowi i Nowakowi.",
-        "Od Lisa nic nie przyszło, z Kotem i Lisem rozmawiałem, u Kotów nikt nie odbiera.",
+        "Od Lisa nic nie przyszło, z Kotem i Lisem rozmawiałem.",
     ]
     for text in later:
         masked = turn.mask(text)
@@ -274,9 +274,9 @@ def test_a_short_surname_leaves_the_words_that_begin_with_it_alone(text):
         ("Adam Kozieł", "Przekaż Koziołowi umowę, a Kozła zaproś.", ["Koziołowi", "Kozła"]),
         ("Adam Kozieł", "Rozmawiałem o Koziele z Kozłem.", ["Koziele", "Kozłem"]),
         ("Paweł Wróbel", "Nie ma Wróbla, przekaż Wróblowi notatkę.", ["Wróbla", "Wróblowi"]),
-        ("Jan Bednarek", "Bednarka nie było, Bednarkowi przekaż.", ["Bednarka", "Bednarkowi"]),
-        ("Jan Krawiec", "Krawca nie było, byliśmy u Krawców.", ["Krawca", "Krawców"]),
-        ("Jan Mróz", "Mroza nie było.", ["Mroza"]),
+        ("Jan Bednarek", "Nie było Bednarka, przekaż Bednarkowi.", ["Bednarka", "Bednarkowi"]),
+        ("Jan Krawiec", "Nie było Krawca, przekaż Krawcowi notatkę.", ["Krawca", "Krawcowi"]),
+        ("Jan Mróz", "Nie było Mroza.", ["Mroza"]),
         ("Tomasz Kot", "Rozmawialiśmy o Kocie.", ["Kocie"]),
     ],
 )
@@ -335,9 +335,9 @@ def test_the_parts_of_a_call_s_names_are_forgotten_with_its_values():
     from polanon.guards import names_pl
 
     mask("Umowę podpisał Adam Kozieł.")
-    assert _known_parts._known_parts.cache_info().currsize > 0
+    assert _known_parts._parts_and_forms.cache_info().currsize > 0
     _matching.forget()
-    assert _known_parts._known_parts.cache_info().currsize == 0
+    assert _known_parts._parts_and_forms.cache_info().currsize == 0
     assert names_pl._noun_surname_forms.cache_info().currsize == 0
     assert names_pl._nominatives.cache_info().currsize == 0
 
@@ -345,9 +345,9 @@ def test_the_parts_of_a_call_s_names_are_forgotten_with_its_values():
 @pytest.mark.parametrize(
     ("name", "later", "forms"),
     [
-        ("Anna Duda", "Dudy nie było, przekaż Dudzie notatkę.", ["Dudy", "Dudzie"]),
+        ("Anna Duda", "Nie było Dudy, przekaż Dudzie notatkę.", ["Dudy", "Dudzie"]),
         ("Jan Sowa", "Z Sową rozmawiałem, Sowie wysłałem umowę.", ["Sową", "Sowie"]),
-        ("Ewa Mucha", "Musze przekaż, że Muchy szukał kurier.", ["Musze", "Muchy"]),
+        ("Ewa Mucha", "Przekaż Musze, że Muchy szukał kurier.", ["Musze", "Muchy"]),
     ],
 )
 def test_a_surname_in_a_is_masked_in_its_other_cases(name, later, forms):
@@ -370,7 +370,7 @@ def test_a_bird_spelled_like_a_known_surname_in_a_stays():
 def test_a_name_first_masked_in_a_case_the_rules_cannot_read_gives_its_nominatives():
     """ "Adama Kozieła" gave the part "Kozieła" alone, so "Kozieł" and "Koziołowi" went out in the
     next message. "Adama" is only a genitive, so the surname is one too, of "Kozieł" or "Kozioł"."""
-    text = "Kozieł dzwonił, przekaż Koziołowi notatkę."
+    text = "Dzwonił Kozieł, przekaż Koziołowi notatkę."
     masked = mask(text, {"<OSOBA_1>": "Adama Kozieła"})
     assert "Koz" not in masked.anonymized, masked.anonymized
     assert Anonymizer.restore(masked.anonymized, masked.mapping) == text
@@ -378,5 +378,48 @@ def test_a_name_first_masked_in_a_case_the_rules_cannot_read_gives_its_nominativ
 
 def test_a_first_name_that_may_be_a_nominative_gives_no_guess_at_the_surname():
     """ "Kamila Kozieła" may be a woman of that name, whose surname is "Kozieła" itself."""
-    text = "Kozieł dzwonił."
+    text = "Dzwonił Kozieł."
     assert mask(text, {"<OSOBA_1>": "Kamila Kozieła"}).anonymized == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Upoważniam Annę Marię Kowalską do odbioru. Kowalskiej nie było, z Kowalską rozmawiałem.",
+        "Pełnomocnictwo dla Anny Kowalska. Kowalskiej nie było, rozmawiałem z Kowalską.",
+    ],
+)
+def test_an_adjectival_surname_after_a_first_name_in_another_case_gives_its_cases(text):
+    """The cases of "Kowalska" were left out with those of noun surnames after a first name in
+    no nominative, so "Kowalskiej" went out where main masked it."""
+    masked = mask(text).anonymized
+    assert "Kowalsk" not in masked, masked
+
+
+def test_the_cases_of_a_double_adjectival_surname_are_masked_in_the_next_message():
+    turn = Anonymizer(default_guards(with_ner=False)).turn()
+    turn.mask("Mirka Nowak-Wiśniewska dzwoniła.")
+    masked = turn.mask("Wiśniewskiej nie było, rozmawiałem z Wiśniewską.")
+    assert "Wiśniewsk" not in masked, masked
+
+
+@pytest.mark.parametrize(
+    ("person", "text"),
+    [
+        ("Michał Góra", "Jadę do Zielonej Górze i w Góry Stołowe."),
+        ("Anna Sowa", "Góry Sowie zwiedzali Sowieci."),
+        ("Jan Zima", "Zimą jest zimno."),
+        ("Jan Woda", "Wody nie ma. Wodą podlewamy."),
+        ("Anna Mała", "Mało kto wie."),
+        ("Jan Sokół", "Jadę do Sokołów Podlaski, a potem w Sokołowie."),
+        ("Jan Kur", "Mieszkam w Kurów, dawniej w Kurowie."),
+        ("Adam Kozieł", "Kozła widziałem na łące."),
+    ],
+)
+def test_a_surname_s_case_stays_where_its_capital_tells_no_name(person, text):
+    """A case of a surname that its stem gives is masked only where a capital tells a name: not
+    at the start of a sentence, not in a place's name of two words, not inside a longer word,
+    and never as the family's plural, which is a town's name as often."""
+    turn = Anonymizer(default_guards(with_ner=False)).turn()
+    turn.mask(f"Umowę podpisał {person}.")
+    assert turn.mask(text) == text
