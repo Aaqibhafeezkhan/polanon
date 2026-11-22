@@ -7,8 +7,12 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
-Gaps the applications found once they moved onto 0.4.2: PolGate in the core's last check, PolSales
-and PolCRM in `MaskedTurn`. Each was reproduced before it was fixed.
+## [0.4.3] - 2026-11-22
+
+A patch release with the gaps the applications found once they moved onto 0.4.2: PolGate in the
+core's last check, PolSales and PolCRM in `MaskedTurn`. Each was reproduced before it was fixed.
+Nothing that worked stops working the same way, the stable tokens are computed as before, and the
+benchmarks give the numbers of 0.4.2.
 
 ### Added
 
