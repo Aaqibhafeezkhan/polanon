@@ -7,6 +7,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-24
+
+A patch release with what the gateway in front of a live agent showed: the escapes an agent's
+tools write out hid names from the guards, and once made the last check refuse calls. Each was
+reproduced before it was fixed. The stable tokens are computed as before, and the benchmarks
+give the numbers of 0.4.3.
+
 ### Fixed
 
 - **A name right after an escape written out is masked.** An agent's tools print JSON once more,
