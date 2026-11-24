@@ -7,6 +7,33 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A name right after an escape written out is masked.** An agent's tools print JSON once more,
+  and logs and programs' strings, with their escapes written out: a line break as the two
+  characters `\n`, "ś" as `\u015b`. The guards read the letter of the escape as part of the
+  next word, so `\r\nKatarzyna Zielińska` and `\tMarek Wiśniewski` went out whole, and the
+  rules took `Wi\u015bniewski` for no name. On an agent's recorded calls, 6 first names with a
+  capitalised word after them went out in the clear after such an escape; none does now. The
+  guards, the search for known values and the last check now read `\n`, `\r`, `\t`, `\"`, `\/` and
+  `\uXXXX` as the characters they stand for, a run of backslashes as one, so JSON encoded twice
+  reads alike. Spans still point to the text as written, so the mapping keeps the value with its
+  escapes and the restore gives it back. A word is no longer taken to begin with the letter of
+  an escape before it, so a known "Nowak" after `\n` keeps its token instead of becoming
+  "nNowak". Neither does a piece merging leaves, trimmed to its letters and digits as the guards
+  read them, nor a known value that a page whose tool lost its backslashes wrote with the letter
+  glued on ("nAlfa"), where the escape is whole. Reading a text that needs this is faster too:
+  the characters between the ones read differently are copied in one go, four times faster on a
+  long text with no-break spaces.
+- **A letter or two left over where two known values cross is no value.** A tool's JSON written
+  out once more keeps its line breaks as the two characters "\n", so spaCy read a surname right
+  after one with the "n" glued on, "nNowak". Its occurrence lost to a known company that
+  started at the surname, and the "n" it kept became a person, masked from then on in every "\n"
+  of the call. The gateway's last check found that value hundreds of times and refused the call
+  three times in a row, twice on a live agent. The pieces merging leaves after the known values
+  are found now follow the rule the guards' pieces already did: one with fewer than three letters
+  and digits names nothing and stays as written.
+
 ## [0.4.3] - 2026-11-22
 
 A patch release with the gaps the applications found once they moved onto 0.4.2: PolGate in the

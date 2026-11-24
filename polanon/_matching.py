@@ -854,8 +854,14 @@ class _Placer:
 
 
 def _occurrence(text: str, start: int, end: int, needle: Needle, through_view: bool) -> str | None:
-    """Return whether an occurrence stands alone or sits inside a word, or None to skip it."""
+    r"""Return whether an occurrence stands alone or sits inside a word, or None to skip it.
+
+    An occurrence that begins with the letter of an escape written out is none: a page whose tool
+    lost its backslashes wrote "nAlfa", and its "nAlfa" took the "n" of every "\nAlfa" with it.
+    """
     if through_view and needle.lowercase_is_a_common_word and text[start:end].islower():
+        return None
+    if _escape_letter(text, start):
         return None
     if _stands_alone(text, start, end):
         if needle.is_short_number and _in_a_date_time_or_amount(text, start, end):
@@ -880,6 +886,22 @@ def _has_word_character(text: str) -> bool:
     return any(_is_word_character(char) for char in text)
 
 
+def _word_goes_on_before(text: str, position: int) -> bool:
+    r"""Return whether the character before `position` is part of the word that reaches it.
+
+    The letter of an escape written out is not: "\nNowak" is a line break and "Nowak", and the
+    "n" taken as part of the word made it "nNowak", a value of its own.
+    """
+    if position == 0 or not _is_word_character(text[position - 1]):
+        return False
+    return not _escape_letter(text, position - 1)
+
+
+def _escape_letter(text: str, index: int) -> bool:
+    r"""Return whether the character at `index` is the letter of "\n", "\r" or "\t" written out."""
+    return index > 0 and text[index] in "nrt" and text[index - 1] == "\\"
+
+
 def _stands_alone(text: str, start: int, end: int) -> bool:
     """Return whether a match is not part of a longer word.
 
@@ -888,7 +910,7 @@ def _stands_alone(text: str, start: int, end: int) -> bool:
     last letter belongs to the word: "Kowalska" plus a combining ogonek is "Kowalską".
     """
     left_clear = (
-        start == 0 or not _is_word_character(text[start]) or not _is_word_character(text[start - 1])
+        start == 0 or not _is_word_character(text[start]) or not _word_goes_on_before(text, start)
     )
     right_clear = (
         end == len(text)
@@ -900,7 +922,7 @@ def _stands_alone(text: str, start: int, end: int) -> bool:
 
 def _with_a_case_ending(text: str, start: int, end: int) -> bool:
     """Return whether a match begins a word that a case ending finishes: "Lis" in "Lisowi"."""
-    if start > 0 and _is_word_character(text[start - 1]):
+    if _word_goes_on_before(text, start):
         return False
     for ending in _SHORT_NAME_ENDINGS:
         last = end + len(ending)
@@ -916,7 +938,7 @@ def _stands_inside(text: str, position: int) -> bool:
 
 def _whole_words(text: str, start: int, end: int) -> tuple[int, int]:
     """Widen a range over the letters, digits, combining marks and invisible characters."""
-    while start > 0 and _is_word_character(text[start - 1]):
+    while _word_goes_on_before(text, start):
         start -= 1
     while end < len(text) and _is_word_character(text[end]):
         end += 1

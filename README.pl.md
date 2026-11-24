@@ -625,8 +625,10 @@ czytelne, chyba że poprosisz o ich maskowanie.
 
 Tekst skopiowany z PDF-ów, Worda albo macOS jest czytany tak, jak przeczytałby go człowiek: litery
 zapisane jako litera bazowa plus znak diakrytyczny, spacje niełamiące i półpauzy wewnątrz liczb oraz
-niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Mapowanie przechowuje każdą wartość
-w postaci, w jakiej została zapisana za pierwszym razem.
+niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Tak samo sekwencje ucieczki zapisane
+dosłownie, jak w JSON-ie i logach wypisywanych przez narzędzia agenta: nazwisko po `\n` albo z `\u015b`
+zamiast „ś” jest czytane jako nazwisko. Mapowanie przechowuje każdą wartość w postaci, w jakiej
+została zapisana za pierwszym razem.
 
 Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 93% wartości,
 a reguły z `pl_core_news_md` 99%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście

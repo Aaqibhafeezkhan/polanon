@@ -17,13 +17,15 @@ from polanon import (
     PersonNameGuard,
     RegexGuard,
     SecretsGuard,
+    leaked_tokens,
 )
 from polanon._matching import occurrences
+from polanon._view import detection_view
 from polanon.guards.base import Guard
 from polanon.judge.base import Judge, JudgeError, JudgeFinding
 from polanon.pipeline import anonymize, mask_known_values
 from polanon.policy import ENTITY_TYPES
-from polanon.types import JudgeFallback, Span
+from polanon.types import JudgeFallback, Span, _trim
 
 ALL = set(ENTITY_TYPES)
 NBSP = chr(0x00A0)
@@ -115,6 +117,132 @@ async def test_a_name_in_decomposed_unicode_is_masked_whole():
     assert result.anonymized == unicodedata.normalize("NFD", "Pani <OSOBA_1> zgłosiła reklamację.")
     assert result.mapping == {"<OSOBA_1>": unicodedata.normalize("NFD", "Małgorzata Wójcik")}
     assert is_lossless(result)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (r"Dane klienta:\nJan Kowalski\nul. Lipowa 5", r"Dane klienta:\n<OSOBA_1>\n<ADRES_1>"),
+        (
+            r"Notatka:\r\nKatarzyna Zielińska prosi o kontakt.",
+            r"Notatka:\r\n<OSOBA_1> prosi o kontakt.",
+        ),
+        (r"Kolumny:\tMarek Wiśniewski\t601 234 567", r"Kolumny:\t<OSOBA_1>\t<TELEFON_1>"),
+        # JSON encoded twice writes a line break with two backslashes.
+        (r"Wynik:\\nJan Kowalski dzwonił.", r"Wynik:\\n<OSOBA_1> dzwonił."),
+    ],
+)
+async def test_a_name_after_an_escape_written_out_is_masked(text, expected):
+    """An agent's tools print JSON and logs with "\\n" written out: the name after it read as one
+    word with the "n" and went out whole."""
+    result = await mask(text)
+    assert result.anonymized == expected
+    # The value is the name as written, without the letter of the escape.
+    assert result.mapping["<OSOBA_1>"][0].isupper()
+    assert is_lossless(result)
+
+
+async def test_a_name_with_its_polish_letters_written_as_escapes_is_masked_as_written():
+    """JSON printed with its default ASCII escapes writes "ś" as "\\u015b"."""
+    text = r'Wynik: {"klient": "Marek Wi\u015bniewski"}'
+    result = await mask(text)
+    assert result.anonymized == 'Wynik: {"klient": "<OSOBA_1>"}'
+    assert result.mapping == {"<OSOBA_1>": r"Marek Wi\u015bniewski"}
+    assert is_lossless(result)
+
+
+async def test_a_known_value_is_found_written_with_escapes_and_after_one():
+    mapping = {"<OSOBA_1>": "Marek Wiśniewski", "<OSOBA_2>": "Nowak"}
+    text = r"Lista:\nMarek Wi\u015bniewski,\nNowak i Nowakowa."
+    result = await mask(text, [], mapping=mapping)
+    assert result.anonymized == r"Lista:\n<OSOBA_1>,\n<OSOBA_2> i <OSOBA_3>."
+    assert result.mapping["<OSOBA_3>"] == "Nowakowa"
+
+
+async def test_a_piece_left_over_after_an_escape_does_not_take_its_letter():
+    """A loose place span ran from the company into the next line, and its piece after the
+    company was trimmed to its first letter, the "n" of "\\n": "nParis" became a place."""
+    text = r"Firma Alfa\nParis otwiera biuro."
+    company = Span(0, text.index(r"\n"), "ORG", 1.0, "fixed")
+    loose = Span(text.index("Alfa"), text.index(" otwiera"), "LOCATION", 0.85, "fixed")
+    result = await mask(text, [FixedGuard(company, loose)])
+    assert result.anonymized == r"<FIRMA_1>\n<MIEJSCE_1> otwiera biuro."
+    assert result.mapping == {"<FIRMA_1>": "Firma Alfa", "<MIEJSCE_1>": "Paris"}
+    assert is_lossless(result)
+
+
+@pytest.mark.parametrize(
+    ("text", "piece"),
+    [
+        (r"(świat)", r"świat"),
+        (r"(Wiś)", r"Wiś"),
+        (r"\n\tNowak\n", "Nowak"),
+        (r"\n ", ""),
+        ("(cafe" + chr(0x301) + ")", "cafe" + chr(0x301)),
+    ],
+)
+def test_a_piece_is_trimmed_to_its_letters_and_digits_as_the_guards_read_them(text, piece):
+    start, end = _trim(text, 0, len(text))
+    assert text[start:end] == piece
+
+
+def test_a_piece_that_starts_inside_an_escape_leaves_the_escape_out():
+    text = r"x\nParis"
+    start, end = _trim(text, text.index("n"), len(text))
+    assert text[start:end] == "Paris"
+
+
+async def test_a_known_value_that_begins_like_an_escape_leaves_the_escape_alone():
+    """A page whose tool lost its backslashes wrote "nAlfa"; where the escape is whole, its "n"
+    is a line break, and masking "nAlfa" there broke it and glued the letter to the name."""
+    text = r"Raport:\nAlfa podała wynik. Potem nAlfa znowu."
+    result = await mask(text, [], mapping={"<FIRMA_1>": "nAlfa"})
+    assert result.anonymized == r"Raport:\nAlfa podała wynik. Potem <FIRMA_1> znowu."
+    assert leaked_tokens(result.anonymized, result.mapping) == []
+
+
+def test_the_last_check_finds_a_value_written_with_escapes():
+    mapping = {"<OSOBA_1>": "Marek Wiśniewski"}
+    assert leaked_tokens({"content": r"Klient: Marek Wi\u015bniewski"}, mapping) == ["<OSOBA_1>"]
+    assert leaked_tokens({"content": r"Klient:\nMarek Wiśniewski"}, mapping) == ["<OSOBA_1>"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        r"Plik C:\temp\raport\nowy.txt zapisany.",
+        r"Ścieżka: C:\\Users\\tester\\notatki.txt",
+        r"Emoji \ud83d\ude00 i sama połówka \ud83d bez pary.",
+        r"Cytat: \"tak\" i adres https:\/\/example.com\/a",
+    ],
+)
+async def test_text_with_escapes_and_nothing_to_mask_comes_back_as_written(text):
+    result = await mask(text)
+    assert result.anonymized == text
+    assert result.mapping == {}
+
+
+def test_the_view_reads_escapes_as_the_characters_they_stand_for():
+    text = r"a\nb\tc\r\nd\"e\/f\u015bg\ud83d\ude00h\ud83di\\nj"
+    view = detection_view(text)
+    assert view is not None
+    assert view.text == 'a\nb\tc\r\nd"e/fśg\U0001f600h\\ud83di\nj'
+    # Each character of the view points to the whole escape it was read from.
+    at = view.text.index("ś")
+    assert text[view.starts[at] : view.ends[at]] == r"\u015b"
+    at = view.text.index("\U0001f600")
+    assert text[view.starts[at] : view.ends[at]] == r"\ud83d\ude00"
+    assert len(view.text) == len(view.starts) == len(view.ends)
+
+
+def test_the_view_reads_plain_runs_between_special_characters_as_written():
+    text = f"Ala{NBSP}ma kota, cafe{chr(0x301)} i {EN_DASH} koniec" + r"\nNowak"
+    view = detection_view(text)
+    assert view is not None
+    assert view.text == "Ala ma kota, café i - koniec\nNowak"
+    assert [text[s:e] for s, e in zip(view.starts, view.ends, strict=True)][:3] == ["A", "l", "a"]
+    at = view.text.index("é")
+    assert text[view.starts[at] : view.ends[at]] == "e" + chr(0x301)
 
 
 def fullwidth(text):
@@ -322,6 +450,28 @@ async def test_a_piece_of_a_losing_detection_too_short_to_name_anything_stays_re
     email = Span(text.index("k.nowak"), text.index(">"), "EMAIL", 1.0, "fixed")
     result = await mask(text, [FixedGuard(loose, email)])
     assert result.anonymized == "Od: K <<EMAIL_1>>"
+
+
+async def test_a_letter_left_over_from_a_known_value_crossing_another_is_no_value():
+    """A tool's JSON written out once more keeps its line breaks as "\\n": the model read the
+    surname with the "n" glued on, and its occurrence lost to the known company, leaving "n" as a
+    person. Masked in every "\\n" from then on, it made the gateway's last check refuse the call."""
+    text = r"Raport:\n\nNowak Serwis Plus zrobił audyt.\n\nPotem\n\nnic."
+    glued = Span(text.index("nNowak"), text.index("nNowak") + len("nNowak"), "PERSON", 0.85)
+    result = await mask(text, [FixedGuard(glued)], mapping={"<FIRMA_1>": "Nowak Serwis Plus"})
+    assert result.anonymized == r"Raport:\n\n<FIRMA_1> zrobił audyt.\n\nPotem\n\nnic."
+    assert result.mapping == {"<FIRMA_1>": "Nowak Serwis Plus"}
+    assert leaked_tokens(result.anonymized, result.mapping) == []
+    assert is_lossless(result)
+
+
+async def test_two_letters_left_over_from_a_known_company_beside_a_longer_name_are_no_value():
+    text = "Umowę podpisał Janusz Kowal sc w imieniu firmy. Forma prawna: sc."
+    result = await mask(text, mapping={"<FIRMA_1>": "Kowal sc"})
+    assert result.anonymized == ("Umowę podpisał <OSOBA_1> sc w imieniu firmy. Forma prawna: sc.")
+    assert "sc" not in result.mapping.values()
+    assert leaked_tokens(result.anonymized, result.mapping) == []
+    assert is_lossless(result)
 
 
 async def test_the_judge_reviews_only_the_masked_text():

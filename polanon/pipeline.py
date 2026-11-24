@@ -302,6 +302,10 @@ def _stray_pieces(merged: list[Span], detected: list[Span], text: str) -> set[tu
     into the next line left the bare word "NIP" behind, and every "NIP" of the conversation went to
     the model as an address. A piece with no digit of a type whose values always carry one, or with
     fewer than three letters and digits, is such a word, and stays as written.
+
+    The same goes for the pieces of known values' occurrences that cross each other or a guard's
+    detection. A value of one letter is also found in every word that letter stands alone in, so
+    the gateway's last check found it hundreds of times and refused to send the call.
     """
     starts = {(span.entity_type, span.start) for span in detected}
     ends = {(span.entity_type, span.end) for span in detected}
@@ -508,10 +512,13 @@ def _mask_stage1(
         forms.pop(skeleton(reading(value)), None)  # a known value is masked as one
     taken = occupied + [(start, end) for start, end, _ in occurrences]
     occurrences += form_matches(haystack, forms, taken, capital_tells_a_name)
-    spans = merge_spans(
-        kept + [Span(start, end, kind, 0.9, "known_value") for start, end, kind in occurrences],
-        text,
-    )
+    found = kept + [Span(start, end, kind, 0.9, "known_value") for start, end, kind in occurrences]
+    spans = merge_spans(found, text)
+    # An occurrence that crosses another keeps a piece of itself as well, and a piece of a letter
+    # or two became a value: "nNowak", a surname glued to the "n" of a "\n" written out in a tool's
+    # JSON, lost to a company and left "n", masked from then on in every "\n" of the call.
+    stray = _stray_pieces(spans, found, text)
+    spans = [span for span in spans if (span.start, span.end) not in stray]
 
     reserved = (base_token(match) for match in CASED_TOKEN_RE.finditer(text))
     return _substitute(text, spans, _TokenAllocator(existing_mapping, reserved, pseudonyms))

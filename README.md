@@ -606,7 +606,9 @@ by context. Other dates are recognised too, but left readable unless you ask for
 
 Text copied from PDFs, Word or macOS is read as a person would read it: letters written as a base
 letter plus an accent, no-break spaces and en dashes inside numbers, and invisible zero-width
-characters do not hide a value. The mapping keeps each value as it was first written.
+characters do not hide a value. Neither do escapes written out, as an agent's tools print JSON
+and logs: a name after `\n`, or with `\u015b` for "ś", is read as the name. The mapping keeps
+each value as it was first written.
 
 On the annotated sample documents in the repository, the rules alone fully mask 93% of the
 values and the rules with `pl_core_news_md` mask 99%, with nothing left half-masked. Thirteen short
