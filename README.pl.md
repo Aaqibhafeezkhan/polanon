@@ -510,7 +510,7 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.3`,
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.4`,
 z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |
@@ -625,8 +625,10 @@ czytelne, chyba że poprosisz o ich maskowanie.
 
 Tekst skopiowany z PDF-ów, Worda albo macOS jest czytany tak, jak przeczytałby go człowiek: litery
 zapisane jako litera bazowa plus znak diakrytyczny, spacje niełamiące i półpauzy wewnątrz liczb oraz
-niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Mapowanie przechowuje każdą wartość
-w postaci, w jakiej została zapisana za pierwszym razem.
+niewidoczne znaki o zerowej szerokości nie ukrywają wartości. Tak samo sekwencje ucieczki zapisane
+dosłownie, jak w JSON-ie i logach wypisywanych przez narzędzia agenta: nazwisko po `\n` albo z `\u015b`
+zamiast „ś” jest czytane jako nazwisko. Mapowanie przechowuje każdą wartość w postaci, w jakiej
+została zapisana za pierwszym razem.
 
 Na oznaczonych przykładowych dokumentach z repozytorium same reguły maskują w całości 93% wartości,
 a reguły z `pl_core_news_md` 99%, przy czym nic nie zostaje zamaskowane tylko w części. Trzynaście

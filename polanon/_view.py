@@ -34,9 +34,22 @@ _PLAIN = {**dict.fromkeys(_SPACES, " "), **dict.fromkeys(DASHES, "-")}
 _ZERO_WIDTH_SPACE = "\N{ZERO WIDTH SPACE}"
 #: Fullwidth ASCII (U+FF01 to U+FF5E) sits this far above the characters it stands for.
 _FULLWIDTH_OFFSET = 0xFEE0
+#: An escape written out, as a tool's JSON printed once more, a log or a program's string holds
+#: it: a line break as the two characters "\n", "ś" as "\u015b". The guards read the character
+#: it stands for. A run of backslashes counts as one: JSON encoded twice writes a break "\\n".
+_ESCAPE = re.compile(r'\\+(?:([nrt"/])|u([0-9a-fA-F]{4}))')
+_ESCAPED = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "/": "/"}
+#: Halves of a character above U+FFFF, which JSON writes as two escapes, "\ud83d\ude00".
+_HIGH_SURROGATES = range(0xD800, 0xDC00)
+_LOW_SURROGATES = range(0xDC00, 0xE000)
 #: A text containing none of these is read by the guards exactly as written, which is nearly always.
 _NEEDS_VIEW = re.compile(
-    "[\u0300-\u036f\uff01-\uff5e" + _SPACES + DASHES + "".join(sorted(INVISIBLE)) + "]"
+    "[\u0300-\u036f\uff01-\uff5e"
+    + _SPACES
+    + DASHES
+    + "".join(sorted(INVISIBLE))
+    + "]|"
+    + _ESCAPE.pattern
 )
 
 
@@ -60,7 +73,7 @@ class View:
 
 
 def detection_view(text: str) -> View | None:
-    """Return the text as the guards should read it, or None when it is fine as written.
+    r"""Return the text as the guards should read it, or None when it is fine as written.
 
     Text copied from a PDF, from macOS or from a web page often spells a Polish letter as a base
     letter plus a combining mark ("s" + U+0301 for "ś"), keeps the groups of a NIP or an IBAN apart
@@ -69,26 +82,79 @@ def detection_view(text: str) -> View | None:
     surname, went out in the clear. The guards read a view with letters composed, such spaces and
     dashes made plain and invisible characters dropped. Spans come back in original coordinates, so
     the mapping holds each value as it was first written.
+
+    An agent's tools print JSON and logs with their escapes written out. A name right after "\n"
+    read as one word with the "n", "\tMarek Wiśniewski" and "\r\nKatarzyna Zielińska" went out
+    whole, and "Wi\u015bniewski" was no name to the rules. The guards read such an escape as the
+    character it stands for.
     """
-    if _NEEDS_VIEW.search(text) is None:
+    special = _NEEDS_VIEW.search(text)
+    if special is None:
         return None
     chars: list[str] = []
     starts: list[int] = []
     ends: list[int] = []
     index = 0
-    while index < len(text):
-        end = index + 1
-        while end < len(text) and unicodedata.combining(text[end]):
-            end += 1
-        cluster = text[index:end]
-        if cluster == _ZERO_WIDTH_SPACE and _between_words(text, index, end):
-            cluster = " "
-        for char in read_cluster(cluster):
+    length = len(text)
+    while index < length:
+        # The characters before the next one to read differently are read as written, in one go;
+        # the last of them stays out when a combining mark follows it, which it is read with.
+        stop = length if special is None else special.start()
+        if special is not None and stop > index and unicodedata.combining(text[stop]):
+            stop -= 1
+        if stop > index:
+            chars.append(text[index:stop])
+            starts.extend(range(index, stop))
+            ends.extend(range(index + 1, stop + 1))
+            index = stop
+        if index >= length:
+            break
+        read, end = _read_at(text, index)
+        for char in read:
             chars.append(char)
             starts.append(index)
             ends.append(end)
         index = end
+        if special is not None and special.end() <= index:
+            special = _NEEDS_VIEW.search(text, index)
     return View("".join(chars), starts, ends)
+
+
+def _read_at(text: str, index: int) -> tuple[str, int]:
+    """Return how the guards read the character at `index`, and where what they read ends."""
+    escape = _ESCAPE.match(text, index)
+    if escape is not None:
+        decoded = _unescaped(text, escape)
+        if decoded is not None:
+            return decoded
+    end = index + 1
+    while end < len(text) and unicodedata.combining(text[end]):
+        end += 1
+    cluster = text[index:end]
+    if cluster == _ZERO_WIDTH_SPACE and _between_words(text, index, end):
+        cluster = " "
+    return read_cluster(cluster), end
+
+
+def _unescaped(text: str, escape: re.Match[str]) -> tuple[str, int] | None:
+    """Return the character an escape stands for, read as a character of text is, and its end.
+
+    Half of a character above U+FFFF is read with the other half after it; alone, the escape is
+    read as written.
+    """
+    if escape[1] is not None:
+        return _ESCAPED[escape[1]], escape.end()
+    code = int(escape[2], 16)
+    end = escape.end()
+    if code in _HIGH_SURROGATES:
+        low = _ESCAPE.match(text, end)
+        if low is None or low[2] is None or int(low[2], 16) not in _LOW_SURROGATES:
+            return None
+        code = 0x10000 + ((code - 0xD800) << 10) + (int(low[2], 16) - 0xDC00)
+        end = low.end()
+    elif code in _LOW_SURROGATES:
+        return None
+    return read_cluster(chr(code)), end
 
 
 def _between_words(text: str, index: int, end: int) -> bool:

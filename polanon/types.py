@@ -231,9 +231,30 @@ def _uncovered_parts(candidate: Span, kept: list[Span], text: str | None) -> lis
 
 
 def _trim(text: str, start: int, end: int) -> tuple[int, int]:
-    """Shrink a range to its first and last letter or digit; empty when it has neither."""
-    while start < end and not text[start].isalnum():
-        start += 1
-    while end > start and not text[end - 1].isalnum():
-        end -= 1
-    return start, end
+    r"""Shrink a range to its first and last letter or digit; empty when it has neither.
+
+    Letters and digits are counted as the guards read them. A piece that began at the "\n" of
+    "\nParis", written out in a tool's JSON, was trimmed to "nParis", a value of its own, and an
+    escape that stands for a letter, the "ś" of "Wiśniewski", is one character of it.
+    """
+    from polanon._view import detection_view  # the view reads spans, so it imports this module
+
+    # An escape the range starts inside of is read whole, from its first backslash.
+    origin = start
+    while origin > 0 and text[origin - 1] == "\\":
+        origin -= 1
+    view = detection_view(text[origin:end])
+    if view is None:
+        while start < end and not text[start].isalnum():
+            start += 1
+        while end > start and not text[end - 1].isalnum():
+            end -= 1
+        return start, end
+    kept = [
+        at
+        for at, char in enumerate(view.text)
+        if char.isalnum() and origin + view.starts[at] >= start
+    ]
+    if not kept:
+        return start, start
+    return origin + view.starts[kept[0]], origin + view.ends[kept[-1]]
