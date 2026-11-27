@@ -7,6 +7,17 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+### Changed
+
+- **The ML filter reviews a text once.** spaCy's findings in a text sent again were already
+  remembered, but the filter computed the features and the probability of every span on every
+  call, though a chat or an agent sends its whole history again each time. `NerGuard` now also
+  remembers which spans it kept, for up to `cache_texts` texts (0 turns it off, as before), under
+  the text's SHA-256 digest and a digest of where its spans and the other guards' spans stand,
+  never a word of the text. Masking the calls of `benchmarks/run_agent.py` a second time with the
+  same anonymizer spends 0.03 s in the filter instead of 0.13, and the benchmarks give the same
+  numbers.
+
 ## [0.4.4] - 2026-11-24
 
 A patch release with what the gateway in front of a live agent showed: the escapes an agent's

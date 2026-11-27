@@ -121,6 +121,43 @@ def test_a_review_reads_the_text_and_each_line_once_however_many_spans_they_hold
     assert [(f["text_english"], f["line_polish"]) for f in seen] == [(0, 0), (0, 0)]
 
 
+def test_a_text_reviewed_before_is_not_reviewed_again(seen, monkeypatch):
+    """A chat sends its whole history with every call: what the filter kept of a text it read
+    before comes back without a feature computed again, remembered by where the spans stand,
+    never by a word of the text."""
+    computed: list[Span] = []
+    features = _span_features.span_features
+
+    def counted(text, span, **found):
+        computed.append(span)
+        return features(text, span, **found)
+
+    monkeypatch.setattr(_span_features, "span_features", counted)
+    guard = NerGuard()
+    assert _found(guard) == ["Anna Nowak"]
+    assert len(computed) == len(seen) == 2
+    assert _found(guard) == ["Anna Nowak"]
+    assert len(computed) == len(seen) == 2
+    assert not any(name in repr(guard._reviewed) for name in ("Anna", "Nowak", "Zenon"))
+
+
+def test_what_the_other_guards_found_is_part_of_what_was_reviewed(seen):
+    """The filter weighs whether a rule found the span too, so the same text with other rule
+    spans is reviewed anew."""
+    guard = NerGuard()
+    assert _found(guard) == ["Anna Nowak"]
+    spans = guard.detect(TEXT, {"PERSON"})
+    assert guard._review(TEXT, spans, []) == []
+    assert len(seen) == 4
+
+
+def test_with_no_texts_remembered_every_review_is_computed(seen):
+    guard = NerGuard(cache_texts=0)
+    assert _found(guard) == _found(guard) == ["Anna Nowak"]
+    assert len(seen) == 4
+    assert not guard._reviewed
+
+
 class _Pipeline:
     """A made-up spaCy pipeline that names its model as a real one does."""
 
