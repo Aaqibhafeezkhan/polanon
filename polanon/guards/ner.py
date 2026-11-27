@@ -854,6 +854,21 @@ def _words_of(
             yield offset + start, offset + end, Word.of(token)
 
 
+def _places(spans: list[Span], others: list[Span]) -> bytes:
+    """Digest where the spans under review and the other guards' spans stand, by type.
+
+    Besides the text, the ML filter's decision depends on nothing else: a span's features read
+    its own place and type, and whether a rule found something where it stands. The spans keep
+    their order, which the remembered positions refer to; the others are sorted, as the review
+    sorts them.
+    """
+    places = (
+        tuple((span.start, span.end, span.entity_type) for span in spans),
+        sorted((other.start, other.end, other.entity_type) for other in others),
+    )
+    return hashlib.sha256(repr(places).encode("utf-8", "surrogatepass")).digest()
+
+
 def _join_hyphenated(text: str, spans: list[Span]) -> list[Span]:
     """Join two spans of the same type separated by nothing but a hyphen.
 
@@ -936,9 +951,10 @@ class NerGuard(Guard):
 
         Args:
             spacy_model: the spaCy package or directory to load.
-            cache_texts: how many texts to remember what the model found in, so a text sent again,
-                as a chat's history is, is not read again; 0 reads every text every time. A text
-                is remembered by its SHA-256 digest, never as written.
+            cache_texts: how many texts to remember what the model found in and what the ML
+                filter kept of it, so a text sent again, as a chat's history is, is not read or
+                reviewed again; 0 reads and reviews every text every time. A text is remembered
+                by its SHA-256 digest, never as written.
             mode: "normal" leaves out what the Polish model reads as a name in English prose,
                 in code, in identifiers and in a place written in lowercase, where nearly all of
                 it is ordinary words; a name opening an English sentence and "jadę do gdyni" go
@@ -969,6 +985,9 @@ class NerGuard(Guard):
         self._found: OrderedDict[tuple[str, frozenset[str]], tuple[Span, ...]] = OrderedDict()
         #: What the model read in every word of the texts it read lately, for the ML filter.
         self._words: OrderedDict[str, tuple[tuple[int, int, Any], ...]] = OrderedDict()
+        #: Which of a text's spans the ML filter kept, by their positions in the list it was
+        #: given, under the text's digest and a digest of where the spans stand.
+        self._reviewed: OrderedDict[tuple[str, bytes], tuple[int, ...]] = OrderedDict()
 
     def _get_pipeline(self) -> Any:
         """Load and cache the spaCy pipeline, once even when several threads ask at the same time.
@@ -1070,10 +1089,40 @@ class NerGuard(Guard):
         """Keep the spans the ML filter keeps, knowing what the other guards found.
 
         Called by the pipeline once every guard has read `text`. A text whose words are no longer
-        remembered keeps every span: more masked, nothing let through.
+        remembered keeps every span: more masked, nothing let through. What the filter kept of a
+        text it reviewed with the same spans is remembered, as :meth:`detect` remembers what the
+        model found: a chat sends its whole history with every call.
         """
         if not spans or not self._filters_by_ml():
             return spans
+        digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        with _CACHE_LOCK:
+            words = self._words.get(digest)
+        if words is None:
+            return spans
+        key = (digest, _places(spans, others)) if self.cache_texts > 0 else None
+        if key is not None:
+            with _CACHE_LOCK:
+                kept_at = self._reviewed.get(key)
+                if kept_at is not None:
+                    self._reviewed.move_to_end(key)
+                    return [spans[at] for at in kept_at]
+        kept_at = self._kept_by_ml(text, spans, others, words)
+        if key is not None:
+            with _CACHE_LOCK:
+                self._reviewed[key] = kept_at
+                while len(self._reviewed) > self.cache_texts:
+                    self._reviewed.popitem(last=False)
+        return [spans[at] for at in kept_at]
+
+    def _kept_by_ml(
+        self,
+        text: str,
+        spans: list[Span],
+        others: list[Span],
+        words: tuple[tuple[int, int, Any], ...],
+    ) -> tuple[int, ...]:
+        """Return the positions in `spans` of the spans the ML filter keeps."""
         from polanon.guards._span_features import (
             line_bounds,
             ml_filter_keeps,
@@ -1082,11 +1131,6 @@ class NerGuard(Guard):
             span_vector,
         )
 
-        digest = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
-        with _CACHE_LOCK:
-            words = self._words.get(digest)
-        if words is None:
-            return spans
         vocab = getattr(self._get_pipeline(), "vocab", None)
         # What every span would read from the whole text, or from a line as long as the text, is
         # read once: per span, a text of 100 KB took 13 s to mask instead of 2.5 s.
@@ -1099,7 +1143,7 @@ class NerGuard(Guard):
         rule_starts = [other.start for other in rule_spans]
         rule_reach = list(accumulate((other.end for other in rule_spans), max))
         kept = []
-        for span in spans:
+        for at, span in enumerate(spans):
             fragment = text[span.start : span.end]
             if fragment not in repeated:
                 repeated[fragment] = text.count(fragment) > 1
@@ -1125,8 +1169,8 @@ class NerGuard(Guard):
             vector = span_vector(text[span.start : span.end], vocab) if vocab is not None else []
             context = span_context(text, span)
             if ml_filter_keeps(features, span.entity_type, vector, context):
-                kept.append(span)
-        return kept
+                kept.append(at)
+        return tuple(kept)
 
     def _line_spans(self, text: str, start: int, end: int, entity_type: str) -> list[Span]:
         """Split an entity at line breaks and the columns of a table, and trim the whitespace.
