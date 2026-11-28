@@ -21,6 +21,7 @@ from polanon import (
     ner_available,
 )
 from polanon.allowlist import NAME_TYPES, PROTECTED_SOURCES
+from polanon.guards.base import Guard
 from polanon.policy import Mode
 
 
@@ -55,12 +56,38 @@ def anonymizer(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[Anonym
     allowlist = OperatorNames(well_known, operator) if operator or well_known else None
     if operator:
         detection += f", {len(operator)} of the operator's names left readable"
-    anonymizer = Anonymizer(
-        default_guards(with_ner=with_ner, spacy_model=args.spacy_model, mode=mode),
-        allowlist=allowlist,
-        pseudonyms=pseudonyms,
-    )
+    if getattr(args, "arbiter", False):
+        guards = _arbiter_guards(args)
+        detection = detection.replace(
+            f"rules and {args.spacy_model}",
+            f"rules, {args.spacy_model} and FastPDN, the arbiter deciding",
+        )
+    else:
+        guards = default_guards(with_ner=with_ner, spacy_model=args.spacy_model, mode=mode)
+    anonymizer = Anonymizer(guards, allowlist=allowlist, pseudonyms=pseudonyms)
     return anonymizer, detection
+
+
+def _arbiter_guards(args: argparse.Namespace) -> list[Guard]:
+    """The guards with the arbiter, or the reason it cannot run, as a setting the gateway refuses.
+
+    Asked for by name, the arbiter is never left out quietly: a gateway that masks less than it
+    was started to mask is the one failure an operator does not see.
+
+    Raises:
+        ValueError: with --rules-only or --paranoid, and when spaCy, its model, onnxruntime,
+            tokenizers or the export of FastPDN is missing, with the commands that fix it.
+    """
+    if args.rules_only:
+        raise ValueError("--arbiter reads with the spaCy model: leave out --rules-only")
+    if args.paranoid:
+        raise ValueError("--arbiter decides in the normal mode: leave out --paranoid")
+    try:
+        return default_guards(
+            with_ner=True, spacy_model=args.spacy_model, arbiter=True, fastpdn_dir=args.fastpdn_dir
+        )
+    except ModuleNotFoundError as exc:
+        raise ValueError(str(exc)) from None
 
 
 def worker_anonymizer(args: argparse.Namespace) -> Anonymizer:

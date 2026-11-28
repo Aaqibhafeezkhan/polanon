@@ -44,6 +44,11 @@ classifiers = [
 # Names, places and organisations without a legal form. Also needs the model:
 #     python -m spacy download pl_core_news_md
 ner = ["spacy>=3.7"]
+# The arbiter: FastPDN, CLARIN-PL's transformer, read beside the spaCy model, and a regression that
+# decides between them. Also needs the spaCy model, and FastPDN exported once:
+#     python -m spacy download pl_core_news_md
+#     python -m polanon.fastpdn      (torch, transformers and onnx for that one run)
+arbiter = ["spacy>=3.7", "onnxruntime>=1.18", "tokenizers>=0.19"]
 # The Ollama and remote stage-2 judges.
 judge = ["httpx>=0.27"]
 # Components for Haystack 3 pipelines: polanon.integrations.haystack.

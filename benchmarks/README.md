@@ -235,6 +235,56 @@ would cost to read and to run in plain Python. The filter costs about half a mil
 against twelve for the spaCy model, and it remembers what the model read in the words of the
 names it reviews, never the words themselves.
 
+## The arbiter
+
+The ML filter can only drop what the spaCy model finds. On OpenPII's test part, of the people the
+pipeline did not mask whole, the model had found nothing at all in about seven of ten; the filters
+dropped one in thirty. The arbiter, `default_guards(arbiter=True)`, brings a second model:
+[FastPDN](https://huggingface.co/clarin-pl/FastPDN), CLARIN-PL's HerBERT fine-tuned on KPWr for
+82 categories of Polish names, run from ONNX by `polanon/guards/_fastpdn.py`. Of the 3,140
+benchmark texts it was checked on, long ones among them, it returns exactly what Hugging Face's
+pipeline returns. What either model finds goes through the hand-written filters; what is left is
+a candidate, and a logistic regression weighs it with the ML filter's signs and with what the two
+models said of it: which found it, with the same bounds or not, FastPDN's score, and its
+category, a street, a town, a company, a country or a piece of software.
+
+- [`arbiter_data.py`](arbiter_data.py) reads every text of OpenPII's Polish rows and of KPWr
+  with both models and writes every candidate with its signs and a label, with
+  ml_filter_data.py's parts. For training, FastPDN reads every line and proposes organisations
+  too.
+- [`arbiter_train.py`](arbiter_train.py) chooses the L2 penalty by five-fold cross-validation, the
+  folds cut by document, on the train parts of both, and writes
+  `polanon/guards/_arbiter_weights.py`. KPWr's train part trains too: trained on OpenPII alone,
+  the arbiter scored KPWr's names so low that no threshold lost none of them on dev, since FastPDN
+  learned that part and is right there more often than elsewhere.
+- [`arbiter_tune.py`](arbiter_tune.py) sets the threshold of each type end to end on the dev
+  parts, the highest with which no value is masked whole less often than with every candidate
+  kept, times 0.75, and measures the final part once.
+
+When it masks, three rules come after the regression. A person or a place the spaCy guard keeps
+stays: the arbiter only adds them. Organisations come from md only, and the arbiter may drop
+them: FastPDN masked public companies in Polish sentences about the news. FastPDN reads only the
+lines `_language()` calls Polish, and every other line is decided as the spaCy guard decides it:
+FastPDN reads the English of software as companies, and the spaCy guard's filters were written
+for that. On the final part, measured once:
+
+| | Values masked whole | Spans outside the values |
+|---|---:|---:|
+| OpenPII, 1,290 texts: the spaCy guard | 4,916 | 401 |
+| the same with the arbiter | **5,229** | **346** |
+| KPWr, 316 sentences with values: the spaCy guard | 380 | 188 |
+| the same with the arbiter | 430 | 188 |
+
+On OpenPII's test part it masks 4,036 values whole instead of 3,764, with 263 spans outside the
+values instead of 306: 1,443 of 1,558 people instead of 1,231, 480 of 701 streets instead of
+451, 455 of 503 cities instead of 424. On KPWr's test part, 1,503 of 1,557 instead of 1,393: 920
+people instead of 856, 90 streets of 95 instead of 66. FastPDN learned KPWr's train part, so the
+KPWr numbers flatter it. On the 13 documents and on the agent's calls it changes nothing: their
+names the spaCy guard already masks, and the agent's English, code and JSON are decided as the
+spaCy guard decides them. It costs time where the text is Polish: on a desktop the 1,000 OpenPII
+texts take 54 s instead of 17, the agent's calls 3.6 s instead of 2.1 the first time and 0.9 s
+either way when the history comes again.
+
 ## Running it
 
 ```bash
@@ -259,6 +309,18 @@ The data polanon was never tuned on is downloaded into `~/.cache/polanon/benchma
 python benchmarks/run_external.py              # OpenPII and KPWr
 python benchmarks/run_external.py --presidio   # and Presidio
 python benchmarks/run_external.py --teryt      # and every TERYT street
+```
+
+The arbiter needs `pip install "polanon[arbiter]"` and FastPDN exported once (see the README):
+
+```bash
+python benchmarks/run.py --ner --arbiter
+python benchmarks/run_agent.py --ner --arbiter
+python benchmarks/run_external.py --arbiter
+python benchmarks/arbiter_data.py              # rebuild it: about an hour on a desktop
+python benchmarks/arbiter_train.py --module polanon/guards/_arbiter_weights.py
+python benchmarks/arbiter_tune.py --write polanon/guards/_arbiter_weights.py
+python benchmarks/arbiter_tune.py --final      # once
 ```
 
 A document worth keeping is welcome: put the text in `samples/`, its annotations in `gold/` with
