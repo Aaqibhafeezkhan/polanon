@@ -511,7 +511,7 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.4`,
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.5`,
 z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |

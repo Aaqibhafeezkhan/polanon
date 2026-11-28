@@ -7,6 +7,13 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-28
+
+A patch release with an option and a speed-up. The arbiter, off by default, reads Polish lines
+with CLARIN-PL's FastPDN beside the spaCy model and masks more people and places with fewer false
+alarms, never fewer than the spaCy guard; and the ML filter no longer reviews a text it reviewed
+before. Without `arbiter=True` the stable tokens and the benchmarks are those of 0.4.4.
+
 ### Added
 
 - **The arbiter: FastPDN beside the spaCy model, off by default.** `default_guards(arbiter=True)`,
