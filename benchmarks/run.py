@@ -181,7 +181,11 @@ def run(guards: list[Guard], *, union: bool = False) -> tuple[dict[str, Score], 
 
 
 def guards_for(
-    with_ner: bool, spacy_model: str, mode: Mode = "normal", ml_filter: bool = True
+    with_ner: bool,
+    spacy_model: str,
+    mode: Mode = "normal",
+    ml_filter: bool = True,
+    arbiter: bool = False,
 ) -> list[Guard]:
     """Build the guard stack for one configuration."""
     guards: list[Guard] = [
@@ -192,7 +196,11 @@ def guards_for(
         InternationalGuard(),
         DenylistGuard([]),
     ]
-    if with_ner:
+    if with_ner and arbiter:
+        from polanon.guards.arbiter import ArbiterGuard
+
+        guards.append(ArbiterGuard())
+    elif with_ner:
         from polanon.guards.ner import NerGuard
 
         guards.append(NerGuard(spacy_model=spacy_model, mode=mode, ml_filter=ml_filter))
@@ -251,13 +259,18 @@ def main() -> int:
     parser.add_argument(
         "--no-ml-filter", action="store_true", help="the spaCy guard with its ML filter off"
     )
+    parser.add_argument(
+        "--arbiter", action="store_true", help="md and FastPDN, the arbiter deciding (with --ner)"
+    )
     args = parser.parse_args()
 
     mode: Mode = "paranoid" if args.paranoid else "normal"
     totals, extra, documents = run(
-        guards_for(args.ner, args.spacy_model, mode, not args.no_ml_filter)
+        guards_for(args.ner, args.spacy_model, mode, not args.no_ml_filter, args.arbiter)
     )
     model = f" + spaCy NER, {mode}" if args.ner else ""
+    if args.ner and args.arbiter:
+        model = " + md and FastPDN, the arbiter deciding"
     print(f"configuration: guards without a model{model}\n")
     report(totals, extra, documents, args.markdown)
     return 0

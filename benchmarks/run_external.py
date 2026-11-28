@@ -390,7 +390,7 @@ def score(
 
 
 def configurations(
-    presidio: bool, without_ml_filter: bool = False
+    presidio: bool, without_ml_filter: bool = False, arbiter: bool = False
 ) -> list[tuple[str, list[Guard], bool]]:
     """The rules alone, with the spaCy model and paranoid when it is installed, and Presidio.
 
@@ -406,6 +406,9 @@ def configurations(
         if without_ml_filter:
             guards = guards_for(True, "pl_core_news_md", "normal", ml_filter=False)
             found.append(("polanon, ML filter off", guards, False))
+        if arbiter:
+            guards = guards_for(True, "pl_core_news_md", arbiter=True)
+            found.append(("polanon + arbiter (md and FastPDN)", guards, False))
     if presidio:
         from compare_presidio import PresidioGuard
 
@@ -487,8 +490,11 @@ def main() -> int:
     parser.add_argument(
         "--without-ml-filter", action="store_true", help="also with the ML filter off"
     )
+    parser.add_argument(
+        "--arbiter", action="store_true", help="also md and FastPDN, the arbiter deciding"
+    )
     args = parser.parse_args()
-    setups = configurations(args.presidio, args.without_ml_filter)
+    setups = configurations(args.presidio, args.without_ml_filter, args.arbiter)
 
     rows = openpii_rows(args.data)
     random.Random(SEED).shuffle(rows)  # noqa: S311 - a fixed sample, not a secret

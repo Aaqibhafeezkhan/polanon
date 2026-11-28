@@ -65,7 +65,9 @@ tokens reach the provider, and puts the originals back into the answer, also whi
   depend on the spaCy model, which leans on capital letters: it misses what people type in
   lowercase, and a town in capitals it does not know. A miss
   is a detection gap, not a bypass, but the value still reaches the provider. The stage-2 judge
-  exists to narrow this gap, not to close it.
+  exists to narrow this gap, not to close it, and so does the arbiter (`arbiter=True`), which
+  reads Polish lines with FastPDN too and finds many of the names the spaCy model misses; it never
+  masks less than the spaCy guard, but it misses names too.
 - **A one-word name later written in lowercase.** A capitalised one-word name is not matched in all
   lowercase, because many Polish surnames are also ordinary words (Zima, Kot, Wilk): "kowalska
   dzwoniła" after "Pani Kowalska" goes out unless a detector recognises it on its own. Once one

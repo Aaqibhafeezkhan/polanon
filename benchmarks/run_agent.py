@@ -342,10 +342,11 @@ def anonymizer_for(
     spacy_model: str = "pl_core_news_md",
     mode: Mode = "normal",
     ml_filter: bool = True,
+    arbiter: bool = False,
 ) -> Anonymizer:
     """The guards the gateway masks with, and its list of well-known names."""
     guards = default_guards(
-        with_ner=with_ner, spacy_model=spacy_model, mode=mode, ml_filter=ml_filter
+        with_ner=with_ner, spacy_model=spacy_model, mode=mode, ml_filter=ml_filter, arbiter=arbiter
     )
     return Anonymizer(guards, allowlist=Allowlist(WELL_KNOWN_NAMES))
 
@@ -457,10 +458,17 @@ def main() -> None:
     parser.add_argument(
         "--no-ml-filter", action="store_true", help="the spaCy guard with its ML filter off"
     )
+    parser.add_argument(
+        "--arbiter", action="store_true", help="md and FastPDN, the arbiter deciding (with --ner)"
+    )
     args = parser.parse_args()
     mode: Mode = "paranoid" if args.paranoid else "normal"
     anonymizer = anonymizer_for(
-        with_ner=args.ner, spacy_model=args.spacy_model, mode=mode, ml_filter=not args.no_ml_filter
+        with_ner=args.ner,
+        spacy_model=args.spacy_model,
+        mode=mode,
+        ml_filter=not args.no_ml_filter,
+        arbiter=args.ner and args.arbiter,
     )
     _report(run(anonymizer), markdown=args.markdown, show=args.show)
 

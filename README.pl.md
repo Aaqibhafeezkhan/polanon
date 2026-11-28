@@ -122,6 +122,7 @@ odpowiedź liczą się tak samo jak numery.
 |---|---|
 | Identyfikatory, dane kontaktowe, sekrety, polskie imiona i nazwiska, nazwy firm rozpoznawane po formie prawnej | `pip install polanon` |
 | Dodatkowo miejsca oraz imiona, nazwiska i organizacje, których nie wychwyci żadna reguła | `pip install "polanon[ner]"`, a potem `python -m spacy download pl_core_news_md` |
+| Więcej osób i miejsc, z FastPDN obok modelu spaCy ([arbiter](#więcej-nazw-arbiter)) | `pip install "polanon[arbiter]"`, model spaCy, a potem raz `python -m polanon.fastpdn` |
 | Sędziowie etapu 2 (lokalny model w Ollamie albo zdalny) | `pip install "polanon[judge]"` |
 | Komponenty do potoków [Haystacka 3](#z-haystackiem) | `pip install "polanon[haystack]"` |
 | [Bramka](#bramka-dla-każdego-narzędzia-zgodnego-z-api-openai) dla narzędzi korzystających z API OpenAI | `pip install "polanon[gateway]"` |
@@ -510,7 +511,7 @@ i potrzebuje `POLANON_UPSTREAM_KEY`, klucza dostawcy, który wysyła zamiast nie
 `-p 127.0.0.1:8787:8787` zostawia port na tym komputerze. Każda opcja `polanon-gateway` idzie
 po nazwie obrazu. Model na tym samym komputerze, na przykład Ollama, to `--upstream
 http://host.docker.internal:11434/v1`, a na Linuksie dodatkowo
-`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.4`,
+`--add-host=host.docker.internal:host-gateway`. Obraz ma tagi z wersją, na przykład `0.4.5`,
 z wersją pomniejszą, `0.4`, i `latest`.
 
 | Narzędzie | Gdzie wpisać adres bazowy |
@@ -554,6 +555,10 @@ Co robi z jednym wywołaniem:
 - `--paranoid` maskuje każdą nazwę, którą znajdzie model spaCy, tak jak `mode="paranoid"`.
   Domyślnie pomija to, co znajdzie w angielskim tekście, w kodzie i identyfikatorach, bo prompt,
   narzędzia i logi agenta są pełne angielskich słów, które polski model bierze za nazwy.
+- `--arbiter` czyta polskie linie także FastPDN, tak jak `default_guards(arbiter=True)`
+  ([arbiter](#więcej-nazw-arbiter)); `--fastpdn-dir` mówi, dokąd go wyeksportowano. Gdy jest
+  zamówiony, a nie zainstalowany, bramka nie startuje i podaje polecenia, które go instalują,
+  zamiast maskować mniej, niż miała.
 - `--allow NAZWA`, podane tyle razy, ile trzeba, i `--allow-file ŚCIEŻKA`, plik z jedną nazwą
   w linii, zostawiają czytelne nazwy, które model musi widzieć takimi, jakie są, na przykład
   imię asystenta i firmę, w imieniu której mówi; tak podana osoba też zostaje czytelna.
@@ -780,6 +785,54 @@ a tak zostawia się decyzję samym ręcznym filtrom:
 guards = default_guards(ml_filter=False)
 ```
 
+## Więcej nazw: arbiter
+
+Model spaCy przeoczy nazwę, której nie widział zapisanej w ten sposób: ulicę bez „ul.”, obce
+nazwisko po imieniu, dzielnicę po nazwie miasta. `arbiter=True` czyta polskie linie także
+[FastPDN](https://huggingface.co/clarin-pl/FastPDN), transformerem CLARIN-PL do polskich nazw
+własnych, a między oboma modelami rozstrzyga arbiter, czyli regresja logistyczna:
+
+```python
+guards = default_guards(arbiter=True)
+```
+
+Potrzebuje `pip install "polanon[arbiter]"`, modelu spaCy i jednorazowego eksportu FastPDN:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install transformers onnx
+python -m polanon.fastpdn        # zapisuje ~/.cache/polanon/fastpdn, około 500 MB
+```
+
+torch jest potrzebny tylko do tego jednego uruchomienia; potem arbiter czyta FastPDN samym
+onnxruntime. polanon nie rozprowadza FastPDN: model należy do CLARIN-PL, jest na licencji
+CC-BY-4.0, a eksport zapisuje tę informację obok modelu.
+
+Trzy reguły pilnują, żeby nie maskował mniej niż strażnik spaCy. Osoba albo miejsce, które
+strażnik spaCy maskuje, zostaje zamaskowane: arbiter może je tylko dodawać. Organizacje proponuje
+wyłącznie model spaCy, więc marka, którą FastPDN zobaczy w polskim zdaniu o giełdzie, zostaje
+czytelna, a arbiter może odrzucić organizację modelu spaCy, która nikogo nie nazywa. Linię, która
+nie jest polska, czyli angielski tekst, kod albo JSON, rozstrzyga się tak jak u strażnika spaCy.
+
+| Benchmark | Strażnik spaCy | Arbiter |
+|---|---:|---:|
+| OpenPII, część testowa: wartości zamaskowane w całości, z 5 255 | 3 764 | **4 036** |
+| to samo: fragmenty poza wartościami | 306 | **263** |
+| OpenPII, część odłożona do samego końca, zmierzona raz: wartości w całości | 4 916 | **5 229** |
+| to samo: fragmenty poza wartościami | 401 | **346** |
+| KPWr, część testowa: osoby, miasta, ulice i firmy w całości, z 1 557 | 1 393 | 1 503 |
+| 13 dokumentów z `benchmarks/samples/`: ze 190 wartości, i fragmenty nad niczym | 188, 6 | 188, 6 |
+| Wywołania agenta: z 250 wystąpień przepuszczone, i użycia tokenów nad niczym | 2, 5 | 2, 5 |
+
+FastPDN uczył się na części treningowej KPWr, więc wyniki na KPWr są dla niego zbyt łaskawe,
+a arbitra dopasowano na wierszach OpenPII podobnych do tych, na których jest mierzony, tak jak
+filtr ML. Na zwykłym komputerze 1 000 tekstów OpenPII, wszystkie po polsku, zajmuje 54 s zamiast
+17. Wywołania agenta, głównie angielski, kod i JSON, zajmują za pierwszym razem 3,6 s zamiast 2,1,
+a gdy historia przychodzi ponownie, w obu wersjach 0,9 s. Zajmuje około 1 GB więcej pamięci. Jak go
+dopasowano i zmierzono, opisują
+[notatki z benchmarku](https://github.com/boromat/polanon/blob/main/benchmarks/README.md#the-arbiter).
+Bramka przyjmuje go jako `--arbiter`.
+
 ## Druga opinia: sędzia
 
 Reguły i model językowy przeoczają to, co pozwala kogoś zidentyfikować wyłącznie z kontekstu:
@@ -843,6 +896,7 @@ wpisy z denylisty i wartości zamaskowane już wcześniej w rozmowie pozostają 
 | Moduł | Do czego służy |
 |---|---|
 | `guards/` | deterministyczne detektory. Każdy zwraca obiekty `Span` we współrzędnych oryginalnego tekstu |
+| `fastpdn.py` | jednorazowy eksport FastPDN dla arbitra z `guards/arbiter.py` |
 | `pipeline.py` | uruchamia detektory w wątku, rozstrzyga nakładające się wykrycia, przydziela stabilne tokeny |
 | `policy.py` | taksonomia typów encji i nazewnictwo tokenów (`<OSOBA_1>`, `<PESEL_1>`) |
 | `judge/` | opcjonalny drugi etap: model przegląda zamaskowany tekst pod kątem tego, co wciąż pozwala kogoś zidentyfikować |

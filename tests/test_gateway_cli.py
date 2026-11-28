@@ -247,3 +247,39 @@ def test_fewer_than_one_worker_is_refused(count, capsys):
     assert status == BAD_SETTING
     assert served.calls == []
     assert "workers is 1 or more" in capsys.readouterr().err
+
+
+ARBITER_PACKAGES = {"spacy", "pl_core_news_md", "onnxruntime", "tokenizers"}
+
+
+def test_the_arbiter_asked_for_is_never_left_out_quietly(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name in ARBITER_PACKAGES else None
+    )
+    base = ["--upstream", "https://provider.test/v1", "--arbiter", "--fastpdn-dir", str(tmp_path)]
+    status, served = run([*base, "--paranoid"])
+    assert status == BAD_SETTING
+    assert "leave out --paranoid" in capsys.readouterr().err
+    status, served = run([*base, "--rules-only"])
+    assert status == BAD_SETTING
+    assert "leave out --rules-only" in capsys.readouterr().err
+    status, served = run(base)
+    assert status == BAD_SETTING
+    assert served.calls == []
+    assert "python -m polanon.fastpdn" in capsys.readouterr().err
+
+
+def test_the_arbiter_reaches_the_guards_and_the_banner(tmp_path, monkeypatch, capsys):
+    from polanon.guards.arbiter import ArbiterGuard
+
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name in ARBITER_PACKAGES else None
+    )
+    for name in ("model.onnx", "tokenizer.json", "config.json"):
+        (tmp_path / name).write_bytes(b"")
+    status, served = run(
+        ["--upstream", "https://provider.test/v1", "--arbiter", "--fastpdn-dir", str(tmp_path)]
+    )
+    assert status == 0
+    assert isinstance(served.app._anonymizer.guards[-1], ArbiterGuard)
+    assert "pl_core_news_md and FastPDN, the arbiter deciding" in capsys.readouterr().err

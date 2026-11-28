@@ -7,6 +7,44 @@ only for a change that breaks something, as CONTRIBUTING.md describes.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-28
+
+A patch release with an option and a speed-up. The arbiter, off by default, reads Polish lines
+with CLARIN-PL's FastPDN beside the spaCy model and masks more people and places with fewer false
+alarms, never fewer than the spaCy guard; and the ML filter no longer reviews a text it reviewed
+before. Without `arbiter=True` the stable tokens and the benchmarks are those of 0.4.4.
+
+### Added
+
+- **The arbiter: FastPDN beside the spaCy model, off by default.** `default_guards(arbiter=True)`,
+  and `--arbiter` for the gateway, read the Polish lines with
+  [FastPDN](https://huggingface.co/clarin-pl/FastPDN) too, CLARIN-PL's transformer for Polish
+  names, and let a logistic regression decide between it and `pl_core_news_md`. On OpenPII's test
+  part it masks 4,036 values whole instead of 3,764, with 263 spans outside the values instead of
+  306; on a part held out until it was done, measured once, 5,229 instead of 4,916 and 346 instead
+  of 401. On the 13 documents and the agent's calls it changes nothing. Three rules keep it from
+  masking less than the spaCy guard: a person or a place the spaCy guard masks stays masked,
+  organisations come from the spaCy model only, and a line that is not Polish is decided as the
+  spaCy guard decides it. It needs `pip install "polanon[arbiter]"` (onnxruntime and tokenizers)
+  and FastPDN exported once with `python -m polanon.fastpdn`, which needs torch, transformers and
+  onnx for that run; polanon does not ship the model, which is CC-BY-4.0, and the export writes
+  its notice. On Polish prose it takes about three times as long as the spaCy guard, on an agent's
+  calls 1.7 times the first time and the same when the history comes again, and it holds about
+  1 GB more. `arbiter_available()` says whether it would run. `benchmarks/arbiter_data.py`,
+  `arbiter_train.py` and `arbiter_tune.py` rebuild it, and `run.py`, `run_agent.py` and
+  `run_external.py` take `--arbiter`.
+
+### Changed
+
+- **The ML filter reviews a text once.** spaCy's findings in a text sent again were already
+  remembered, but the filter computed the features and the probability of every span on every
+  call, though a chat or an agent sends its whole history again each time. `NerGuard` now also
+  remembers which spans it kept, for up to `cache_texts` texts (0 turns it off, as before), under
+  the text's SHA-256 digest and a digest of where its spans and the other guards' spans stand,
+  never a word of the text. Masking the calls of `benchmarks/run_agent.py` a second time with the
+  same anonymizer spends 0.03 s in the filter instead of 0.13, and the benchmarks give the same
+  numbers.
+
 ## [0.4.4] - 2026-11-24
 
 A patch release with what the gateway in front of a live agent showed: the escapes an agent's

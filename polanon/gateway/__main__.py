@@ -128,6 +128,18 @@ def _parser() -> argparse.ArgumentParser:
         "identifiers: less gets through, and many more words become tokens the model cannot read",
     )
     parser.add_argument(
+        "--arbiter",
+        action="store_true",
+        help="read the Polish lines with FastPDN too and let the arbiter decide: more people and "
+        "places masked, fewer words that name nobody; needs polanon[arbiter] and FastPDN exported "
+        "once with python -m polanon.fastpdn",
+    )
+    parser.add_argument(
+        "--fastpdn-dir",
+        default=None,
+        help="where FastPDN was exported, for --arbiter (default: ~/.cache/polanon/fastpdn)",
+    )
+    parser.add_argument(
         "--no-well-known-names",
         action="store_true",
         help="also mask names on the well-known list, such as Facebook, Excel or ZUS",

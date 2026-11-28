@@ -4,7 +4,7 @@
 
 Use it when Polish text with personal data is sent to a language model API and the answer must come back with the real names and numbers in it. It is pseudonymisation, not legal anonymisation: no detector catches everything, and the mapping it returns must be kept as safe as the original document.
 
-Install with `pip install polanon`. The `ner` extra adds a spaCy model for places and names no rule can see (`pip install "polanon[ner]"`, then `python -m spacy download pl_core_news_md`); the `judge` extra adds an optional second review by a small local or remote model.
+Install with `pip install polanon`. The `ner` extra adds a spaCy model for places and names no rule can see (`pip install "polanon[ner]"`, then `python -m spacy download pl_core_news_md`); the `judge` extra adds an optional second review by a small local or remote model; the `arbiter` extra, with FastPDN exported once by `python -m polanon.fastpdn`, reads Polish lines with CLARIN-PL's FastPDN beside the spaCy model and masks more people and places (`default_guards(arbiter=True)`).
 
 ```python
 from polanon import Anonymizer, default_guards

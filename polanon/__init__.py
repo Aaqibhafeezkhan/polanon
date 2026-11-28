@@ -107,6 +107,7 @@ __all__ = [
     "StoredValue",
     "StreamRestorer",
     "SweepReport",
+    "arbiter_available",
     "default_guards",
     "leaked_tokens",
     "mask_known_values",
@@ -119,13 +120,18 @@ __all__ = [
     "tokens_in",
 ]
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 
 #: The entity types an Anonymizer masks unless told otherwise: every built-in type except DATE.
 #: A date rarely identifies anyone on its own, and masking every deadline and invoice date leaves
 #: the model unable to answer the question the text was sent with. Add it back with
 #: ``DEFAULT_ENABLED | {"DATE"}``.
 DEFAULT_ENABLED = frozenset(ENTITY_TYPES) - {"DATE"}
+
+_ARBITER_INSTALL = (
+    'pip install "polanon[arbiter]", python -m spacy download pl_core_news_md, then export '
+    "FastPDN once with python -m polanon.fastpdn; or call default_guards() without arbiter=True"
+)
 
 _NER_INSTALL = (
     'pip install "polanon[ner]", then python -m spacy download {model}; '
@@ -140,6 +146,8 @@ def default_guards(
     spacy_model: str = "pl_core_news_md",
     mode: Mode = "normal",
     ml_filter: bool = True,
+    arbiter: bool = False,
+    fastpdn_dir: str | Path | None = None,
 ) -> list[Guard]:
     """Guards in recommended order. NER guard is imported lazily because spaCy is heavy/optional.
 
@@ -162,14 +170,26 @@ def default_guards(
             reads as a name in the normal mode, weighing the span, its words and what the rules
             found; see :class:`polanon.guards.ner.NerGuard`. On by default; False leaves the
             decision to the hand-written filters alone.
+        arbiter: read the Polish lines with FastPDN too, CLARIN-PL's transformer, and let the
+            arbiter decide between it and the spaCy model; see :mod:`polanon.guards.arbiter`. It
+            masks more people and places and fewer words that name nobody, for about 1.15 times
+            the time on an agent's calls, and a person or a place the spaCy guard masks always
+            stays masked. Off by default; it needs ``pip install "polanon[arbiter]"`` and FastPDN
+            exported once with ``python -m polanon.fastpdn``, and it reads with
+            ``pl_core_news_md`` in the normal mode, with the ML filter.
+        fastpdn_dir: where FastPDN was exported, for the arbiter; ~/.cache/polanon/fastpdn by
+            default.
 
     Raises:
         TypeError: when `denylist` is a single string, which would be read letter by letter.
-        ValueError: for a mode that is neither "normal" nor "paranoid".
+        ValueError: for a mode that is neither "normal" nor "paranoid", and for the arbiter
+            without the spaCy model, in the paranoid mode, without the ML filter or with another
+            spaCy model.
         NerModelUnavailableError: when `with_ner` is on and spaCy or the model is not installed.
             It is raised here rather than on the first text to mask, with the command that fixes
             it, and it is both a ModuleNotFoundError and a MaskingUnavailableError.
-            Also raised for a model directory without `meta.json` or `config.cfg`.
+            Also raised for a model directory without `meta.json` or `config.cfg`, and with
+            `arbiter` on when onnxruntime, tokenizers or the export of FastPDN is missing.
     """
     if isinstance(denylist, str):
         # The term itself stays out of the message: it is what the caller wants kept hidden.
@@ -183,15 +203,75 @@ def default_guards(
         InternationalGuard(),
         DenylistGuard(list(denylist)),
     ]
+    if arbiter:
+        _check_arbiter(with_ner=with_ner, spacy_model=spacy_model, mode=mode, ml_filter=ml_filter)
     if with_ner:
         try:
             _require_spacy(spacy_model)
+            if arbiter:
+                _require_arbiter(fastpdn_dir)
         except ModuleNotFoundError as exc:
             raise NerModelUnavailableError(str(exc)) from None
-        from polanon.guards.ner import NerGuard
+        if arbiter:
+            from polanon.guards.arbiter import ArbiterGuard
 
-        guards.append(NerGuard(spacy_model=spacy_model, mode=mode, ml_filter=ml_filter))
+            guards.append(ArbiterGuard(fastpdn_dir))
+        else:
+            from polanon.guards.ner import NerGuard
+
+            guards.append(NerGuard(spacy_model=spacy_model, mode=mode, ml_filter=ml_filter))
     return guards
+
+
+def _check_arbiter(*, with_ner: bool, spacy_model: str, mode: Mode, ml_filter: bool) -> None:
+    """Refuse settings the arbiter was not fitted for, rather than mask otherwise than measured."""
+    from polanon.guards.ner import _model_reference
+
+    if not with_ner:
+        raise ValueError(
+            "the arbiter reads with the spaCy model: call default_guards(with_ner=True)"
+        )
+    if mode != "normal":
+        raise ValueError(
+            'the arbiter decides in the normal mode: call default_guards(mode="normal")'
+        )
+    if not ml_filter:
+        raise ValueError("the arbiter keeps every name the ML filter keeps: leave ml_filter on")
+    if _model_reference(spacy_model) != "pl_core_news_md":
+        raise ValueError(f"the arbiter was fitted with pl_core_news_md, not {spacy_model!r}")
+
+
+def _require_arbiter(fastpdn_dir: str | Path | None) -> None:
+    """Fail now, with the commands that fix it, instead of on the first text to mask."""
+    from polanon.guards._fastpdn import DEFAULT_DIRECTORY, missing_files
+
+    for package in ("onnxruntime", "tokenizers"):
+        if importlib.util.find_spec(package) is None:
+            raise ModuleNotFoundError(f"the arbiter needs {package}: {_ARBITER_INSTALL}")
+    directory = Path(fastpdn_dir) if fastpdn_dir is not None else DEFAULT_DIRECTORY
+    missing = missing_files(directory)
+    if missing:
+        raise ModuleNotFoundError(
+            f"FastPDN is not exported to {directory} (missing {', '.join(missing)}): "
+            f"{_ARBITER_INSTALL}"
+        )
+
+
+def arbiter_available(fastpdn_dir: str | Path | None = None) -> bool:
+    """Return whether ``default_guards(arbiter=True)`` would find everything the arbiter needs.
+
+    It runs the same checks without loading anything: spaCy and pl_core_news_md, onnxruntime and
+    tokenizers, and FastPDN's export.
+
+    Args:
+        fastpdn_dir: where FastPDN was exported; ~/.cache/polanon/fastpdn by default.
+    """
+    try:
+        _require_spacy("pl_core_news_md")
+        _require_arbiter(fastpdn_dir)
+    except ModuleNotFoundError:
+        return False
+    return True
 
 
 def _require_spacy(spacy_model: str) -> None:
