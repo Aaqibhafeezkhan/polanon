@@ -78,13 +78,16 @@ def export(directory: Path = DEFAULT_DIRECTORY, revision: str = REVISION) -> Pat
     tokenizer = AutoTokenizer.from_pretrained(SOURCE, revision=revision)
     model = AutoModelForTokenClassification.from_pretrained(SOURCE, revision=revision).eval()
 
-    class Logits(torch.nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.model = model
+    def start(self: Any) -> None:
+        torch.nn.Module.__init__(self)
+        self.model = model
 
-        def forward(self, input_ids: Any, attention_mask: Any) -> Any:
-            return self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+    def forward(self: Any, input_ids: Any, attention_mask: Any) -> Any:
+        return self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+
+    # The network with its logits as the one output. Built with type() rather than a class
+    # statement: where torch is not installed, as in CI, mypy cannot see what it would subclass.
+    logits_only = type("Logits", (torch.nn.Module,), {"__init__": start, "forward": forward})
 
     # What the original reads in the check sentences, before the export: tracing the model for
     # ONNX leaves it reading some of them otherwise.
@@ -103,7 +106,7 @@ def export(directory: Path = DEFAULT_DIRECTORY, revision: str = REVISION) -> Pat
     sample = tokenizer(CHECKS[0], return_tensors="pt")
     axes = {name: {0: "batch", 1: "tokens"} for name in ("input_ids", "attention_mask", "logits")}
     torch.onnx.export(
-        Logits(),
+        logits_only(),
         (sample["input_ids"], sample["attention_mask"]),
         str(directory / MODEL_FILE),
         input_names=["input_ids", "attention_mask"],
